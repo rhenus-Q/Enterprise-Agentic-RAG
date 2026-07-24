@@ -279,6 +279,26 @@ _SECRET_QUESTIONS = [
     ("github_pat_11ABCDEFG0_secrettokenvalue", "github_pat_11ABCDEFG0_secrettokenvalue"),  # PAT
     ("api_key=supersecretvalue", "supersecretvalue"),  # generic key=value
     ("password=hunter2", "hunter2"),  # generic key=value
+    ("password: hunter2", "hunter2"),  # generic key: value
+    ("token: 0123456789abcdef", "0123456789abcdef"),  # generic key: value
+    ("tavily tvly-dev-ABC123def456", "tvly-dev-ABC123def456"),  # Tavily key
+    ("aws AKIAIOSFODNN7EXAMPLE", "AKIAIOSFODNN7EXAMPLE"),  # AWS access key id
+    (
+        "jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1g",
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.dBjftJeZ4CVPmB92K27uhbUJU1p1r_wW1g",
+    ),  # JWT
+    (
+        "curl -H 'Authorization: Bearer AbCd1234EfGh5678IjKl'",
+        "AbCd1234EfGh5678IjKl",
+    ),  # Bearer header
+]
+
+# Ordinary questions that must survive redaction untouched: over-redaction
+# corrupts the question the retriever and generator actually see.
+_NON_SECRET_QUESTIONS = [
+    "Who is the bearer of the on-call pager?",
+    "What are the bearer responsibilities during an incident?",
+    "How do I reset my VPN password?",
 ]
 
 
@@ -287,6 +307,11 @@ def test_redact_secrets_replaces_secret_like_values():
         redacted = _redact_secrets(question)
         assert "[REDACTED]" in redacted, question
         assert leaked not in redacted, question
+
+
+def test_redact_secrets_leaves_ordinary_questions_untouched():
+    for question in _NON_SECRET_QUESTIONS:
+        assert _redact_secrets(question) == question, question
 
 
 def test_non_secret_question_passes_through_unchanged(monkeypatch):

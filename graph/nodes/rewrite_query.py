@@ -46,7 +46,9 @@ def rewrite_query(state: GraphState):
             "stop_reason": STOP_REASON_TOOL_ERROR,
         }
 
-    print(f"---NEW SEARCH QUERY: {new_query}---")
+    # Log only that a rewrite happened: the query is question-derived content and
+    # may echo injected text, so it must not enter stdout/log retention verbatim.
+    print(f"---NEW SEARCH QUERY READY ({len(new_query)} CHARS)---")
 
     return {
         "search_query": new_query,

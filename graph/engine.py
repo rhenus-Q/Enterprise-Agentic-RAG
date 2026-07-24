@@ -204,7 +204,7 @@ QUESTION_PREVIEW_MAX_CHARS = 80
 
 # Obvious secret-like values scrubbed from the question before it is previewed
 # in trace output. Each entry is (pattern, replacement). Prefix-style keys are
-# matched before the generic key=value form so e.g. `api_key=sk-...` is fully
+# matched before the generic key/value form so e.g. `api_key=sk-...` is fully
 # redacted regardless of which rule fires first. This is best-effort hygiene for
 # debug artifacts, not a guarantee that every possible secret shape is caught.
 _SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
@@ -212,8 +212,24 @@ _SECRET_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"sk-[A-Za-z0-9_\-]+"), "[REDACTED]"),  # OpenAI-style keys
     (re.compile(r"github_pat_[A-Za-z0-9_]+"), "[REDACTED]"),  # GitHub fine-grained PAT
     (re.compile(r"ghp_[A-Za-z0-9]+"), "[REDACTED]"),  # GitHub classic token
-    # Generic key=value secrets (api_key / token / password / secret), case-insensitive.
-    (re.compile(r"(?i)\b(api_key|apikey|token|password|secret)\s*=\s*\S+"), r"\1=[REDACTED]"),
+    (re.compile(r"tvly-[A-Za-z0-9_\-]+"), "[REDACTED]"),  # Tavily key
+    (re.compile(r"AKIA[0-9A-Z]{16}"), "[REDACTED]"),  # AWS access key id
+    # JWT / OAuth-style tokens: three base64url segments starting with the `eyJ` header.
+    (re.compile(r"eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]*"), "[REDACTED]"),
+    # Authorization headers. Deliberately narrow: the value must be token-shaped
+    # (>= 12 chars from the token alphabet and containing a digit) so ordinary
+    # prose like "the bearer of the on-call pager" is not mangled before it
+    # reaches the retriever and the generator.
+    (
+        re.compile(r"(?i)\bbearer\s+(?=[A-Za-z0-9._\-]*\d)[A-Za-z0-9._\-]{12,}"),
+        "Bearer [REDACTED]",
+    ),
+    # Generic key/value secrets (api_key / token / password / secret), case-insensitive.
+    # Both `=` and `:` separators are covered; the separator itself is preserved.
+    (
+        re.compile(r"(?i)\b(api_key|apikey|token|password|secret)\s*([:=])\s*\S+"),
+        r"\1\2[REDACTED]",
+    ),
 )
 
 

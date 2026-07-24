@@ -61,6 +61,15 @@ def test_rewrite_query_writes_stripped_search_query_and_counts_the_call(monkeypa
     assert result["llm_call_count"] == 4
 
 
+def test_rewrite_query_does_not_print_the_query_text(monkeypatch, capsys):
+    _patch_rewriter(monkeypatch, new_query="secret-bearing rewritten query")
+
+    rewrite_query({"question": "Q", "generation": "A"})
+
+    # Query text is question-derived content: banners must not leak it to logs.
+    assert "secret-bearing rewritten query" not in capsys.readouterr().out
+
+
 def test_rewrite_query_success_does_not_write_stop_reason(monkeypatch):
     _patch_rewriter(monkeypatch)
 
