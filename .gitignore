@@ -1,0 +1,85 @@
+# ---- Environment / secrets ----
+.env
+.env.*
+*.env
+# keep the committed template un-ignored (no trailing comment: gitignore patterns are literal)
+!.env.example
+.envrc
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- uv ----
+# Keep uv.lock committed for reproducible installs; ignore the local cache only.
+.uv/
+
+# ---- Test / tooling caches ----
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# ---- Project data: persisted vector store ----
+# Rebuilt locally via `uv run python ingestion.py`; do not commit.
+chroma_db/
+
+# ---- Build artifacts ----
+build/
+dist/
+*.egg-info/
+
+# ---- IDE / editor ----
+.vscode/
+.idea/
+*.swp
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+
+# ---- Eval history records ----
+# Generated at runtime — gitignored by default so history files do not bloat
+# the repo. The directory itself is tracked via evals/history/.gitkeep.
+# To share a specific baseline, force-add it: git add -f evals/history/<file>.json
+evals/history/*.json
+
+
+# ---- Engine run traces ----
+# Metadata-only trace JSON written when AnswerOptions(trace_path=...) is set
+# (README's example uses traces/). Runtime artifacts — do not commit.
+traces/
+
+# ---- Local planning / roadmap drafts ----
+# docs/roadmap/ is a local working-artifact area (see docs/roadmap/README.md).
+# Everything is ignored EXCEPT the README and the three workflow templates, which
+# are tracked because repository Skills depend on them. Git cannot negate a path
+# inside an excluded directory, so each tracked file needs its parent directory
+# un-ignored and then re-ignored.
+/docs/roadmap/*
+!/docs/roadmap/README.md
+!/docs/roadmap/spec/
+/docs/roadmap/spec/*
+!/docs/roadmap/spec/spec-template.md
+!/docs/roadmap/plan/
+/docs/roadmap/plan/*
+!/docs/roadmap/plan/plan-template.md
+!/docs/roadmap/implementation/
+/docs/roadmap/implementation/*
+!/docs/roadmap/implementation/implementation-template.md
+
+#claude code local setting
+.claude/settings.local.json
+
