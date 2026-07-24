@@ -130,7 +130,7 @@ Unless the request explicitly approves an exception:
 * Do not change prompts, model names, or corpus documents.
 * Do not change graph behavior, graph routing, graph nodes, `stop_reason`
   semantics, or fallback-policy semantics.
-* Do not modify `.env` or `.env.example`.
+* Do not modify `.env`.
 * Do not run full eval, `ingestion.py`, `tests/chains/`, or any
   API-key-requiring command.
 * Do not commit automatically; do not create or switch branches.
