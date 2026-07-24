@@ -39,11 +39,15 @@ def main():
     print("Type 'exit' to quit.\n")
 
     # Privacy mode toggle: when WEB_SEARCH_ENABLED=false, questions are never
-    # sent to an external web search service (Tavily).
+    # sent to an external web search service (Tavily), and no LangSmith trace
+    # is exported. The suppression itself lives in graph/engine.py so that it
+    # covers every caller, not just this CLI.
     if not web_search_enabled():
         print(
-            "Web search is DISABLED (WEB_SEARCH_ENABLED=false). "
-            "Answers come from the local knowledge base only.\n"
+            "Privacy mode is ON (WEB_SEARCH_ENABLED=false):\n"
+            "  - Web search is disabled; answers come from the local knowledge base only.\n"
+            "  - LangSmith tracing is disabled; no trace leaves this machine.\n"
+            "  Note: questions and retrieved chunks are still sent to OpenAI.\n"
         )
 
     while True:

@@ -25,6 +25,12 @@ AnswerOptions.trace_path. Trace data is safe by construction: it contains
 node names, timings, counters, flags, and citation lines — never document
 page_content, prompts, raw graph state, or secrets.
 
+Privacy mode also suppresses LangSmith export for the run (see
+answer_question): unlike the local trace above, a LangSmith trace carries
+full prompt inputs and outputs — including retrieved document page_content
+— to a third-party service, so it is the larger disclosure surface of the
+two.
+
 Import is side-effect-free in the repo's sense: no external client is
 constructed (graph.graph builds clients lazily), so importing this module
 needs no API keys and no network.
@@ -35,10 +41,13 @@ import json
 import re
 import time
 import uuid
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from langsmith import tracing_context
 
 import graph.graph as graph_runtime
 from graph import config
@@ -318,7 +327,15 @@ def answer_question(
     keys; omitted fields fall back to the environment defaults. The hard
     privacy guarantee is unchanged: web_search_enabled=False (per run or via
     WEB_SEARCH_ENABLED=false) means zero external web searches regardless of
-    the fallback policy.
+    the fallback policy. Such a run additionally exports no LangSmith trace,
+    whatever the ambient LANGSMITH_*/LANGCHAIN_* settings say. Note the scope:
+    this stops web search and trace export, not the OpenAI calls themselves —
+    the question and the retrieved chunks still reach the model provider for
+    all four LLM steps that run in this mode: retrieval/document grading,
+    generation, grounding (hallucination) grading, and answer-usefulness
+    grading. Not routing: privacy mode skips the router LLM entirely
+    (route_question returns RETRIEVE before invoking it), and the router only
+    ever receives the question anyway.
 
     Observability: a missing run_id is generated, the executed node path and
     timings are collected, and when options.trace_path is set a
@@ -355,9 +372,25 @@ def answer_question(
         web_fallback_policy=options.web_fallback_policy,
     )
 
+    # Privacy mode additionally suppresses LangSmith export for this run.
+    # tracing_context is the highest-priority control (above ls.configure and
+    # above the LANGSMITH_*/LANGCHAIN_* environment variables), and it is
+    # execution-scoped rather than process-global — which is what lets the
+    # per-run privacy resolution above stay per-run: the eval harness can run
+    # private and web-enabled rows in the same process and each gets the right
+    # tracing behavior.
+    #
+    # Only the disabling direction is ever applied. Passing enabled=True on a
+    # non-private run would override an operator's LANGSMITH_TRACING=false and
+    # force tracing on, so those runs keep the ambient configuration untouched.
+    tracing_guard = (
+        nullcontext() if initial_state["web_search_enabled"] else tracing_context(enabled=False)
+    )
+
     # Resolved via the module attribute so tests can monkeypatch graph.graph.app.
     started = time.perf_counter()
-    result, node_path, node_timings = _run_graph_with_trace(graph_runtime.app, initial_state)
+    with tracing_guard:
+        result, node_path, node_timings = _run_graph_with_trace(graph_runtime.app, initial_state)
     total_duration_ms = round((time.perf_counter() - started) * 1000.0, 2)
 
     answer_result = AnswerResult(

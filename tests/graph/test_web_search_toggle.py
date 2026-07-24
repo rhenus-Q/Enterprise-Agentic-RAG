@@ -1,12 +1,15 @@
 """
 Tests for the WEB_SEARCH_ENABLED toggle (privacy mode).
 
-Covers three layers, all fully mocked -- no API keys or network required:
+Covers four layers, all fully mocked -- no API keys or network required:
 1. graph.config.web_search_enabled() env-var parsing.
 2. The routing/decision functions in graph/graph.py, with the LLM chains
    monkeypatched at their lazy get_*() seams.
 3. The compiled graph end-to-end, proving the web_search node is called when
    the toggle is on and never reached when it is off.
+4. Privacy mode's second guarantee at the engine level: no LangSmith trace is
+   exported for a private run, while non-private runs leave the ambient
+   tracing configuration alone.
 """
 
 import importlib
@@ -15,6 +18,7 @@ from types import SimpleNamespace
 import pytest
 from langchain_core.documents import Document
 
+import graph.engine as engine_module
 import graph.graph as graph_module
 from graph.config import web_search_enabled
 from graph.consts import (
@@ -23,6 +27,7 @@ from graph.consts import (
     STOP_REASON_WEB_SEARCH_DISABLED,
     WEBSEARCH,
 )
+from graph.engine import AnswerOptions, answer_question
 from graph.graph import (
     MAX_RETRIES,
     decide_to_generate,
@@ -388,3 +393,87 @@ def test_format_answer_returns_plain_answer_on_normal_finish():
 def test_format_answer_returns_plain_answer_when_stop_reason_missing():
     # Callers that never seed stop_reason must keep today's output unchanged.
     assert format_answer({"generation": "Full answer."}) == "Full answer."
+
+
+# ---------------------------------------------------------------------------
+# LangSmith trace suppression (privacy mode's second guarantee)
+#
+# A LangSmith trace carries full prompts and retrieved page_content to a
+# third-party service, so privacy mode must suppress export -- and must do so
+# for every caller of answer_question(), not just the CLI.
+# ---------------------------------------------------------------------------
+
+
+class _RecordingTracingContext:
+    """Stands in for langsmith.tracing_context; records how it was used."""
+
+    def __init__(self):
+        self.calls = []
+        self.active_during_run = False
+
+    def __call__(self, **kwargs):
+        self.calls.append(kwargs)
+        return self
+
+    def __enter__(self):
+        self.active_during_run = True
+        return self
+
+    def __exit__(self, *exc_info):
+        return False
+
+
+class _StreamingFakeApp:
+    """Minimal compiled-graph stand-in; notes whether tracing was suppressed."""
+
+    def __init__(self, recorder):
+        self.recorder = recorder
+        self.tracing_suppressed_at_run_time = None
+
+    def stream(self, state, stream_mode="updates"):
+        # Sampled inside the stream so it reflects the state at the moment the
+        # graph actually executes -- i.e. inside the context manager, not after.
+        self.tracing_suppressed_at_run_time = self.recorder.active_during_run
+        yield {"generate": {"generation": "A"}}
+
+
+def _install_tracing_probe(monkeypatch):
+    recorder = _RecordingTracingContext()
+    monkeypatch.setattr(engine_module, "tracing_context", recorder)
+    fake_app = _StreamingFakeApp(recorder)
+    monkeypatch.setattr(graph_module, "app", fake_app)
+    return recorder, fake_app
+
+
+def test_privacy_mode_disables_langsmith_tracing_for_the_run(monkeypatch):
+    recorder, fake_app = _install_tracing_probe(monkeypatch)
+
+    answer_question("Q", AnswerOptions(web_search_enabled=False))
+
+    assert recorder.calls == [{"enabled": False}]
+    # The suppression must be active while the graph runs, not merely entered.
+    assert fake_app.tracing_suppressed_at_run_time is True
+
+
+def test_privacy_mode_via_environment_also_disables_tracing(monkeypatch):
+    # The guarantee must hold for the env-driven path too, not just per-run
+    # options -- that is how the CLI enables privacy mode.
+    monkeypatch.setenv("WEB_SEARCH_ENABLED", "false")
+    recorder, _ = _install_tracing_probe(monkeypatch)
+
+    answer_question("Q")
+
+    assert recorder.calls == [{"enabled": False}]
+
+
+def test_web_enabled_run_leaves_ambient_tracing_configuration_untouched(monkeypatch):
+    # Regression guard: passing enabled=True here would be the highest-priority
+    # override and would force tracing ON for an operator who deliberately set
+    # LANGSMITH_TRACING=false. Non-private runs must not touch tracing at all.
+    monkeypatch.delenv("WEB_SEARCH_ENABLED", raising=False)
+    recorder, fake_app = _install_tracing_probe(monkeypatch)
+
+    answer_question("Q", AnswerOptions(web_search_enabled=True))
+
+    assert recorder.calls == []
+    assert fake_app.tracing_suppressed_at_run_time is False

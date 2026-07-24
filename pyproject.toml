@@ -7,6 +7,9 @@ dependencies = [
     "langgraph",
     "langchain",
     "langchain-core",
+    # Imported directly by graph/engine.py (tracing_context) to suppress trace
+    # export in privacy mode; also a transitive dependency of langchain-core.
+    "langsmith",
     "langchain-openai",
     "langchain-chroma",
     "langchain-text-splitters",

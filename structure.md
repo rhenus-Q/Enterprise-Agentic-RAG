@@ -17,8 +17,8 @@ LangGraph workflow:
 - Answers come from a curated local knowledge base (Chroma) — a synthetic
   AcmeCorp internal-document corpus under `data/acmecorp_internal_docs/`
   (six fictional policy/guide documents; no real company data) — with web
-  search (Tavily) as a fallback, and a privacy mode that disables web
-  search entirely.
+  search (Tavily) as a fallback, and a privacy mode that disables web search
+  entirely and suppresses LangSmith trace export.
 - Every answer passes explicit quality gates (document relevance, answer
   grounding, answer usefulness).
 - Failed gates trigger **meaningful retries** that change the input between
@@ -117,7 +117,7 @@ Three pure decision functions in `graph/graph.py`:
 - Privacy mode off → an LLM router picks `retrieve` (knowledge-base topics) or
   `websearch` (current/external information).
 - Privacy mode on → always `retrieve`, **without calling the router LLM** (the
-  question never leaves the local environment, and the call is saved).
+  question is not sent to any third party for routing, and the call is saved).
 
 **`decide_to_generate`** (after document grading)
 - All chunks relevant → `generate`.
@@ -285,6 +285,25 @@ value wins over the environment). When disabled:
   is already recorded.
 - The `websearch` node is unreachable (verified by end-to-end tests asserting
   zero web-tool calls in worst-case scenarios).
+- No LangSmith trace is exported. `graph/engine.py` wraps the graph run in
+  `langsmith.tracing_context(enabled=False)`, which outranks both
+  `ls.configure()` and the `LANGSMITH_*`/`LANGCHAIN_*` environment variables.
+  Being execution-scoped rather than process-global, it keeps the per-run
+  privacy resolution per-run (the eval harness runs private and web-enabled
+  rows in one process), and covers every caller of `answer_question()` rather
+  than the CLI alone. Only the disabling direction is applied — forcing
+  `enabled=True` on a normal run would override an operator's deliberate
+  `LANGSMITH_TRACING=false`.
+
+Scope limit: privacy mode stops external web search and trace export, not the
+OpenAI calls themselves — the question and retrieved chunks still reach the
+model provider for all four LLM steps that run in this mode:
+retrieval/document grading, generation, grounding (hallucination) grading, and
+answer-usefulness grading. Routing is not among them: the router LLM is
+skipped entirely (see above), and it only ever receives the question, never
+retrieved chunks. A fully-local deployment
+would mean swapping the model and embedding providers, a separate deployment
+profile rather than a flag.
 
 All grounding and usefulness gates remain active in privacy mode, with one
 principled exception in both modes: the deterministic insufficient-context

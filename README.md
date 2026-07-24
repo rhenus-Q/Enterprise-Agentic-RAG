@@ -153,11 +153,11 @@ See [`.env.example`](.env.example) for the full template:
 | ----------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `OPENAI_API_KEY`                                                                    | Yes                                   | Chat models (router, graders, generation) and embeddings                                                                                                                       |
 | `TAVILY_API_KEY`                                                                    | Yes                                   | Web-search fallback node                                                                                                                                                       |
-| `WEB_SEARCH_ENABLED`                                                                | Optional (default `true`)             | Set to `false` to disable all external web search (privacy mode)                                                                                                               |
+| `WEB_SEARCH_ENABLED`                                                                | Optional (default `true`)             | Set to `false` for privacy mode: disables all external web search *and* LangSmith trace export                                                                                  |
 | `WEB_FALLBACK_POLICY`                                                               | Optional (default `conservative`)     | `conservative` / `aggressive` / `disabled` — when document grading falls back to web search (see below)                                                                        |
 | `MAX_LLM_CALLS_PER_RUN`, `MAX_WEB_SEARCHES_PER_RUN`, `MAX_WEB_RESULTS_TO_GRADE`     | Optional (defaults `30` / `5` / `15`) | Per-run cost/latency budgets (see below)                                                                                                                                       |
 | `LLM_REQUEST_TIMEOUT_SECONDS`                                                       | Optional (default `60`)               | Per-request timeout for a single LLM call, applied to all six chains; a timeout is handled by the existing failure paths and surfaces as the matching `*_error` stop reason     |
-| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT` | Optional                              | LangSmith tracing for LangChain/LangGraph runs. Set `LANGSMITH_TRACING=true`, provide a LangSmith API key, and choose a project name such as `enterprise-ai-automation-agent`. |
+| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT` | Optional                              | LangSmith tracing for LangChain/LangGraph runs. Set `LANGSMITH_TRACING=true`, provide a LangSmith API key, and choose a project name such as `enterprise-ai-automation-agent`. Ignored when `WEB_SEARCH_ENABLED=false` (privacy mode suppresses trace export). |
 
 `.env` is gitignored; only `.env.example` is committed.
 
@@ -165,9 +165,12 @@ See [`.env.example`](.env.example) for the full template:
 
 In enterprise or compliance-sensitive deployments, sending user questions to an
 external search API is a data-leak risk: every routed or fallback web search
-transmits the question text to a third-party service. Setting
-`WEB_SEARCH_ENABLED=false` guarantees questions never leave the local environment:
+transmits the question text to a third-party service, and an enabled LangSmith
+trace transmits considerably more — full prompts and the `page_content` of the
+internal documents that were retrieved. Setting `WEB_SEARCH_ENABLED=false`
+closes both paths:
 
+* No LangSmith trace is exported for the run, whatever `LANGSMITH_TRACING` and friends are set to. The suppression is applied per run in `graph/engine.py`, so it covers the CLI, the eval harness, and any programmatic caller of `answer_question()`. The metadata-only engine trace (`AnswerOptions.trace_path`) remains available for debugging.
 * The entry router never sends a question to web search — everything goes to vector retrieval (the router LLM call is skipped entirely on this path).
 * If retrieved documents are graded irrelevant, the workflow generates from whatever relevant documents remain instead of searching the web; with none left, it returns the deterministic *"I do not have enough information in the provided documents."* answer rather than fabricating one.
 * A grounded-but-off-target answer ends the run with the grounded answer instead of triggering a web-search supplement. In that case the workflow records a `stop_reason` in its state, and the CLI appends an explicit caveat to the answer so the limitation is never silent:
@@ -182,6 +185,14 @@ answer skips the graders entirely — it contains no claims to verify, and
 regenerating from the same empty context cannot improve it. The default
 (variable unset or any value other than `false`/`0`/`no`/`off`) preserves the
 full web-search behavior.
+
+**What privacy mode does not do.** It stops external web search and trace
+export; it does not make the assistant local-only. The retrieval grader,
+generation chain, hallucination grader, and answer grader all still send the
+question and the retrieved chunks to OpenAI. Read the mode as "no third-party
+web search and no trace export", not "nothing leaves the machine" — a
+fully-local deployment would mean replacing the model and embedding providers,
+which is a separate deployment profile rather than a flag.
 
 ### Web fallback policy (`WEB_FALLBACK_POLICY`)
 
@@ -298,6 +309,13 @@ LANGSMITH_API_KEY=your_langsmith_api_key
 LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 LANGSMITH_PROJECT=enterprise-ai-automation-agent
 ```
+
+> **Privacy mode overrides this.** When `WEB_SEARCH_ENABLED=false`, no trace is
+> exported regardless of the settings above — a LangSmith trace carries full
+> prompts and retrieved document content off the machine, so privacy mode
+> suppresses it along with web search. Use the metadata-only engine trace
+> (`AnswerOptions.trace_path`) to debug private runs. See
+> [ADR 002](docs/adr/002-web-search-privacy-mode.md).
 
 The two tracing layers serve different purposes:
 

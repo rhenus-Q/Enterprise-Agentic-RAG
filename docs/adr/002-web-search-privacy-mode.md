@@ -1,6 +1,7 @@
 # ADR 002: WEB_SEARCH_ENABLED privacy mode
 
-Status: Accepted
+Status: Accepted (amended 2026-07-24 — privacy mode now also suppresses
+LangSmith trace export; see "Amendment" below)
 
 Date: 2026-06-11
 
@@ -82,3 +83,56 @@ no claims to verify. In privacy mode it still ends through the
   reasonable UX for an interactive product, but it complicates the CLI and
   the guarantee story ("never" is easier to verify than "only when
   approved").
+
+## Amendment (2026-07-24): LangSmith trace export
+
+The original decision closed the Tavily egress path and left a larger one
+open. With `LANGSMITH_TRACING=true`, every chain invocation exported full
+prompt inputs and outputs — including the `page_content` of retrieved
+internal documents and the generated answers — to `api.smith.langchain.com`.
+Tavily received a search query; LangSmith received the corpus. Nothing in the
+codebase read a tracing variable, so `WEB_SEARCH_ENABLED=false` had no effect
+on it.
+
+That was also inconsistent with the standard applied elsewhere in the
+project: the engine's own trace JSON is deliberately metadata-only, console
+banners log exception type only, and secrets are redacted out of the question
+before it reaches `GraphState`.
+
+Privacy mode therefore now suppresses LangSmith export as well. The mechanism
+is `langsmith.tracing_context(enabled=False)` wrapped around the graph run in
+`graph/engine.py`, chosen over mutating `LANGSMITH_*`/`LANGCHAIN_*`
+environment variables for three reasons:
+
+- **Priority.** `tracing_context` outranks both `ls.configure()` and the
+  environment variables, so the guarantee does not depend on which of the
+  legacy `LANGCHAIN_*` or current `LANGSMITH_*` names an operator used to
+  enable tracing — a detail the repo's own docs are inconsistent about
+  (`.env.example` documents the legacy names, `README.md` the current ones).
+- **Scope.** It is execution-scoped, not process-global, which preserves the
+  per-run privacy resolution this ADR already relies on: the eval harness
+  keeps running private and web-enabled rows in the same process, each with
+  the correct tracing behavior.
+- **Coverage.** Placing it in the engine covers every caller of
+  `answer_question()`. A startup toggle in `main.py` would have left
+  `evals/run_eval.py` and programmatic callers exporting traces.
+
+Only the disabling direction is applied. Passing `enabled=True` on a
+non-private run would be the highest-priority override and would force
+tracing *on* for an operator who deliberately set `LANGSMITH_TRACING=false`,
+so those runs keep the ambient configuration untouched.
+
+Consistent with the reasoning that rejected a "half-privacy mode" above, the
+suppression is coupled to the existing flag rather than given its own opt-out.
+The cost is real — README recommends tracing for debugging exactly the
+self-correction loops that are hardest to reproduce — but the privacy-safe
+substitute already exists: `AnswerOptions.trace_path` records node path,
+per-node timings, counters, and stop reasons with no content.
+
+**Scope limit, stated plainly.** This does not make the assistant local-only,
+and the Context section above should be read with that in mind. The retrieval
+grader, generation chain, hallucination grader, and answer grader all still
+send the question and the retrieved chunks to OpenAI. Privacy mode means "no
+third-party web search and no trace export" — not "nothing leaves the
+machine". Delivering the latter would require replacing the model and
+embedding providers, which is a separate deployment profile, not a flag.
