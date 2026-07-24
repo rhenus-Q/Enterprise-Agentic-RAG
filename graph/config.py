@@ -135,3 +135,107 @@ def llm_request_timeout_seconds() -> int:
     return _positive_int_from_env(
         "LLM_REQUEST_TIMEOUT_SECONDS", DEFAULT_LLM_REQUEST_TIMEOUT_SECONDS
     )
+
+
+# --- Provider selection (LLM_PROVIDER) ---
+#
+# Which provider serves every LLM and embedding call. Deliberately coarse: a
+# process-level deployment mode, not a per-run option and not a per-chain
+# selection. It has to be process-level because get_retriever() is cached for
+# the process and its Chroma collection is bound to one embedding space
+# (OpenAI's default 1536 dims vs. a local model's 1024), so a run cannot swap
+# providers halfway.
+PROVIDER_OPENAI = "openai"
+PROVIDER_OLLAMA = "ollama"
+
+_LLM_PROVIDERS = (PROVIDER_OPENAI, PROVIDER_OLLAMA)
+
+# Local-mode development defaults. Both tags were verified as installed on the
+# development endpoint rather than assumed — a wrong embedding tag would
+# silently build an index against the wrong model. Any locally hosted model can
+# be used instead via the environment variables below, with no graph changes.
+DEFAULT_LOCAL_CHAT_MODEL = "qwen3:4b-instruct-2507-q4_K_M"
+DEFAULT_LOCAL_EMBEDDING_MODEL = "qwen3-embedding:0.6b"
+DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
+
+
+def llm_provider() -> str:
+    """
+    Read the LLM_PROVIDER deployment mode from the environment.
+
+    Unset or empty returns the documented default ("openai"). An explicit
+    "openai"/"ollama" (case-insensitive, whitespace-stripped) returns that
+    value. Any other non-empty value raises ValueError.
+
+    Failing loudly here deliberately breaks this module's usual fail-safe
+    pattern. normalize_web_fallback_policy() can fall back to conservative
+    because every policy value is a benign variation; LLM_PROVIDER is
+    different in kind. Silently degrading a typo like "ollma" to "openai"
+    would ship the question and every retrieved chunk to a third party while
+    the operator believes the deployment is fully local — the exact silent
+    privacy failure the local mode exists to prevent. An unset value
+    defaulting to OpenAI is fine, because that is an explicit documented
+    default rather than a misread intention.
+    """
+
+    raw = os.getenv("LLM_PROVIDER")
+    if raw is None:
+        return PROVIDER_OPENAI
+
+    cleaned = raw.strip().lower()
+    if not cleaned:
+        return PROVIDER_OPENAI
+
+    if cleaned not in _LLM_PROVIDERS:
+        raise ValueError(
+            f"Invalid LLM_PROVIDER value {raw.strip()!r}. "
+            f"Valid options: {', '.join(_LLM_PROVIDERS)}. "
+            f"Unset the variable to use the default provider ({PROVIDER_OPENAI})."
+        )
+
+    return cleaned
+
+
+def local_mode_enabled() -> bool:
+    """
+    True when LLM_PROVIDER selects the local provider.
+
+    Derived helper — it reads no environment variable of its own, so the
+    fail-fast behavior of llm_provider() applies here too.
+    """
+
+    return llm_provider() == PROVIDER_OLLAMA
+
+
+def _non_empty_str_from_env(name: str, default: str) -> str:
+    """Read a whitespace-stripped string; missing or blank falls back to the default."""
+
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+
+    return raw.strip() or default
+
+
+def local_chat_model() -> str:
+    """Chat model served by the local provider (LOCAL_CHAT_MODEL)."""
+
+    return _non_empty_str_from_env("LOCAL_CHAT_MODEL", DEFAULT_LOCAL_CHAT_MODEL)
+
+
+def local_embedding_model() -> str:
+    """Embedding model served by the local provider (LOCAL_EMBEDDING_MODEL)."""
+
+    return _non_empty_str_from_env("LOCAL_EMBEDDING_MODEL", DEFAULT_LOCAL_EMBEDDING_MODEL)
+
+
+def ollama_base_url() -> str:
+    """
+    Base URL of the local provider endpoint (OLLAMA_BASE_URL).
+
+    Any trailing slash is stripped so callers can join paths without producing
+    a doubled separator. Note this is a real trust boundary: it defaults to
+    localhost but may point at private infrastructure elsewhere.
+    """
+
+    return _non_empty_str_from_env("OLLAMA_BASE_URL", DEFAULT_OLLAMA_BASE_URL).rstrip("/")

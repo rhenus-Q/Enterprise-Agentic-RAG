@@ -26,9 +26,8 @@ from functools import lru_cache
 from langchain_core.documents import Document
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 
-from graph.config import llm_request_timeout_seconds
+from graph.chains._llm import get_chat_model
 
 INSUFFICIENT_CONTEXT_ANSWER = "I do not have enough information in the provided documents."
 
@@ -108,8 +107,9 @@ def get_generation_chain():
     """
     Lazily build and cache the generation LCEL chain.
 
-    The ChatOpenAI client is constructed here on first call, not at import time,
-    so importing this module needs no API key or network.
+    The chat model comes from the shared provider factory and is constructed
+    on first call, not at import time, so importing this module needs no API
+    key or network.
 
     Chain:
     1. format documents into a context string
@@ -117,11 +117,7 @@ def get_generation_chain():
     3. extract a plain string with StrOutputParser
     """
 
-    llm = ChatOpenAI(
-        model="gpt-5-mini",
-        temperature=0,
-        timeout=llm_request_timeout_seconds(),
-    )
+    llm = get_chat_model()
 
     return (
         {

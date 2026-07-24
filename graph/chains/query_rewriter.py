@@ -20,9 +20,8 @@ from functools import lru_cache
 
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 
-from graph.config import llm_request_timeout_seconds
+from graph.chains._llm import get_chat_model
 
 system_prompt = """
 You are a web search query rewriter for an enterprise RAG system.
@@ -70,12 +69,9 @@ Previous (not useful) answer:
 def get_query_rewriter():
     """
     Lazily build and cache the query rewriter chain.
-    The ChatOpenAI client is constructed on first call, not at import time.
+    The chat model comes from the shared provider factory and is constructed
+    on first call, not at import time.
     """
 
-    llm = ChatOpenAI(
-        model="gpt-5-mini",
-        temperature=0,
-        timeout=llm_request_timeout_seconds(),
-    )
+    llm = get_chat_model()
     return prompt | llm | StrOutputParser()

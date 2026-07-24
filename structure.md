@@ -301,14 +301,55 @@ model provider for all four LLM steps that run in this mode:
 retrieval/document grading, generation, grounding (hallucination) grading, and
 answer-usefulness grading. Routing is not among them: the router LLM is
 skipped entirely (see above), and it only ever receives the question, never
-retrieved chunks. A fully-local deployment
-would mean swapping the model and embedding providers, a separate deployment
-profile rather than a flag.
+retrieved chunks. Closing the model path too requires swapping the provider,
+which is what the local provider mode below does.
 
 All grounding and usefulness gates remain active in privacy mode, with one
 principled exception in both modes: the deterministic insufficient-context
 answer skips the graders — it contains no claims to verify, and regenerating
 from the same empty context cannot improve it (see §5).
+
+### Local provider mode (`LLM_PROVIDER=ollama`) — experimental
+
+A process-level deployment mode that routes all six chains and both embedding
+call sites to an Ollama-compatible endpoint. It composes with privacy mode
+rather than replacing it.
+
+* **Seams.** One `graph/chains/_llm.py::get_chat_model()` serves every chain
+  (replacing six identical inline `ChatOpenAI(...)` constructions);
+  `ingestion.py::get_embeddings()` serves both embedding sites. Both stay lazy
+  and `@lru_cache`'d, and the local provider package is imported only when
+  local mode is selected, so imports remain side-effect-free.
+* **The one runtime-policy change.** `seed_state()` resolves
+  `web_search_enabled` to `False` whenever local mode is active, and a per-run
+  `AnswerOptions(web_search_enabled=True)` cannot override it. Tavily becomes
+  unreachable through the existing privacy paths and the
+  `tracing_context(enabled=False)` guard already keyed off that flag suppresses
+  LangSmith export. A local-mode run therefore traverses the **existing**
+  privacy path — nothing is added to or removed from the graph, and no node,
+  routing function, `stop_reason`, or `GraphState` field changed.
+* **Fail-fast configuration.** `llm_provider()` raises on an invalid non-empty
+  value instead of falling back, unlike `normalize_web_fallback_policy()`.
+  Every policy value is a benign variation; a mistyped provider is a silent
+  privacy failure.
+* **Provider-scoped indexes.** OpenAI keeps `chroma_db/` /
+  `agentic_rag_docs`; local mode uses `chroma_db_local/` /
+  `agentic_rag_docs_local`. `delete_collection()` during the idempotent rebuild
+  is scoped to the active provider, so neither ingest can destroy the other's
+  index, and switching between two already-built matching indexes needs no
+  re-ingestion. A sidecar `embedding_fingerprint.json` records provider +
+  model; a missing fingerprint means legacy-OpenAI (accepted in OpenAI mode, a
+  mismatch in local mode).
+* **Startup preflight, outside the graph.** `main.py` checks the provider
+  value, endpoint reachability, both installed models (reported individually),
+  and index presence + fingerprint match, then prints a mode banner.
+  `evals/run_eval.py` calls the same helpers *after* its `--validate-only`
+  early return, so dataset validation stays keys-free and never imports the
+  graph. Preflight lives outside the graph because ADR 006 requires in-graph
+  failures to degrade rather than crash; checking first keeps both graceful
+  degradation and an actionable message.
+* **Boundary.** No third-party egress — not "nothing leaves the machine":
+  `OLLAMA_BASE_URL` may point at private infrastructure. See ADR 014.
 
 ## 10. stop_reason and user-facing caveats
 

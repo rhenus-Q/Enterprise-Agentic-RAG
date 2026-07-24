@@ -146,6 +146,18 @@ def seed_state(
     if web_search_enabled is None:
         web_search_enabled = config.web_search_enabled()
 
+    # Local-provider mode (LLM_PROVIDER=ollama) forces the existing privacy
+    # path. Both web search and LangSmith export key off this one flag, so
+    # resolving it to False here is what makes local mode's "no third-party
+    # egress" guarantee hold, without adding or removing a single graph node.
+    #
+    # The precedence is deliberate and absolute: local mode wins, and an
+    # explicit AnswerOptions(web_search_enabled=True) cannot re-enable web
+    # search. A per-run option must never be able to reopen a third-party
+    # egress path that the deployment mode closed.
+    if config.local_mode_enabled():
+        web_search_enabled = False
+
     if web_fallback_policy is None:
         web_fallback_policy = config.web_fallback_policy()
     else:
@@ -328,8 +340,12 @@ def answer_question(
     privacy guarantee is unchanged: web_search_enabled=False (per run or via
     WEB_SEARCH_ENABLED=false) means zero external web searches regardless of
     the fallback policy. Such a run additionally exports no LangSmith trace,
-    whatever the ambient LANGSMITH_*/LANGCHAIN_* settings say. Note the scope:
-    this stops web search and trace export, not the OpenAI calls themselves —
+    whatever the ambient LANGSMITH_*/LANGCHAIN_* settings say. Local-provider
+    mode (LLM_PROVIDER=ollama) forces web_search_enabled=False for every run
+    and cannot be overridden per run, which is how it removes third-party
+    egress entirely rather than only for search. Note the scope in the default
+    OpenAI mode: this stops web search and trace export, not the OpenAI calls
+    themselves —
     the question and the retrieved chunks still reach the model provider for
     all four LLM steps that run in this mode: retrieval/document grading,
     generation, grounding (hallucination) grading, and answer-usefulness

@@ -949,6 +949,21 @@ def main(argv=None):
         print(f"Dataset OK: {len(rows)} rows " + ", ".join(f"{c}={n}" for c, n in counts.items()))
         return 0
 
+    # Provider startup checks, deliberately placed AFTER the --validate-only
+    # return above: dataset validation imports no graph, makes no model call,
+    # and must keep working with no API keys and no local model server running.
+    # Imported here for the same reason.
+    from main import PreflightError, run_local_mode_preflight
+
+    try:
+        local_banner = run_local_mode_preflight()
+    except PreflightError as exc:
+        print(f"ERROR: {exc}")
+        return 1
+
+    if local_banner:
+        print(local_banner)
+
     if args.limit is not None:
         rows = rows[: args.limit]
 

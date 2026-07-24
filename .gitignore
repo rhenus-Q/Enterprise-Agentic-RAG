@@ -35,6 +35,9 @@ coverage.xml
 # ---- Project data: persisted vector store ----
 # Rebuilt locally via `uv run python ingestion.py`; do not commit.
 chroma_db/
+# The local-provider (LLM_PROVIDER=ollama) index. A sibling directory, so the
+# pattern above does not cover it — it needs its own entry.
+chroma_db_local/
 
 # ---- Build artifacts ----
 build/

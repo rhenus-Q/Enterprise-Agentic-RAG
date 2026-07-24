@@ -19,6 +19,7 @@ dependencies = [
     "python-dotenv",
     "pydantic",
     "langchain-tavily>=0.2.18",
+    "langchain-ollama>=1.1.0",
 ]
 
 # This is an application, not a library to be packaged/installed; tell uv not to build the project itself as a package.

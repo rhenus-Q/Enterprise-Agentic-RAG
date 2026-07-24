@@ -20,10 +20,9 @@ from functools import lru_cache
 from typing import Literal
 
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
-from graph.config import llm_request_timeout_seconds
+from graph.chains._llm import get_chat_model
 
 
 class RouteQuery(BaseModel):
@@ -84,14 +83,11 @@ prompt = ChatPromptTemplate.from_messages(
 def get_question_router():
     """
     Lazily build and cache the question router chain.
-    The ChatOpenAI client is constructed on first call, not at import time.
+    The chat model comes from the shared provider factory and is constructed
+    on first call, not at import time.
     """
 
-    llm = ChatOpenAI(
-        model="gpt-5-mini",
-        temperature=0,
-        timeout=llm_request_timeout_seconds(),
-    )
+    llm = get_chat_model()
     structured_llm = llm.with_structured_output(RouteQuery)
     return prompt | structured_llm
 

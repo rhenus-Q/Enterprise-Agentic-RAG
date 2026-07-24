@@ -20,10 +20,9 @@ from functools import lru_cache
 
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
-from graph.config import llm_request_timeout_seconds
+from graph.chains._llm import get_chat_model
 
 
 class GradeHallucination(BaseModel):
@@ -100,17 +99,14 @@ def format_documents(documents: list[Document]) -> str:
 def get_hallucination_grader():
     """
     Lazily build and cache the grounding/hallucination grader chain.
-    The ChatOpenAI client is constructed on first call, not at import time.
+    The chat model comes from the shared provider factory and is constructed
+    on first call, not at import time.
 
     Documents are formatted to text first, then passed to prompt + structured LLM,
     so the chain can be called directly with GraphState's documents (List[Document]).
     """
 
-    llm = ChatOpenAI(
-        model="gpt-5-mini",
-        temperature=0,
-        timeout=llm_request_timeout_seconds(),
-    )
+    llm = get_chat_model()
     structured_llm = llm.with_structured_output(GradeHallucination)
     return (
         {

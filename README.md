@@ -151,12 +151,16 @@ See [`.env.example`](.env.example) for the full template:
 
 | Variable                                                                            | Required                              | Used for                                                                                                                                                                       |
 | ----------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `OPENAI_API_KEY`                                                                    | Yes                                   | Chat models (router, graders, generation) and embeddings                                                                                                                       |
-| `TAVILY_API_KEY`                                                                    | Yes                                   | Web-search fallback node                                                                                                                                                       |
+| `OPENAI_API_KEY`                                                                    | Yes (unless `LLM_PROVIDER=ollama`)    | Chat models (router, graders, generation) and embeddings                                                                                                                       |
+| `TAVILY_API_KEY`                                                                    | Yes (unless `LLM_PROVIDER=ollama`)    | Web-search fallback node                                                                                                                                                       |
 | `WEB_SEARCH_ENABLED`                                                                | Optional (default `true`)             | Set to `false` for privacy mode: disables all external web search *and* LangSmith trace export                                                                                  |
 | `WEB_FALLBACK_POLICY`                                                               | Optional (default `conservative`)     | `conservative` / `aggressive` / `disabled` — when document grading falls back to web search (see below)                                                                        |
 | `MAX_LLM_CALLS_PER_RUN`, `MAX_WEB_SEARCHES_PER_RUN`, `MAX_WEB_RESULTS_TO_GRADE`     | Optional (defaults `30` / `5` / `15`) | Per-run cost/latency budgets (see below)                                                                                                                                       |
 | `LLM_REQUEST_TIMEOUT_SECONDS`                                                       | Optional (default `60`)               | Per-request timeout for a single LLM call, applied to all six chains; a timeout is handled by the existing failure paths and surfaces as the matching `*_error` stop reason     |
+| `LLM_PROVIDER`                                                                      | Optional (default `openai`)           | `openai` / `ollama`. Process-level provider switch; `ollama` routes every LLM and embedding call to a local endpoint (see below). An **invalid** value fails loudly rather than falling back |
+| `LOCAL_CHAT_MODEL`                                                                  | Optional (default `qwen3:4b-instruct-2507-q4_K_M`) | Chat model used when `LLM_PROVIDER=ollama`; must be installed on the endpoint                                                                                      |
+| `LOCAL_EMBEDDING_MODEL`                                                             | Optional (default `qwen3-embedding:0.6b`) | Embedding model used when `LLM_PROVIDER=ollama`; changing it requires re-running ingestion                                                                             |
+| `OLLAMA_BASE_URL`                                                                   | Optional (default `http://localhost:11434`) | Ollama-compatible endpoint serving both local models                                                                                                                |
 | `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT` | Optional                              | LangSmith tracing for LangChain/LangGraph runs. Set `LANGSMITH_TRACING=true`, provide a LangSmith API key, and choose a project name such as `enterprise-ai-automation-agent`. Ignored when `WEB_SEARCH_ENABLED=false` (privacy mode suppresses trace export). |
 
 `.env` is gitignored; only `.env.example` is committed.
@@ -190,9 +194,77 @@ full web-search behavior.
 export; it does not make the assistant local-only. The retrieval grader,
 generation chain, hallucination grader, and answer grader all still send the
 question and the retrieved chunks to OpenAI. Read the mode as "no third-party
-web search and no trace export", not "nothing leaves the machine" — a
-fully-local deployment would mean replacing the model and embedding providers,
-which is a separate deployment profile rather than a flag.
+web search and no trace export", not "nothing leaves the machine" — removing
+the model provider too is what `LLM_PROVIDER=ollama` below is for.
+
+### Local provider mode (`LLM_PROVIDER=ollama`) — experimental
+
+Privacy mode closes the search and tracing paths but cannot close the model
+path: only a provider swap can. Setting `LLM_PROVIDER=ollama` routes all six
+chains and both embedding call sites to an Ollama-compatible endpoint.
+
+**The boundary, stated accurately.** In local mode no data is sent to OpenAI,
+Tavily, or LangSmith, and no failure path falls back to them — a local model
+failure ends the run through the normal `generation_error` caveat rather than
+silently rerouting. But `OLLAMA_BASE_URL` is itself the trust boundary: it
+defaults to `localhost` and may point at your own private infrastructure. The
+correct claim is **"no third-party egress"**, never "nothing leaves the
+machine".
+
+* **Process-level, not per-run.** The retriever is cached per process and its
+  Chroma collection is bound to one embedding space, so the provider is a
+  deployment mode — there is no `AnswerOptions` field for it.
+* **Precedence.** Local mode forces `web_search_enabled=False` for every run;
+  an explicit `AnswerOptions(web_search_enabled=True)` cannot re-enable web
+  search. This is a deliberate change to *resolved runtime policy* — a
+  local-mode run traverses the existing privacy path — while graph topology,
+  routing, nodes, and `GraphState` are untouched.
+* **Invalid values fail loudly.** Unlike `WEB_FALLBACK_POLICY`, a typo such as
+  `LLM_PROVIDER=ollma` raises instead of falling back to `openai`; silently
+  degrading it would ship your questions and retrieved chunks to a third party
+  while you believed the deployment was local.
+* **Experimental, and not a quality claim.** The defaults prove the local
+  execution path works end to end. They say nothing about enterprise answer
+  quality — small models are weakest exactly at the grounding gate. Point the
+  same switch at a stronger locally hosted model for real use; no graph
+  changes are needed.
+* **Raise the timeout.** `LLM_REQUEST_TIMEOUT_SECONDS=60` is likely too tight
+  for local inference, especially on the first call while the model cold-loads.
+
+**Separate indexes, and when re-ingestion is needed.** The OpenAI index
+(`chroma_db/`, collection `agentic_rag_docs`) and the local one
+(`chroma_db_local/`, collection `agentic_rag_docs_local`) coexist, and each
+ingest only ever touches its own provider's collection. Each index stores a
+small fingerprint (`{"embedding_provider", "embedding_model"}`) that startup
+checks against the active configuration — two different embedding models of
+the same dimension raise no error on their own and would silently retrieve
+meaningless neighbours.
+
+| Situation | Re-ingestion? |
+|---|---|
+| First use of a provider, no index yet | Yes |
+| Configured embedding model changed (fingerprint mismatch) | Yes, for that provider |
+| Switching between two already-built matching indexes | **No** — this is the normal case |
+| An index built before this feature (no fingerprint), in OpenAI mode | **No** — treated as legacy OpenAI |
+
+```powershell
+ollama pull qwen3:4b-instruct-2507-q4_K_M   # or whichever chat model you configure
+ollama pull qwen3-embedding:0.6b
+
+$env:LLM_PROVIDER = "ollama"
+uv run python ingestion.py                  # builds chroma_db_local/
+uv run python main.py
+```
+
+Startup checks run before the graph and fail with an actionable message on the
+first problem: invalid provider value, unreachable endpoint, a chat or
+embedding model that is not installed (named individually), a missing local
+index, or a fingerprint that does not match. They live outside the graph on
+purpose — ADR 006 requires in-graph failures to degrade rather than crash, so a
+node could only turn a misconfigured endpoint into a generic `*_error` whose
+message is discarded. `uv run python evals/run_eval.py --validate-only` stays
+exempt: it never imports the graph, so it keeps working with no endpoint
+running.
 
 ### Web fallback policy (`WEB_FALLBACK_POLICY`)
 
