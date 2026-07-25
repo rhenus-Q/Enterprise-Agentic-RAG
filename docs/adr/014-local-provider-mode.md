@@ -158,3 +158,14 @@ much stronger locally hosted model with no graph changes.
   this depends on how the installed `ChatOllama` maps Ollama's thinking
   parameter. Leaked `<think>` blocks would contaminate both the answer and what
   the grounding grader sees — worth a manual check on first use.
+
+## Extended by ADR 015
+
+`FULLY_LOCAL_MODE=true` is an intention-named equivalent of
+`LLM_PROVIDER=ollama`, resolved inside `llm_provider()`. `LLM_PROVIDER` keeps
+the semantics described above unchanged and still selects the local provider on
+its own, including when `FULLY_LOCAL_MODE=false` is also set — explicit `false`
+asserts nothing. The single contradiction, `FULLY_LOCAL_MODE=true` with
+`LLM_PROVIDER=openai`, raises for the reason given in this ADR. ADR 015 also
+generalizes this ADR's startup preflight, renaming
+`run_local_mode_preflight()` to `run_startup_preflight()`.

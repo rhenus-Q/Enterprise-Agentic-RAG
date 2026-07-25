@@ -12,7 +12,7 @@ model server, no ingestion:
    router is skipped in privacy mode and the query rewriter is unreachable
    because REWRITE_QUERY only edges into WEBSEARCH, so two modules would stay
    silently unproven.
-3. main.run_local_mode_preflight() -- every failure branch, plus the
+3. main.run_startup_preflight() -- every failure branch, plus the
    --validate-only bypass.
 4. Composition with privacy mode, plus egress tripwires: local mode must never
    construct an OpenAI client, never invoke Tavily, never export a LangSmith
@@ -447,7 +447,7 @@ def test_preflight_rejects_an_invalid_provider_value(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "ollma")
 
     with pytest.raises(main_module.PreflightError) as excinfo:
-        main_module.run_local_mode_preflight()
+        main_module.run_startup_preflight()
 
     assert "ollma" in str(excinfo.value)
 
@@ -457,7 +457,7 @@ def test_preflight_reports_an_unreachable_endpoint(monkeypatch):
     _patch_endpoint(monkeypatch, error=OSError("connection refused"))
 
     with pytest.raises(main_module.PreflightError) as excinfo:
-        main_module.run_local_mode_preflight()
+        main_module.run_startup_preflight()
 
     message = str(excinfo.value)
     assert "not reachable" in message
@@ -470,7 +470,7 @@ def test_preflight_names_a_missing_chat_model(monkeypatch):
     _patch_index(monkeypatch)
 
     with pytest.raises(main_module.PreflightError) as excinfo:
-        main_module.run_local_mode_preflight()
+        main_module.run_startup_preflight()
 
     message = str(excinfo.value)
     assert CHAT_MODEL in message
@@ -483,7 +483,7 @@ def test_preflight_names_a_missing_embedding_model(monkeypatch):
     _patch_index(monkeypatch)
 
     with pytest.raises(main_module.PreflightError) as excinfo:
-        main_module.run_local_mode_preflight()
+        main_module.run_startup_preflight()
 
     message = str(excinfo.value)
     assert EMBED_MODEL in message
@@ -496,7 +496,7 @@ def test_preflight_requests_ingestion_when_the_local_index_is_missing(monkeypatc
     _patch_index(monkeypatch, exists=False)
 
     with pytest.raises(main_module.PreflightError) as excinfo:
-        main_module.run_local_mode_preflight()
+        main_module.run_startup_preflight()
 
     assert "ingestion.py" in str(excinfo.value)
 
@@ -509,7 +509,7 @@ def test_preflight_treats_a_missing_fingerprint_as_a_mismatch_in_local_mode(monk
     _patch_index(monkeypatch, fingerprint=None)
 
     with pytest.raises(main_module.PreflightError) as excinfo:
-        main_module.run_local_mode_preflight()
+        main_module.run_startup_preflight()
 
     message = str(excinfo.value)
     assert "fingerprint" in message
@@ -525,7 +525,7 @@ def test_preflight_reports_a_fingerprint_provider_mismatch(monkeypatch):
     )
 
     with pytest.raises(main_module.PreflightError) as excinfo:
-        main_module.run_local_mode_preflight()
+        main_module.run_startup_preflight()
 
     message = str(excinfo.value)
     assert PROVIDER_OPENAI in message
@@ -543,7 +543,7 @@ def test_preflight_reports_a_fingerprint_embedding_model_mismatch(monkeypatch):
     )
 
     with pytest.raises(main_module.PreflightError) as excinfo:
-        main_module.run_local_mode_preflight()
+        main_module.run_startup_preflight()
 
     message = str(excinfo.value)
     assert "some-other-embed" in message
@@ -556,7 +556,7 @@ def test_preflight_passes_and_reports_the_mode_when_everything_matches(monkeypat
     _patch_endpoint(monkeypatch)
     _patch_index(monkeypatch)
 
-    banner = main_module.run_local_mode_preflight()
+    banner = main_module.run_startup_preflight()
 
     assert banner is not None
     assert CHAT_MODEL in banner
@@ -572,7 +572,7 @@ def test_preflight_accepts_a_bare_model_name_against_an_installed_latest_tag(mon
     _patch_endpoint(monkeypatch, models=("qwen3:latest", EMBED_MODEL))
     _patch_index(monkeypatch)
 
-    assert main_module.run_local_mode_preflight() is not None
+    assert main_module.run_startup_preflight() is not None
 
 
 def test_openai_mode_preflight_is_a_no_op_even_with_a_legacy_index(monkeypatch):
@@ -583,7 +583,7 @@ def test_openai_mode_preflight_is_a_no_op_even_with_a_legacy_index(monkeypatch):
     monkeypatch.setattr(main_module, "index_exists", _tripwire("index_exists"))
     monkeypatch.setattr(main_module, "read_index_fingerprint", _tripwire("read_index_fingerprint"))
 
-    assert main_module.run_local_mode_preflight() is None
+    assert main_module.run_startup_preflight() is None
 
 
 def test_validate_only_never_runs_preflight(monkeypatch, capsys):
@@ -594,9 +594,7 @@ def test_validate_only_never_runs_preflight(monkeypatch, capsys):
     monkeypatch.setenv("LLM_PROVIDER", "ollama")
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:9")  # nothing listening
     monkeypatch.setattr(main_module, "installed_ollama_models", _tripwire("endpoint probe"))
-    monkeypatch.setattr(
-        main_module, "run_local_mode_preflight", _tripwire("run_local_mode_preflight")
-    )
+    monkeypatch.setattr(main_module, "run_startup_preflight", _tripwire("run_startup_preflight"))
 
     assert run_eval_main(["--validate-only"]) == 0
     assert "Dataset OK" in capsys.readouterr().out

@@ -146,16 +146,22 @@ def seed_state(
     if web_search_enabled is None:
         web_search_enabled = config.web_search_enabled()
 
-    # Local-provider mode (LLM_PROVIDER=ollama) forces the existing privacy
+    # PRIVACY_MODE=true and local-provider mode both force the existing privacy
     # path. Both web search and LangSmith export key off this one flag, so
-    # resolving it to False here is what makes local mode's "no third-party
-    # egress" guarantee hold, without adding or removing a single graph node.
+    # resolving it to False here is what makes the "no third-party egress"
+    # guarantee hold, without adding or removing a single graph node.
     #
-    # The precedence is deliberate and absolute: local mode wins, and an
-    # explicit AnswerOptions(web_search_enabled=True) cannot re-enable web
-    # search. A per-run option must never be able to reopen a third-party
-    # egress path that the deployment mode closed.
-    if config.local_mode_enabled():
+    # The precedence is deliberate and absolute: this override runs AFTER the
+    # per-run resolution above, so an explicit
+    # AnswerOptions(web_search_enabled=True) cannot re-enable web search. A
+    # per-run option must never be able to reopen an egress path the deployment
+    # closed. WEB_SEARCH_ENABLED is deliberately NOT part of this check — it
+    # stays a per-run-overridable default (ADR 002); PRIVACY_MODE is the lock.
+    #
+    # Keep this here rather than folding it into config.web_search_enabled(),
+    # which an explicit per-run option bypasses entirely: moving it would
+    # silently downgrade the lock to a default. See ADR 015.
+    if config.privacy_mode() or config.local_mode_enabled():
         web_search_enabled = False
 
     if web_fallback_policy is None:

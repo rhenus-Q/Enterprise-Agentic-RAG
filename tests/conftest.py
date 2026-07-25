@@ -21,8 +21,11 @@ requires_openai = pytest.mark.skipif(
 )
 
 
-# Environment variables selecting and configuring the LLM/embedding provider.
+# Environment variables selecting the deployment mode and configuring the
+# LLM/embedding provider.
 PROVIDER_ENV_VARS = (
+    "PRIVACY_MODE",
+    "FULLY_LOCAL_MODE",
     "LLM_PROVIDER",
     "LOCAL_CHAT_MODEL",
     "LOCAL_EMBEDDING_MODEL",
@@ -33,24 +36,29 @@ PROVIDER_ENV_VARS = (
 @pytest.fixture(autouse=True)
 def isolate_provider_env(monkeypatch):
     """
-    Run every test as if no provider configuration existed, so a developer's
-    local .env cannot change what the suite asserts.
+    Run every test as if no mode or provider configuration existed, so a
+    developer's local .env cannot change what the suite asserts.
 
     load_dotenv() above deliberately loads .env before collection, which means
-    an operator who sets LLM_PROVIDER=ollama to actually use local mode would
-    otherwise import that setting into the test run. That is not hypothetical:
-    local mode forces web_search_enabled=False for every run, so twelve tests
-    across test_engine.py, test_security_behavior.py, test_observability.py,
-    and test_web_search_toggle.py would fail while asserting perfectly correct
-    web-enabled behavior — failures that look like regressions but are only
-    ambient configuration leaking in.
+    an operator who sets PRIVACY_MODE=true or LLM_PROVIDER=ollama to actually
+    use those features would otherwise import the setting into the test run.
+    That is not hypothetical: local mode forces web_search_enabled=False for
+    every run, and twelve tests across test_engine.py,
+    test_security_behavior.py, test_observability.py, and
+    test_web_search_toggle.py failed exactly this way before this fixture
+    existed — while asserting perfectly correct web-enabled behavior. Failures
+    that look like regressions but are only ambient configuration leaking in.
 
-    Clearing the variables here makes provider selection opt-in: a test that
-    cares sets it explicitly with monkeypatch (see
-    tests/graph/test_local_provider.py, which sets or deletes them in every
-    test and is therefore unaffected either way). It also pins tests/chains/ to
-    the real gpt-5-mini those integration tests are written against, rather
-    than silently redirecting them to a local endpoint.
+    PRIVACY_MODE is the sharper case: it is an absolute lock that a per-run
+    AnswerOptions(web_search_enabled=True) cannot override, so it would break
+    the same tests even where an explicit per-run option is passed.
+
+    Clearing the variables here makes mode selection opt-in: a test that cares
+    sets it explicitly with monkeypatch (see tests/graph/test_mode_flags.py and
+    tests/graph/test_local_provider.py, which set or delete them in every test
+    and are therefore unaffected either way). It also pins tests/chains/ to the
+    real gpt-5-mini those integration tests are written against, rather than
+    silently redirecting them to a local endpoint.
 
     monkeypatch restores the original environment after each test.
     """

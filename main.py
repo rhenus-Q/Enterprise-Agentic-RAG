@@ -15,10 +15,12 @@ load_dotenv()
 
 from graph.config import (
     PROVIDER_OLLAMA,
+    fully_local_mode,
     llm_provider,
     local_chat_model,
     local_embedding_model,
     ollama_base_url,
+    privacy_mode,
     web_search_enabled,
 )
 from graph.engine import answer_question
@@ -102,22 +104,30 @@ def _model_installed(model, installed):
     return ":" not in model and f"{model}:latest" in installed
 
 
-def run_local_mode_preflight():
+def run_startup_preflight():
     """
-    Validate the provider configuration before the graph runs.
+    Validate the mode and provider configuration before the graph runs.
 
-    The provider value itself is always checked, in both modes: an invalid
-    LLM_PROVIDER must fail loudly rather than quietly serving traffic to
-    OpenAI. The remaining checks — endpoint reachable, both models installed,
-    index present and matching — apply only in local mode, so an OpenAI
-    deployment behaves exactly as it did before, including one whose index
-    predates fingerprints.
+    The mode flags and the provider value are checked in BOTH modes: an
+    unparseable PRIVACY_MODE / FULLY_LOCAL_MODE, an invalid LLM_PROVIDER, or a
+    FULLY_LOCAL_MODE/LLM_PROVIDER contradiction must fail here with a readable
+    message. Without this the same ValueError would surface as a raw traceback
+    in the CLI (the banner below reads web_search_enabled()) or, worse, be
+    swallowed by the eval harness's per-row handler and reported as a generic
+    failed row.
+
+    The remaining checks — endpoint reachable, both models installed, index
+    present and matching — apply only in local mode, so an OpenAI deployment
+    behaves exactly as it did before, including one whose index predates
+    fingerprints.
 
     Returns a banner string in local mode and None in OpenAI mode. Raises
     PreflightError on the first failed check, with a message naming what to fix.
     """
 
     try:
+        privacy_mode()
+        fully_local_mode()
         provider = llm_provider()
     except ValueError as exc:
         raise PreflightError(str(exc)) from exc
@@ -206,7 +216,7 @@ def main():
     print("Type 'exit' to quit.\n")
 
     try:
-        local_banner = run_local_mode_preflight()
+        local_banner = run_startup_preflight()
     except PreflightError as exc:
         print(f"Startup check failed:\n  {exc}")
         return 1
@@ -214,16 +224,25 @@ def main():
     if local_banner:
         print(local_banner)
 
-    # Privacy mode toggle: when WEB_SEARCH_ENABLED=false, questions are never
-    # sent to an external web search service (Tavily), and no LangSmith trace
-    # is exported. The suppression itself lives in graph/engine.py so that it
-    # covers every caller, not just this CLI. Skipped in local mode, whose
-    # banner above already states the (stronger) guarantee.
+    # Privacy mode: questions are never sent to an external web search service
+    # (Tavily), and no LangSmith trace is exported. The suppression itself
+    # lives in graph/engine.py so that it covers every caller, not just this
+    # CLI. Skipped in local mode, whose banner above already states the
+    # (stronger) guarantee. Two variables can reach this state, so name the one
+    # responsible — PRIVACY_MODE additionally locks out per-run overrides.
     if not local_banner and not web_search_enabled():
+        locked = privacy_mode()
+        source = "PRIVACY_MODE=true" if locked else "WEB_SEARCH_ENABLED=false"
+        lock_note = (
+            "  - This is an absolute lock: a per-run option cannot re-enable it.\n"
+            if locked
+            else ""
+        )
         print(
-            "Privacy mode is ON (WEB_SEARCH_ENABLED=false):\n"
+            f"Privacy mode is ON ({source}):\n"
             "  - Web search is disabled; answers come from the local knowledge base only.\n"
             "  - LangSmith tracing is disabled; no trace leaves this machine.\n"
+            f"{lock_note}"
             "  Note: questions and retrieved chunks are still sent to OpenAI.\n"
         )
 

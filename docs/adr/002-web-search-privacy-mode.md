@@ -135,4 +135,12 @@ grader, generation chain, hallucination grader, and answer grader all still
 send the question and the retrieved chunks to OpenAI. Privacy mode means "no
 third-party web search and no trace export" — not "nothing leaves the
 machine". Delivering the latter would require replacing the model and
-embedding providers, which is a separate deployment profile, not a flag.
+embedding providers, which is a separate deployment profile, not a flag — see
+ADR 014, which added exactly that.
+
+**Extended by ADR 015.** `PRIVACY_MODE=true` is an intention-named flag with
+the same two effects, but as an absolute *lock*: no per-run
+`AnswerOptions(web_search_enabled=True)` can reopen either path.
+`WEB_SEARCH_ENABLED` keeps the semantics described above unchanged — it remains
+a per-run-overridable **default**, and its lenient value parsing (anything not
+explicitly falsy means enabled) is untouched.

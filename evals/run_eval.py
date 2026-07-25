@@ -953,10 +953,10 @@ def main(argv=None):
     # return above: dataset validation imports no graph, makes no model call,
     # and must keep working with no API keys and no local model server running.
     # Imported here for the same reason.
-    from main import PreflightError, run_local_mode_preflight
+    from main import PreflightError, run_startup_preflight
 
     try:
-        local_banner = run_local_mode_preflight()
+        local_banner = run_startup_preflight()
     except PreflightError as exc:
         print(f"ERROR: {exc}")
         return 1

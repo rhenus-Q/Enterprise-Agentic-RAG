@@ -13,16 +13,86 @@ import os
 # Values (case-insensitive, whitespace-stripped) that disable a boolean flag.
 _FALSY_VALUES = {"false", "0", "no", "off"}
 
+# Values that enable one. Used only by the default-off mode flags below;
+# WEB_SEARCH_ENABLED keeps its own lenient "anything not falsy is on" rule.
+_TRUTHY_VALUES = {"true", "1", "yes", "on"}
+
+
+def _flag_from_env(name: str) -> bool:
+    """
+    Read a default-off boolean mode flag.
+
+    Missing or empty is False. Recognized truthy/falsy spellings resolve
+    normally. Anything else raises ValueError rather than being guessed: these
+    flags gate external egress, so a typo must not quietly resolve to either
+    answer.
+
+    Deliberately stricter than web_search_enabled() below, which treats any
+    unrecognized value as enabled. That leniency is a published contract
+    (ADR 002) with tests pinning it, so it is left untouched; a new surface can
+    afford the stricter rule, matching llm_provider().
+    """
+
+    raw = os.getenv(name)
+    if raw is None:
+        return False
+
+    cleaned = raw.strip().lower()
+    if not cleaned:
+        return False
+
+    if cleaned in _TRUTHY_VALUES:
+        return True
+
+    if cleaned in _FALSY_VALUES:
+        return False
+
+    raise ValueError(
+        f"Invalid {name} value {raw.strip()!r}. "
+        f"Valid options: {', '.join(sorted(_TRUTHY_VALUES))} to enable, "
+        f"{', '.join(sorted(_FALSY_VALUES))} to disable. "
+        f"Unset the variable to leave {name} off."
+    )
+
+
+def privacy_mode() -> bool:
+    """
+    Read the PRIVACY_MODE lock from the environment (default off).
+
+    True is an absolute lock: no external web search and no LangSmith trace
+    export, and — unlike WEB_SEARCH_ENABLED — a per-run
+    AnswerOptions(web_search_enabled=True) cannot reopen either path.
+
+    The lock itself is applied in graph/engine.py::seed_state(), because an
+    explicit per-run option bypasses this module entirely. See ADR 015.
+
+    False or unset asserts nothing, leaving WEB_SEARCH_ENABLED and per-run
+    options in control.
+    """
+
+    return _flag_from_env("PRIVACY_MODE")
+
 
 def web_search_enabled() -> bool:
     """
-    Read the WEB_SEARCH_ENABLED toggle from the environment.
+    Resolve the DEFAULT web-search setting from the environment.
 
-    Returns True when the variable is missing or set to anything other than an
-    explicit falsy value, preserving the original always-on behavior. Only an
-    explicit "false" / "0" / "no" / "off" enables privacy mode, in which user
-    questions are never sent to an external web search service.
+    Web search is on unless something asks for privacy: PRIVACY_MODE=true, or
+    an explicit falsy WEB_SEARCH_ENABLED ("false" / "0" / "no" / "off"). Any
+    other WEB_SEARCH_ENABLED value still means enabled, preserving that
+    variable's original contract.
+
+    Only the disabling direction is ever applied, so PRIVACY_MODE=false cannot
+    raise the default back up when WEB_SEARCH_ENABLED=false is also set.
+
+    This is the DEFAULT layer: seed_state() consults it only when no per-run
+    option was given, and the CLI banner reads it. The absolute lock lives in
+    graph/engine.py::seed_state() — do not move it here, where an explicit
+    per-run option would bypass it and silently downgrade it to a default.
     """
+
+    if privacy_mode():
+        return False
 
     return os.getenv("WEB_SEARCH_ENABLED", "true").strip().lower() not in _FALSY_VALUES
 
@@ -159,38 +229,66 @@ DEFAULT_LOCAL_EMBEDDING_MODEL = "qwen3-embedding:0.6b"
 DEFAULT_OLLAMA_BASE_URL = "http://localhost:11434"
 
 
+def fully_local_mode() -> bool:
+    """
+    Read the FULLY_LOCAL_MODE convenience flag (default off).
+
+    True selects the local provider. False or unset asserts nothing and leaves
+    LLM_PROVIDER in control — an operator who copies FULLY_LOCAL_MODE=false
+    from .env.example while separately setting LLM_PROVIDER=ollama holds a
+    coherent configuration that must keep working.
+
+    Reads only its own variable: llm_provider() consults this function, so
+    consulting llm_provider() here would recurse.
+    """
+
+    return _flag_from_env("FULLY_LOCAL_MODE")
+
+
 def llm_provider() -> str:
     """
-    Read the LLM_PROVIDER deployment mode from the environment.
+    Resolve the provider deployment mode from FULLY_LOCAL_MODE and LLM_PROVIDER.
 
-    Unset or empty returns the documented default ("openai"). An explicit
-    "openai"/"ollama" (case-insensitive, whitespace-stripped) returns that
-    value. Any other non-empty value raises ValueError.
+    FULLY_LOCAL_MODE=true selects "ollama". Unset or false asserts nothing, so
+    LLM_PROVIDER decides on its own: unset or empty returns the documented
+    default ("openai"), and an explicit "openai"/"ollama" (case-insensitive,
+    whitespace-stripped) returns that value.
+
+    Two configurations raise ValueError: an invalid LLM_PROVIDER value, and the
+    single genuine contradiction FULLY_LOCAL_MODE=true with LLM_PROVIDER=openai.
 
     Failing loudly here deliberately breaks this module's usual fail-safe
     pattern. normalize_web_fallback_policy() can fall back to conservative
-    because every policy value is a benign variation; LLM_PROVIDER is
-    different in kind. Silently degrading a typo like "ollma" to "openai"
-    would ship the question and every retrieved chunk to a third party while
-    the operator believes the deployment is fully local — the exact silent
-    privacy failure the local mode exists to prevent. An unset value
-    defaulting to OpenAI is fine, because that is an explicit documented
-    default rather than a misread intention.
+    because every policy value is a benign variation; the provider is
+    different in kind. Silently degrading a typo like "ollma" to "openai", or
+    silently picking a side in a contradiction, would ship the question and
+    every retrieved chunk to a third party while the operator believes the
+    deployment is fully local — the exact silent privacy failure local mode
+    exists to prevent. An unset value defaulting to OpenAI is fine, because
+    that is an explicit documented default rather than a misread intention.
     """
 
+    requested_local = fully_local_mode()
+
     raw = os.getenv("LLM_PROVIDER")
-    if raw is None:
-        return PROVIDER_OPENAI
+    if raw is None or not raw.strip():
+        return PROVIDER_OLLAMA if requested_local else PROVIDER_OPENAI
 
     cleaned = raw.strip().lower()
-    if not cleaned:
-        return PROVIDER_OPENAI
 
     if cleaned not in _LLM_PROVIDERS:
         raise ValueError(
             f"Invalid LLM_PROVIDER value {raw.strip()!r}. "
             f"Valid options: {', '.join(_LLM_PROVIDERS)}. "
             f"Unset the variable to use the default provider ({PROVIDER_OPENAI})."
+        )
+
+    if requested_local and cleaned != PROVIDER_OLLAMA:
+        raise ValueError(
+            f"Contradictory configuration: FULLY_LOCAL_MODE=true requires the "
+            f"'{PROVIDER_OLLAMA}' provider, but LLM_PROVIDER is {cleaned!r}. "
+            f"Unset LLM_PROVIDER (or set it to '{PROVIDER_OLLAMA}') to run fully "
+            f"locally, or set FULLY_LOCAL_MODE=false to use {cleaned!r}."
         )
 
     return cleaned

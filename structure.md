@@ -309,6 +309,31 @@ principled exception in both modes: the deterministic insufficient-context
 answer skips the graders — it contains no claims to verify, and regenerating
 from the same empty context cannot improve it (see §5).
 
+### Deployment mode flags (`PRIVACY_MODE`, `FULLY_LOCAL_MODE`)
+
+Intention-named flags over the two mechanisms above, added in ADR 015. Both
+default to off and reject unparseable values at startup.
+
+* **Two enforcement layers.** `config.web_search_enabled()` lowers the *default*
+  when `PRIVACY_MODE=true`; `graph/engine.py::seed_state()` applies the *lock*
+  (`if privacy_mode() or local_mode_enabled(): web_search_enabled = False`).
+  The lock cannot live in `graph/config.py`, because `seed_state()` consults
+  that module only when the per-run option is `None` — an explicit
+  `AnswerOptions(web_search_enabled=True)` would bypass it, silently turning
+  the lock back into a default.
+* **Resolution order.** Lock (privacy mode or local provider) → explicit per-run
+  option → `WEB_SEARCH_ENABLED` default.
+* **`WEB_SEARCH_ENABLED` is unchanged**, deliberately: still a
+  per-run-overridable default with lenient value parsing, because the eval
+  harness runs privacy rows and web rows in the same process.
+* **`FULLY_LOCAL_MODE=false` asserts nothing** — `LLM_PROVIDER` stays in
+  control. Only `FULLY_LOCAL_MODE=true` + `LLM_PROVIDER=openai` raises.
+* **Startup validation.** `main.py::run_startup_preflight()` (renamed from
+  `run_local_mode_preflight()`) validates both flags and the provider in every
+  mode, before the local-only checks, so an invalid value becomes a
+  `PreflightError` rather than a raw traceback in the CLI or a swallowed
+  per-row failure in the eval harness. `--validate-only` still bypasses it.
+
 ### Local provider mode (`LLM_PROVIDER=ollama`) — experimental
 
 A process-level deployment mode that routes all six chains and both embedding

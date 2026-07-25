@@ -29,6 +29,7 @@ architecture.
 | [012](012-prompt-injection-hardening.md) | Prompt-injection hardening | Extends ADR 010: Security rules on the control-plane chains (router/graders/rewriter), explicit `[BEGIN/END UNTRUSTED DOCUMENT n]` delimiters in the generation context, and deterministic graph-level containment tests. |
 | [013](013-eval-harness-v2-expansion.md) | Eval harness v2 expansion | Extends ADR 009: 24-row/6-category dataset (adds `multi_document`, `policy_fallback`), richer deterministic checks (AND/OR contains, not-contains, source titles, min-local-sources, web-search-count, policy), and metadata-only history + delta tracking; still deterministic, still not in CI. |
 | [014](014-local-provider-mode.md) | Optional local provider mode | `LLM_PROVIDER=ollama` routes all six chains and both embedding sites to a local endpoint, forces the privacy path, and guarantees no third-party egress and no fallback to one; OpenAI stays the default. |
+| [015](015-mode-flags.md) | `PRIVACY_MODE` / `FULLY_LOCAL_MODE` flags | Extends 002 and 014: intention-named deployment flags where `PRIVACY_MODE=true` is an absolute lock no per-run option can reopen, `WEB_SEARCH_ENABLED` stays a default, and `FULLY_LOCAL_MODE=false` defers to `LLM_PROVIDER`. |
 
 ## Conventions
 

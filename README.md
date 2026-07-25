@@ -153,7 +153,9 @@ See [`.env.example`](.env.example) for the full template:
 | ----------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `OPENAI_API_KEY`                                                                    | Yes (unless `LLM_PROVIDER=ollama`)    | Chat models (router, graders, generation) and embeddings                                                                                                                       |
 | `TAVILY_API_KEY`                                                                    | Yes (unless `LLM_PROVIDER=ollama`)    | Web-search fallback node                                                                                                                                                       |
-| `WEB_SEARCH_ENABLED`                                                                | Optional (default `true`)             | Set to `false` for privacy mode: disables all external web search *and* LangSmith trace export                                                                                  |
+| `PRIVACY_MODE`                                                                      | Optional (default `false`)            | Absolute privacy lock: disables all external web search *and* LangSmith trace export, and a per-run option cannot reopen either (see below)                                     |
+| `FULLY_LOCAL_MODE`                                                                  | Optional (default `false`)            | Route every LLM and embedding call to the local endpoint and apply the same lock; equivalent to `LLM_PROVIDER=ollama`                                                           |
+| `WEB_SEARCH_ENABLED`                                                                | Optional (default `true`)             | Legacy spelling of privacy mode: set to `false` to disable web search *and* LangSmith export. A **default**, not a lock — a per-run option still overrides it                   |
 | `WEB_FALLBACK_POLICY`                                                               | Optional (default `conservative`)     | `conservative` / `aggressive` / `disabled` — when document grading falls back to web search (see below)                                                                        |
 | `MAX_LLM_CALLS_PER_RUN`, `MAX_WEB_SEARCHES_PER_RUN`, `MAX_WEB_RESULTS_TO_GRADE`     | Optional (defaults `30` / `5` / `15`) | Per-run cost/latency budgets (see below)                                                                                                                                       |
 | `LLM_REQUEST_TIMEOUT_SECONDS`                                                       | Optional (default `60`)               | Per-request timeout for a single LLM call, applied to all six chains; a timeout is handled by the existing failure paths and surfaces as the matching `*_error` stop reason     |
@@ -164,6 +166,42 @@ See [`.env.example`](.env.example) for the full template:
 | `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT` | Optional                              | LangSmith tracing for LangChain/LangGraph runs. Set `LANGSMITH_TRACING=true`, provide a LangSmith API key, and choose a project name such as `enterprise-ai-automation-agent`. Ignored when `WEB_SEARCH_ENABLED=false` (privacy mode suppresses trace export). |
 
 `.env` is gitignored; only `.env.example` is committed.
+
+### Deployment modes (`PRIVACY_MODE`, `FULLY_LOCAL_MODE`)
+
+These two flags are the recommended way to describe a deployment. Both default
+to `false`, both accept `true/1/yes/on` or `false/0/no/off`, and **any other
+value fails at startup** with a message naming the variable and the accepted
+values.
+
+| Flag | Effect | Strength |
+|---|---|---|
+| `PRIVACY_MODE=true` | No external web search, no LangSmith trace export | **Lock** — a per-run `AnswerOptions(web_search_enabled=True)` cannot reopen either path |
+| `FULLY_LOCAL_MODE=true` | Every LLM and embedding call runs on the local endpoint, plus the same privacy lock | **Lock** — equivalent to `LLM_PROVIDER=ollama` |
+
+**Precedence**, resolved in this order:
+
+1. `PRIVACY_MODE=true` **or** the active provider is local → web search off, absolutely.
+2. Otherwise an explicit per-run `AnswerOptions(web_search_enabled=…)` → that value.
+3. Otherwise → `WEB_SEARCH_ENABLED` (on unless explicitly `false`/`0`/`no`/`off`).
+
+So `PRIVACY_MODE=true` is **stronger** than `WEB_SEARCH_ENABLED=false`, not a
+synonym for it: the legacy variable is a default that a caller may override,
+which is how the eval harness runs privacy rows and web-fallback rows in the
+same process. Both remain fully supported.
+
+`FULLY_LOCAL_MODE` and `LLM_PROVIDER` compose the same way. Setting
+`FULLY_LOCAL_MODE=false` asserts *nothing*, so `LLM_PROVIDER=ollama` still
+selects local mode on its own. The one genuine contradiction —
+`FULLY_LOCAL_MODE=true` with `LLM_PROVIDER=openai` — fails at startup naming
+both variables.
+
+> **Running evals:** `PRIVACY_MODE=true` in `.env` will fail every
+> web-fallback row of a full eval, because the lock beats the harness's per-row
+> option. Set it per-invocation rather than globally when evaluating.
+> `--validate-only` is unaffected — it never reads these flags.
+
+See [ADR 015](docs/adr/015-mode-flags.md) for the full precedence tables.
 
 ### Privacy mode (`WEB_SEARCH_ENABLED=false`)
 
