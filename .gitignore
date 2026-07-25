@@ -87,5 +87,5 @@ traces/
 .claude/settings.local.json
 
 #local result
-.\evals\local-smoke-results.md
+/evals/local-smoke-results.md
 
