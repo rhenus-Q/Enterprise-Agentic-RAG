@@ -89,3 +89,8 @@ traces/
 #local result
 /evals/local-smoke-results.md
 
+#codex
+AGENTS.md
+.agents/
+.codex/
+Doc/
