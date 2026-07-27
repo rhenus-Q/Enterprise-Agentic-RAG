@@ -94,3 +94,6 @@ AGENTS.md
 .agents/
 .codex/
 Doc/
+
+# ---- Node / frontend ----
+frontend/node_modules/

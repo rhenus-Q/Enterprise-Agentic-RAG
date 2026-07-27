@@ -1,0 +1,154 @@
+import { useEffect, useState } from "react";
+
+import { apiClient, demoScenarioController } from "./api/client";
+import type { MockScenario } from "./api/mock";
+import { normalizeApiError, type ApiError, type RuntimeStatus } from "./api/types";
+import { ErrorState } from "./components/ErrorState";
+import { RuntimeBadge } from "./components/RuntimeBadge";
+import { AskPage } from "./pages/AskPage";
+import { DocumentsPage } from "./pages/DocumentsPage";
+import { RunsPage } from "./pages/RunsPage";
+
+type Page = "ask" | "documents" | "runs";
+
+const pages: Array<{ id: Page; label: string }> = [
+  { id: "ask", label: "Ask" },
+  { id: "documents", label: "Documents" },
+  { id: "runs", label: "Runs" },
+];
+
+export default function App() {
+  const [page, setPage] = useState<Page>("ask");
+  const [status, setStatus] = useState<RuntimeStatus | null>(null);
+  const [statusError, setStatusError] = useState<ApiError | null>(null);
+  const [statusLoading, setStatusLoading] = useState(true);
+  const [scenarioVersion, setScenarioVersion] = useState(0);
+  const [scenario, setScenario] = useState<MockScenario | null>(
+    demoScenarioController?.getScenario() ?? null,
+  );
+
+  useEffect(() => {
+    const controller = demoScenarioController;
+    if (!controller) {
+      return;
+    }
+
+    return controller.subscribe(() => {
+      setScenario(controller.getScenario());
+      setScenarioVersion((version) => version + 1);
+    });
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setStatusLoading(true);
+    setStatusError(null);
+
+    apiClient
+      .getStatus()
+      .then((nextStatus) => {
+        if (active) {
+          setStatus(nextStatus);
+        }
+      })
+      .catch((error: unknown) => {
+        if (active) {
+          setStatus(null);
+          setStatusError(normalizeApiError(error));
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setStatusLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [scenarioVersion]);
+
+  function changeScenario(nextScenario: MockScenario) {
+    const option = demoScenarioController?.options.find((item) => item.id === nextScenario);
+    if (option) {
+      setPage(option.page);
+    }
+    demoScenarioController?.setScenario(nextScenario);
+  }
+
+  return (
+    <div className="app-shell">
+      <header className="app-header">
+        <div className="header-inner">
+          <button className="product-name" type="button" onClick={() => setPage("ask")}>
+            <span className="product-mark" aria-hidden="true">
+              AR
+            </span>
+            <span>
+              <strong>Agentic RAG</strong>
+              <small>Knowledge workspace</small>
+            </span>
+          </button>
+
+          <nav className="tab-navigation" aria-label="Primary navigation">
+            {pages.map((item) => (
+              <button
+                className={page === item.id ? "is-active" : ""}
+                type="button"
+                aria-current={page === item.id ? "page" : undefined}
+                onClick={() => setPage(item.id)}
+                key={item.id}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+
+          <div className="header-actions">
+            <RuntimeBadge status={status} loading={statusLoading} />
+            {demoScenarioController && scenario && (
+              <details className="demo-control">
+                <summary>Preview states</summary>
+                <label>
+                  <span>Mock scenario</span>
+                  <select
+                    aria-label="Preview mock state"
+                    value={scenario}
+                    onChange={(event) => changeScenario(event.target.value as MockScenario)}
+                  >
+                    {demoScenarioController.options.map((option) => (
+                      <option value={option.id} key={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </details>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {statusError && (
+        <div className="global-notice">
+          <ErrorState error={statusError} compact />
+        </div>
+      )}
+
+      <main className={`page-frame page-frame--${page}`}>
+        {page === "ask" && (
+          <AskPage
+            api={apiClient}
+            status={status}
+            statusLoading={statusLoading}
+            key={`ask-${scenarioVersion}`}
+          />
+        )}
+        {page === "documents" && (
+          <DocumentsPage api={apiClient} key={`documents-${scenarioVersion}`} />
+        )}
+        {page === "runs" && <RunsPage api={apiClient} key={`runs-${scenarioVersion}`} />}
+      </main>
+    </div>
+  );
+}
