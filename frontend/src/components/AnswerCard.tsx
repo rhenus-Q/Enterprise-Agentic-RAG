@@ -1,3 +1,4 @@
+import { formatDuration } from "../lib/format";
 import type { AskResponse } from "../api/types";
 import { StatusPill } from "./StatusPill";
 
@@ -37,7 +38,7 @@ export function AnswerCard({ response }: AnswerCardProps) {
 
       <div className="answer-footer">
         <span>Run {response.run_id}</span>
-        <span>{response.total_duration_ms.toLocaleString()} ms</span>
+        <span>{formatDuration(response.total_duration_ms)}</span>
       </div>
     </article>
   );

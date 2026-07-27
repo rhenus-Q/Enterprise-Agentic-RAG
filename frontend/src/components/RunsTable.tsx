@@ -1,3 +1,4 @@
+import { formatDateTime, formatDuration } from "../lib/format";
 import type { RunSummary } from "../api/types";
 import { StatusPill } from "./StatusPill";
 
@@ -5,15 +6,6 @@ interface RunsTableProps {
   runs: RunSummary[];
   selectedRunId: string | null;
   onSelect: (runId: string) => void;
-}
-
-function formatTimestamp(timestamp: string): string {
-  return new Intl.DateTimeFormat("en", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(timestamp));
 }
 
 export function RunsTable({ runs, selectedRunId, onSelect }: RunsTableProps) {
@@ -25,8 +17,11 @@ export function RunsTable({ runs, selectedRunId, onSelect }: RunsTableProps) {
             <th>Question</th>
             <th>Status</th>
             <th>Provider</th>
-            <th>Duration</th>
+            <th className="numeric-cell">Duration</th>
             <th>Started</th>
+            <th>
+              <span className="sr-only">Open run detail</span>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -42,8 +37,11 @@ export function RunsTable({ runs, selectedRunId, onSelect }: RunsTableProps) {
                 <StatusPill status={run.status} />
               </td>
               <td className="table-mono">{run.provider}</td>
-              <td className="table-mono">{run.total_duration_ms.toLocaleString()} ms</td>
-              <td>{formatTimestamp(run.generated_at)}</td>
+              <td className="numeric-cell">{formatDuration(run.total_duration_ms)}</td>
+              <td>{formatDateTime(run.generated_at)}</td>
+              <td className="run-chevron" aria-hidden="true">
+                ›
+              </td>
             </tr>
           ))}
         </tbody>

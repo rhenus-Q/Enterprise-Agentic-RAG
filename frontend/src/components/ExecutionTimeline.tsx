@@ -1,3 +1,4 @@
+import { formatDuration } from "../lib/format";
 import type { NodeTiming } from "../api/types";
 
 interface ExecutionTimelineProps {
@@ -60,19 +61,21 @@ export function ExecutionTimeline({
 
           return (
             <li className="timeline-row" key={`${node}-${index}`}>
-              <span className="timeline-index">{String(index + 1).padStart(2, "0")}</span>
+              <span className="timeline-rail" aria-hidden="true">
+                <span className="timeline-dot">{String(index + 1).padStart(2, "0")}</span>
+              </span>
               <div className="timeline-step">
                 <div className="timeline-label">
                   <strong>{friendlyName(node)}</strong>
                   <code>{node}</code>
+                  <span className="timeline-duration">
+                    {duration === null ? "—" : formatDuration(duration)}
+                  </span>
                 </div>
                 <div className="timeline-track" aria-hidden="true">
                   <span style={{ width: `${width}%` }} />
                 </div>
               </div>
-              <span className="timeline-duration">
-                {duration === null ? "—" : `${duration.toLocaleString()} ms`}
-              </span>
             </li>
           );
         })}

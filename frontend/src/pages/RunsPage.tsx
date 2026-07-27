@@ -90,9 +90,12 @@ export function RunsPage({ api = apiClient }: RunsPageProps) {
       </header>
 
       {loading && (
-        <div className="loading-panel" role="status">
-          <span className="spinner" aria-hidden="true" />
-          Loading execution history…
+        <div className="skeleton-panel" role="status">
+          <span className="sr-only">Loading execution history…</span>
+          <span className="skeleton skeleton--title" aria-hidden="true" />
+          <span className="skeleton skeleton--wide" aria-hidden="true" />
+          <span className="skeleton skeleton--wide" aria-hidden="true" />
+          <span className="skeleton skeleton--medium" aria-hidden="true" />
         </div>
       )}
 
@@ -130,9 +133,11 @@ export function RunsPage({ api = apiClient }: RunsPageProps) {
 
           <div className="run-detail-column">
             {detailLoading && (
-              <div className="loading-panel" role="status">
-                <span className="spinner" aria-hidden="true" />
-                Loading run detail…
+              <div className="skeleton-panel skeleton-panel--inline" role="status">
+                <span className="sr-only">Loading run detail…</span>
+                <span className="skeleton skeleton--title" aria-hidden="true" />
+                <span className="skeleton skeleton--wide" aria-hidden="true" />
+                <span className="skeleton skeleton--short" aria-hidden="true" />
               </div>
             )}
             {detailError && <ErrorState error={detailError} compact />}

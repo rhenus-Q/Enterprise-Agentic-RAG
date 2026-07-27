@@ -108,7 +108,12 @@ export default function App() {
             <RuntimeBadge status={status} loading={statusLoading} />
             {demoScenarioController && scenario && (
               <details className="demo-control">
-                <summary>Preview states</summary>
+                <summary>
+                  <span className="dev-tag" aria-hidden="true">
+                    DEV
+                  </span>
+                  Preview states
+                </summary>
                 <label>
                   <span>Mock scenario</span>
                   <select

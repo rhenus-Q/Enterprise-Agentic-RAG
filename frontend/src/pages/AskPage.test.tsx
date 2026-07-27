@@ -42,6 +42,15 @@ describe("AskPage", () => {
     );
   });
 
+  it("fills the composer from a suggested question", () => {
+    render(<AskPage api={clientWithAsk(vi.fn())} status={runtimeFixtures.openai} />);
+    fireEvent.click(screen.getByRole("button", { name: "How do I request VPN access?" }));
+
+    expect((screen.getByLabelText("Question") as HTMLTextAreaElement).value).toBe(
+      "How do I request VPN access?",
+    );
+  });
+
   it("disables question input while a run is in flight", async () => {
     let resolveRequest: ((response: AskResponse) => void) | undefined;
     const pending = new Promise<AskResponse>((resolve) => {

@@ -27,6 +27,15 @@ function asFallbackPolicy(value: string | null): WebFallbackPolicy | null {
     : null;
 }
 
+// Drawn from the shipped AcmeCorp corpus so a first-time visitor can reach a
+// grounded answer without inventing a question.
+const suggestedQuestions = [
+  "How do I request VPN access?",
+  "What is the reimbursement window for business expenses?",
+  "Who is paged first during a Sev-1 incident?",
+  "How long are security event logs retained?",
+];
+
 export function AskPage({ api = apiClient, status, statusLoading = false }: AskPageProps) {
   const [question, setQuestion] = useState("");
   const [webSearchEnabled, setWebSearchEnabled] = useState<boolean | null>(null);
@@ -158,7 +167,6 @@ export function AskPage({ api = apiClient, status, statusLoading = false }: AskP
         </form>
 
         <div className="ask-runtime-line">
-          <RuntimeBadge status={status} loading={statusLoading} />
           <span>Answers include citations and metadata-only execution details.</span>
         </div>
 
@@ -167,6 +175,27 @@ export function AskPage({ api = apiClient, status, statusLoading = false }: AskP
             <strong>Runtime configuration needs attention</strong>
             <span>{status.config_error}</span>
           </div>
+        )}
+
+        {!hasOutcome && (
+          <section className="suggestions" aria-labelledby="suggestions-heading">
+            <p className="suggestions-label" id="suggestions-heading">
+              Try one of these
+            </p>
+            <div className="suggestion-chips">
+              {suggestedQuestions.map((suggestion) => (
+                <button
+                  className="suggestion-chip"
+                  type="button"
+                  onClick={() => setQuestion(suggestion)}
+                  disabled={submitting}
+                  key={suggestion}
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </section>
         )}
       </section>
 

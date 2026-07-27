@@ -1,3 +1,4 @@
+import { formatDuration, humanizeToken } from "../lib/format";
 import type { RunDetail } from "../api/types";
 import { ExecutionTimeline } from "./ExecutionTimeline";
 import { StatusPill } from "./StatusPill";
@@ -20,7 +21,7 @@ export function RunDetailPanel({ run }: RunDetailPanelProps) {
       <dl className="run-facts">
         <div>
           <dt>Total duration</dt>
-          <dd>{run.total_duration_ms.toLocaleString()} ms</dd>
+          <dd>{formatDuration(run.total_duration_ms)}</dd>
         </div>
         <div>
           <dt>Provider</dt>
@@ -40,7 +41,7 @@ export function RunDetailPanel({ run }: RunDetailPanelProps) {
         </div>
         <div>
           <dt>Stop reason</dt>
-          <dd>{run.stop_reason || "None"}</dd>
+          <dd>{run.stop_reason ? humanizeToken(run.stop_reason) : "—"}</dd>
         </div>
       </dl>
 
@@ -51,7 +52,7 @@ export function RunDetailPanel({ run }: RunDetailPanelProps) {
         <dl className="counter-grid">
           {Object.entries(run.counters).map(([name, value]) => (
             <div key={name}>
-              <dt>{name.replaceAll("_", " ")}</dt>
+              <dt>{humanizeToken(name)}</dt>
               <dd>{value}</dd>
             </div>
           ))}

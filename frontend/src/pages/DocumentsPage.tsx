@@ -9,21 +9,10 @@ import {
 } from "../api/types";
 import { ErrorState } from "../components/ErrorState";
 import { IndexStatusCard } from "../components/IndexStatusCard";
+import { formatBytes, formatDate, humanizeToken } from "../lib/format";
 
 interface DocumentsPageProps {
   api?: ApiClient;
-}
-
-function formatBytes(size: number): string {
-  return size < 1024 ? `${size} B` : `${(size / 1024).toFixed(1)} KB`;
-}
-
-function formatModifiedAt(timestamp: string): string {
-  return new Intl.DateTimeFormat("en", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  }).format(new Date(timestamp));
 }
 
 export function DocumentsPage({ api = apiClient }: DocumentsPageProps) {
@@ -77,9 +66,16 @@ export function DocumentsPage({ api = apiClient }: DocumentsPageProps) {
       </header>
 
       {loading && (
-        <div className="loading-panel" role="status">
-          <span className="spinner" aria-hidden="true" />
-          Loading document metadata…
+        <div className="skeleton-panel" role="status">
+          <span className="sr-only">Loading document metadata…</span>
+          <span className="skeleton skeleton--title" aria-hidden="true" />
+          <span className="skeleton skeleton--wide" aria-hidden="true" />
+          <div className="skeleton-row" aria-hidden="true">
+            <span className="skeleton" />
+            <span className="skeleton" />
+            <span className="skeleton" />
+          </div>
+          <span className="skeleton skeleton--medium" aria-hidden="true" />
         </div>
       )}
 
@@ -118,25 +114,15 @@ export function DocumentsPage({ api = apiClient }: DocumentsPageProps) {
                       MD
                     </span>
                     <span className="category-label">
-                      {document.document_category.replaceAll("_", " ")}
+                      {humanizeToken(document.document_category)}
                     </span>
                   </div>
                   <h3>{document.title}</h3>
                   <code>{document.file_name}</code>
-                  <dl>
-                    <div>
-                      <dt>Size</dt>
-                      <dd>{formatBytes(document.size_bytes)}</dd>
-                    </div>
-                    <div>
-                      <dt>Modified</dt>
-                      <dd>{formatModifiedAt(document.modified_at)}</dd>
-                    </div>
-                    <div>
-                      <dt>Source</dt>
-                      <dd>{document.source_type.replaceAll("_", " ")}</dd>
-                    </div>
-                  </dl>
+                  <p className="document-meta">
+                    {formatBytes(document.size_bytes)} · {formatDate(document.modified_at)} ·{" "}
+                    {humanizeToken(document.source_type)}
+                  </p>
                 </article>
               ))}
             </div>

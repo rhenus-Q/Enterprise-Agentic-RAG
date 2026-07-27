@@ -417,7 +417,10 @@ const runSummaries: RunsResponse["runs"] = [
     status: "error",
     stop_reason: "generation_error",
     total_duration_ms: 972.2,
-    provider: "ollama",
+    // Provider is a process-level mode and history is per-process, so a single
+    // session can never mix providers. Local mode is demonstrated through the
+    // runtime-mode scenarios instead.
+    provider: "openai",
     retries: 0,
     web_search_count: 0,
   },
