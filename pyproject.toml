@@ -16,8 +16,10 @@ dependencies = [
     "chromadb",
     "tavily-python",
     "beautifulsoup4",
+    "fastapi",
     "python-dotenv",
     "pydantic",
+    "uvicorn",
     "langchain-tavily>=0.2.18",
     "langchain-ollama>=1.1.0",
 ]
@@ -30,6 +32,7 @@ package = false
 # Install with `uv sync --group dev`.
 [dependency-groups]
 dev = [
+    "httpx",
     "mypy>=2.1.0",
     "pre-commit>=4.6.0",
     "pytest",
