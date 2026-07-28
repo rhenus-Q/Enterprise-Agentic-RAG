@@ -90,9 +90,6 @@ traces/
 /evals/local-smoke-results.md
 
 #codex
-AGENTS.md
-.agents/
-.codex/
 Doc/
 
 # ---- Node / frontend ----

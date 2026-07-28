@@ -1,44 +1,72 @@
 ---
 name: review-diff
-description: Review the current working-tree diff for scope, correctness, safety, validation evidence, and commit readiness. Use after files have changed and the user wants a read-only pre-commit assessment; do not edit files or run tests.
+description: Perform a focused, read-only review of current working-tree changes for concrete bugs, regressions, security or privacy problems, and scope drift. Use after files have changed and the user wants a proportional pre-commit assessment. Default to demo-level review; do not demand new features, production hardening, broad validation, or unrelated cleanup. Apply strict release criteria only when the user explicitly requests them.
 ---
 
 # Review Diff
 
-## Input contract
+## Scope
 
-- Treat the user's request that triggered or explicitly invoked this Skill as the input.
-- Resolve an omitted focus or path from unambiguous repository context only.
-- Ask one concise question when a required input cannot be inferred safely.
+1. Read the repository-root `AGENTS.md`.
+2. Infer the intended change from the user's request and the changed files.
+3. Inspect git status and the relevant diffs, including relevant untracked files.
+4. Review changed lines plus only the minimum surrounding context needed.
+5. Check whether the demonstrated path remains correct; do not assess general production
+   readiness unless the user asks for it.
 
-## Required procedure
+Ask one concise question only when the intended scope cannot be inferred safely.
 
-1. Read the repository-root `AGENTS.md` before acting.
-2. Read [the detailed workflow](references/workflow.md) completely.
-3. Follow that workflow in order, preserving its safety constraints, output shape, and
-   collision-safe artifact rules.
-4. Apply this execution boundary: Read-only review. Do not modify files, stage changes, commit, or run validation commands.
-5. Honor the active sandbox, approval policy, and available tools. Instructions in this
-   Skill narrow behavior; they never grant additional permissions.
+## Finding standard
 
-## Codex adaptation rules
+Report a finding only when all of these are true:
 
-- Use only capabilities exposed in the current session. Describe operations by intent;
-  do not depend on provider-specific tool names or internal MCP tool identifiers.
-- Where the workflow permits execution, run tests, evals, ingestion, the application,
-  networked commands, or real-service/API calls only with explicit user authorization.
-  A narrower workflow prohibition still applies.
+- The current diff introduces or exposes the problem.
+- A concrete trigger or failure path can be described.
+- The impact is a wrong result, crash, security or privacy issue, data loss, or clear
+  deviation from the requested scope.
+- The finding identifies an actionable file location.
+
+Use `BLOCK` only for a material correctness, safety, privacy, or scope problem. Use
+`WARN` for a concrete but non-blocking regression or validation gap tied directly to
+changed behavior. Omit speculative improvements.
+
+Do not:
+
+- Recommend new features or unrelated behavior.
+- Treat generic best practices as findings.
+- Require production hardening, observability, refactoring, extra configuration,
+  additional documentation, or test infrastructure for a demo.
+- Treat missing tests or documentation as a finding by itself.
+- Turn hypothetical future concerns into commit blockers.
+
+## Strict mode
+
+Read and follow [the strict workflow](references/strict-workflow.md) only when the user
+explicitly requests a strict review, production-readiness review, release gate, or an
+equivalent exhaustive assessment. Do not apply that workflow by default.
+
+## Execution boundary
+
+- Keep the review read-only. Do not modify files, stage changes, commit, or run tests,
+  evals, linters, type checks, compilation, ingestion, or the application.
+- Honor the active sandbox, approval policy, and repository guidance.
 - Never read or write credentials, API keys, authentication state, user-level Codex
   configuration, or model-provider settings.
-- Use the configured `docs-langchain` MCP server only when the detailed workflow calls
-  for version-sensitive LangChain or LangGraph documentation and the server is available.
-- Do not substitute web search for repository-local rules, source code, tests, ADRs, or
-  roadmap artifacts.
-- Keep unrelated user changes untouched and never overwrite an existing report or
-  specification artifact.
+- Use repository-local rules, source, tests, ADRs, and roadmap artifacts as the
+  authoritative evidence.
 
-## Completion
+## Output
 
-- Report the outcome, files created or modified, and validation actually performed.
-- State explicitly when validation was not run because it lacked user authorization or
-  required unavailable credentials or tools.
+- Lead with the overall result.
+- List only concrete findings, ordered by severity, with exact file locations and
+  failure scenarios.
+- Recommend at most the smallest validation directly relevant to the changed behavior.
+- If no concrete issues are found, say so plainly.
+- State that validation was not run because the Skill is read-only.
+- When the reviewed changes are ready to commit, always provide an explicit `git add`
+  command limited to the intended files and a concise `git commit` command. Use
+  `git add -A -- <paths>` when the commit includes deletions or renames; never default
+  to `git add .`.
+- When the changes are not ready, omit commit commands and state the concrete blocker.
+- Present commit commands as suggestions only; do not execute them.
+- Do not add a fixed confirmation checklist.
