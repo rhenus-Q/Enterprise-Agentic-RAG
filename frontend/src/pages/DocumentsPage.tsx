@@ -10,7 +10,12 @@ import {
 import { ContentReveal } from "../components/ContentReveal";
 import { ErrorState } from "../components/ErrorState";
 import { IndexStatusCard } from "../components/IndexStatusCard";
-import { formatBytes, formatDate, humanizeToken } from "../lib/format";
+import {
+  formatBytes,
+  formatCategoryName,
+  formatDate,
+  humanizeToken,
+} from "../lib/format";
 
 interface DocumentsPageProps {
   api?: ApiClient;
@@ -182,7 +187,7 @@ export function DocumentsPage({ api = apiClient }: DocumentsPageProps) {
                       <span>MD</span>
                     </span>
                     <span className="category-label">
-                      {humanizeToken(document.document_category)}
+                      {formatCategoryName(document.document_category)}
                     </span>
                   </div>
                   <h3>{document.title}</h3>

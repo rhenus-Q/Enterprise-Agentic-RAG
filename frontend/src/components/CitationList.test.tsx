@@ -41,13 +41,13 @@ describe("CitationList", () => {
     ).not.toBeNull();
   });
 
-  it("uses canonical HR mock data and normalizes any HR case variation", () => {
+  it("normalizes backend-shaped HR category values without sanitizing the fixture", () => {
     const mockCitation = askFixtures.localSuccess.citations.find(
       (citation) => citation.title === "Employee Onboarding Guide",
     )!;
-    expect(mockCitation.document_category).toBe("HR");
+    expect(mockCitation.document_category).toBe("hr");
 
-    const variations = ["hr", "Hr", "HR"];
+    const variations = ["hr", "Hr", "HR", "  hr  "];
     const { rerender } = render(
       <CitationList citations={[{ ...mockCitation, document_category: variations[0]! }]} />,
     );

@@ -1477,8 +1477,11 @@ h3 {
   font-size: 0.61rem;
   font-weight: 720;
   letter-spacing: 0.05em;
-  text-transform: uppercase;
   white-space: nowrap;
+}
+
+.source-kind {
+  text-transform: uppercase;
 }
 
 .citation-item .source-kind {

@@ -1,4 +1,5 @@
 import type { Citation } from "../api/types";
+import { formatCategoryName } from "../lib/format";
 
 interface CitationListProps {
   citations: Citation[];
@@ -21,17 +22,6 @@ function citationDomain(url: string): string | null {
 
 function shortSourceName(source: string): string {
   return source.split(/[\\/]/).pop() ?? source;
-}
-
-function displayCategory(category: string): string {
-  if (category.trim().toLowerCase() === "hr") {
-    return "HR";
-  }
-
-  return category
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
 }
 
 function CitationIcon({ citation }: { citation: Citation }) {
@@ -76,6 +66,7 @@ export function CitationList({ citations }: CitationListProps) {
           const title = citationTitle(citation);
           const domain = citation.url ? citationDomain(citation.url) : null;
           const filename = citation.source ? shortSourceName(citation.source) : null;
+          const category = formatCategoryName(citation.document_category);
 
           return (
             <li
@@ -101,10 +92,8 @@ export function CitationList({ citations }: CitationListProps) {
               {citation.query && <p className="citation-snippet">“{citation.query}”</p>}
 
               <div className="citation-meta">
-                {citation.document_category && (
-                  <span>{displayCategory(citation.document_category)}</span>
-                )}
-                {citation.document_category && filename && (
+                {category && <span>{category}</span>}
+                {category && filename && (
                   <span className="citation-meta-separator" aria-hidden="true">
                     ·
                   </span>

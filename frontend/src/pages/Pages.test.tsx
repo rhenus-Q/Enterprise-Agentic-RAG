@@ -38,6 +38,17 @@ describe("DocumentsPage", () => {
     expect(await screen.findByText("Data Retention Policy")).not.toBeNull();
     expect(screen.getByText(/6\.1 KB · .* · local corpus/)).not.toBeNull();
   });
+  it("normalizes a backend-shaped HR category without changing the fixture", async () => {
+    const hrDocument = populatedDocumentsResponse.documents.find(
+      (document) => document.title === "Employee Onboarding Guide",
+    );
+    expect(hrDocument?.document_category).toBe("hr");
+
+    render(<DocumentsPage api={readOnlyClient()} />);
+
+    expect(await screen.findByText("Employee Onboarding Guide")).not.toBeNull();
+    expect(screen.getByText("HR")).not.toBeNull();
+  });
 });
 
 describe("DocumentsPage loading", () => {

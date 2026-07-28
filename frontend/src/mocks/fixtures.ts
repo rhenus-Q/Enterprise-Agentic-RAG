@@ -166,7 +166,7 @@ const baseAskResponse: AskResponse = {
       title: "Employee Onboarding Guide",
       source: "data/acmecorp_internal_docs/employee_onboarding_guide.md",
       url: null,
-      document_category: "HR",
+      document_category: "hr",
       query: null,
       snippet:
         "New employees receive access to the expense platform during their first week and should route approvals through their direct manager.",
@@ -333,7 +333,7 @@ const documents = [
     source: "data/acmecorp_internal_docs/employee_onboarding_guide.md",
     file_name: "employee_onboarding_guide.md",
     title: "Employee Onboarding Guide",
-    document_category: "HR",
+    document_category: "hr",
     source_type: "local_corpus",
     size_bytes: 5142,
     modified_at: "2026-07-18T14:22:10Z",

@@ -50,6 +50,23 @@ export function formatProviderName(provider: string): string {
   return normalized;
 }
 
+export function formatCategoryName(value: string | null | undefined): string {
+  const normalized = value?.trim() ?? "";
+
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized.toLowerCase() === "hr") {
+    return "HR";
+  }
+
+  return normalized
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export function humanizeToken(value: string): string {
   return value.replaceAll("_", " ");
 }
