@@ -1506,6 +1506,28 @@ h3 {
   -webkit-line-clamp: 2;
 }
 
+.citation-snippet--expanded {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}
+
+.citation-disclosure {
+  display: inline-flex;
+  padding: 0;
+  margin: 4px 0 0 61px;
+  border: 0;
+  color: var(--blue-dark);
+  background: transparent;
+  font-size: 0.64rem;
+  font-weight: 680;
+  line-height: 1.4;
+}
+
+.citation-disclosure:hover {
+  text-decoration: underline;
+}
+
 .citation-meta {
   display: flex;
   flex-wrap: wrap;
@@ -2862,6 +2884,7 @@ h3 {
   }
 
   .citation-snippet,
+  .citation-disclosure,
   .citation-meta {
     margin-left: 0;
   }

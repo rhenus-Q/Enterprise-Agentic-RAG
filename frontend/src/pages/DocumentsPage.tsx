@@ -161,45 +161,47 @@ export function DocumentsPage({ api = apiClient }: DocumentsPageProps) {
           {data.index && <IndexStatusCard index={data.index} />}
 
           <section className="documents-section" aria-labelledby="corpus-heading">
-          <div className="section-heading-row">
-            <div>
-              <p className="eyebrow">Local corpus</p>
-              <h2 id="corpus-heading">Indexed source files</h2>
+            <div className="section-heading-row">
+              <div>
+                <p className="eyebrow">Local corpus</p>
+                <h2 id="corpus-heading">Indexed source files</h2>
+              </div>
+              <span className="count-badge">{data.document_count} files</span>
             </div>
-            <span className="count-badge">{data.document_count} files</span>
-          </div>
 
-          {data.documents.length === 0 ? (
-            <div className="empty-state">
-              <strong>No corpus documents found</strong>
-              <p>Add Markdown source files to the configured corpus before rebuilding the index.</p>
-            </div>
-          ) : (
-            <div className="document-grid">
-              {data.documents.map((document) => (
-                <article className="document-card" key={document.source}>
-                  <div className="document-card-topline">
-                    <span className="file-mark" aria-hidden="true">
-                      <svg viewBox="0 0 28 32">
-                        <path d="M4.5 1.5h12l7 7v22H4.5z" />
-                        <path d="M16.5 1.5v7h7M8.5 15.5h11M8.5 20h11M8.5 24.5H16" />
-                      </svg>
-                      <span>MD</span>
-                    </span>
-                    <span className="category-label">
-                      {formatCategoryName(document.document_category)}
-                    </span>
-                  </div>
-                  <h3>{document.title}</h3>
-                  <code>{document.file_name}</code>
-                  <p className="document-meta">
-                    {formatBytes(document.size_bytes)} · {formatDate(document.modified_at)} ·{" "}
-                    {humanizeToken(document.source_type)}
-                  </p>
-                </article>
-              ))}
-            </div>
-          )}
+            {data.documents.length === 0 ? (
+              <div className="empty-state">
+                <strong>No corpus documents found</strong>
+                <p>
+                  Add Markdown source files to the configured corpus before rebuilding the index.
+                </p>
+              </div>
+            ) : (
+              <div className="document-grid">
+                {data.documents.map((document) => (
+                  <article className="document-card" key={document.source}>
+                    <div className="document-card-topline">
+                      <span className="file-mark" aria-hidden="true">
+                        <svg viewBox="0 0 28 32">
+                          <path d="M4.5 1.5h12l7 7v22H4.5z" />
+                          <path d="M16.5 1.5v7h7M8.5 15.5h11M8.5 20h11M8.5 24.5H16" />
+                        </svg>
+                        <span>MD</span>
+                      </span>
+                      <span className="category-label">
+                        {formatCategoryName(document.document_category)}
+                      </span>
+                    </div>
+                    <h3>{document.title}</h3>
+                    <code>{document.file_name}</code>
+                    <p className="document-meta">
+                      {formatBytes(document.size_bytes)} · {formatDate(document.modified_at)} ·{" "}
+                      {humanizeToken(document.source_type)}
+                    </p>
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
         </ContentReveal>
       )}

@@ -254,6 +254,19 @@ describe("RunsPage", () => {
     expect(runDetailFixtures.run_01HV7Q2R8W.provider).toBe("openai");
   });
 
+  it("preserves safe external-link behavior in run evidence", async () => {
+    render(<RunsPage api={readOnlyClient()} />);
+
+    const link = await screen.findByRole("link", {
+      name: "Open Zero Trust Architecture in a new tab",
+    });
+    expect(link.getAttribute("href")).toBe(
+      "https://www.nist.gov/publications/zero-trust-architecture",
+    );
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
   it("explains that history is empty rather than showing a bare table", async () => {
     const api = readOnlyClient();
     api.getRuns = vi.fn().mockResolvedValue(emptyRunsResponse);

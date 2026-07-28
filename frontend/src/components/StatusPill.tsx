@@ -2,6 +2,7 @@ import type { RunStatus } from "../api/types";
 
 interface StatusPillProps {
   status: RunStatus;
+  /** A nonblank visible-label override. Meaningful whitespace is rendered as supplied. */
   label?: string;
 }
 
@@ -12,6 +13,6 @@ const labels: Record<RunStatus, string> = {
 };
 
 export function StatusPill({ status, label }: StatusPillProps) {
-  const visibleLabel = status === "ok" ? labels.ok : (label ?? labels[status]);
+  const visibleLabel = label?.trim() ? label : labels[status];
   return <span className={`status-pill status-pill--${status}`}>{visibleLabel}</span>;
 }

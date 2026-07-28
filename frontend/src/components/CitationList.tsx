@@ -1,3 +1,12 @@
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+
 import type { Citation } from "../api/types";
 import { formatCategoryName } from "../lib/format";
 
@@ -22,6 +31,80 @@ function citationDomain(url: string): string | null {
 
 function shortSourceName(source: string): string {
   return source.split(/[\\/]/).pop() ?? source;
+}
+
+function CitationExcerpt({ text, title }: { text: string; title: string }) {
+  const generatedId = useId();
+  const excerptId = `citation-excerpt-${generatedId}`;
+  const excerptRef = useRef<HTMLParagraphElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [truncated, setTruncated] = useState(false);
+
+  const measureTruncation = useCallback(() => {
+    const excerpt = excerptRef.current;
+
+    if (!excerpt || expanded) {
+      return;
+    }
+
+    const nextTruncated = excerpt.scrollHeight > excerpt.clientHeight + 1;
+    setTruncated((current) => (current === nextTruncated ? current : nextTruncated));
+  }, [expanded]);
+
+  useLayoutEffect(() => {
+    setExpanded(false);
+  }, [text]);
+
+  useLayoutEffect(() => {
+    measureTruncation();
+  }, [measureTruncation, text]);
+
+  useEffect(() => {
+    const excerpt = excerptRef.current;
+
+    if (!excerpt) {
+      return undefined;
+    }
+
+    const handleResize = () => {
+      measureTruncation();
+    };
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(handleResize);
+
+    observer?.observe(excerpt);
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [measureTruncation, text]);
+
+  return (
+    <>
+      <p
+        className={`citation-snippet${expanded ? " citation-snippet--expanded" : ""}`}
+        id={excerptId}
+        ref={excerptRef}
+        title={text}
+      >
+        {text}
+      </p>
+      {truncated && (
+        <button
+          className="citation-disclosure"
+          type="button"
+          aria-controls={excerptId}
+          aria-expanded={expanded}
+          aria-label={`${expanded ? "Show less" : "Show more"} of ${title}`}
+          onClick={() => setExpanded((current) => !current)}
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      )}
+    </>
+  );
 }
 
 function CitationIcon({ citation }: { citation: Citation }) {
@@ -88,8 +171,10 @@ export function CitationList({ citations }: CitationListProps) {
                 </span>
               </div>
 
-              {citation.snippet && <p className="citation-snippet">{citation.snippet}</p>}
-              {citation.query && <p className="citation-snippet">“{citation.query}”</p>}
+              {citation.snippet && <CitationExcerpt text={citation.snippet} title={title} />}
+              {citation.query && (
+                <CitationExcerpt text={`“${citation.query}”`} title={title} />
+              )}
 
               <div className="citation-meta">
                 {category && <span>{category}</span>}
@@ -119,7 +204,7 @@ export function CitationList({ citations }: CitationListProps) {
                     target="_blank"
                     rel="noopener noreferrer"
                     title={citation.url}
-                    aria-label={`Open ${title} in new tab`}
+                    aria-label={`Open ${title} in a new tab`}
                   >
                     Open <span aria-hidden="true">↗</span>
                   </a>

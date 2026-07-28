@@ -52,15 +52,30 @@ describe("IndexStatusCard", () => {
 });
 
 describe("StatusPill", () => {
-  it("normalizes successful statuses while preserving review and degraded labels", () => {
-    const { rerender } = render(<StatusPill status="ok" label="Completed" />);
+  it("uses the canonical success label when no override is supplied", () => {
+    render(<StatusPill status="ok" />);
     expect(screen.getByText("COMPLETE")).not.toBeNull();
+  });
 
-    rerender(<StatusPill status="caveat" />);
-    expect(screen.getByText("NEEDS REVIEW")).not.toBeNull();
+  it("honors custom labels for successful and non-successful statuses", () => {
+    const { rerender } = render(<StatusPill status="ok" label="Completed safely" />);
+    expect(screen.getByText("Completed safely")).not.toBeNull();
 
-    rerender(<StatusPill status="error" />);
-    expect(screen.getByText("DEGRADED")).not.toBeNull();
+    rerender(<StatusPill status="caveat" label="Manual review required" />);
+    expect(screen.getByText("Manual review required")).not.toBeNull();
+
+    rerender(<StatusPill status="error" label="Unavailable" />);
+    expect(screen.getByText("Unavailable")).not.toBeNull();
+  });
+
+  it.each([
+    ["ok", "", "COMPLETE"],
+    ["caveat", "   ", "NEEDS REVIEW"],
+    ["error", "\t", "DEGRADED"],
+  ] as const)("uses the canonical %s fallback for a blank label", (status, label, fallback) => {
+    render(<StatusPill status={status} label={label} />);
+    expect(screen.getByText(fallback)).not.toBeNull();
+    cleanup();
   });
 });
 

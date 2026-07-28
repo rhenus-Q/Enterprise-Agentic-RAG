@@ -124,7 +124,7 @@ export function RunDetailPanel({ run }: RunDetailPanelProps) {
                         className="evidence-external"
                         href={item.url}
                         target="_blank"
-                        rel="noreferrer"
+                        rel="noopener noreferrer"
                         aria-label={`Open ${item.title} in a new tab`}
                         title={item.url}
                       >

@@ -1,11 +1,42 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Citation } from "../api/types";
 import { askFixtures } from "../mocks/fixtures";
 import { CitationList } from "./CitationList";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+
+function mockExcerptMeasurements({
+  clientHeight,
+  scrollHeight,
+}: {
+  clientHeight: number;
+  scrollHeight: number;
+}) {
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.classList.contains("citation-snippet") ? clientHeight : 0;
+  });
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.classList.contains("citation-snippet") ? scrollHeight : 0;
+  });
+}
+
+function citationWithSnippet(title: string, snippet: string, source: string): Citation {
+  return {
+    ...askFixtures.localSuccess.citations[0]!,
+    title,
+    snippet,
+    source,
+  };
+}
 
 describe("CitationList", () => {
   it("uses the reference evidence labels", () => {
@@ -65,7 +96,7 @@ describe("CitationList", () => {
 
     expect(screen.getByText(/remote access requires an enrolled company device/i)).not.toBeNull();
     const link = screen.getByRole("link", {
-      name: "Open Zero Trust Architecture in new tab",
+      name: "Open Zero Trust Architecture in a new tab",
     });
     expect(link.getAttribute("href")).toBe(
       "https://www.nist.gov/publications/zero-trust-architecture",
@@ -101,5 +132,101 @@ describe("CitationList", () => {
     expect(filename?.getAttribute("title")).toBe(fullPath);
     expect(screen.getByText(`Full source path: ${fullPath}`)).not.toBeNull();
     expect(screen.getByText(longCitation.snippet ?? "")).not.toBeNull();
+  });
+
+  it("does not show a disclosure when the rendered excerpt is not truncated", () => {
+    mockExcerptMeasurements({ clientHeight: 32, scrollHeight: 32 });
+    const citation = citationWithSnippet(
+      "Short policy",
+      "A short excerpt that fits within two lines.",
+      "data/acmecorp_internal_docs/short_policy.md",
+    );
+
+    render(<CitationList citations={[citation]} />);
+
+    const excerpt = screen.getByText(citation.snippet ?? "");
+    expect(excerpt.getAttribute("title")).toBe(citation.snippet);
+    expect(screen.queryByText("Show more")).toBeNull();
+  });
+
+  it("expands and collapses a measured truncated excerpt accessibly", () => {
+    mockExcerptMeasurements({ clientHeight: 32, scrollHeight: 80 });
+    const citation = citationWithSnippet(
+      "Extended policy",
+      "This complete supporting excerpt is long enough to exceed the rendered two-line citation limit.",
+      "data/acmecorp_internal_docs/extended_policy.md",
+    );
+
+    render(<CitationList citations={[citation]} />);
+
+    const showMore = screen.getByRole("button", {
+      name: `Show more of ${citation.title}`,
+    });
+    const excerptId = showMore.getAttribute("aria-controls");
+    const excerpt = excerptId ? document.getElementById(excerptId) : null;
+
+    expect(showMore.getAttribute("type")).toBe("button");
+    expect(showMore.textContent).toBe("Show more");
+    expect(showMore.getAttribute("aria-expanded")).toBe("false");
+    expect(excerpt).not.toBeNull();
+    expect(excerpt?.textContent).toBe(citation.snippet);
+    expect(excerpt?.getAttribute("title")).toBe(citation.snippet);
+    expect(excerpt?.classList.contains("citation-snippet--expanded")).toBe(false);
+
+    fireEvent.click(showMore);
+
+    const showLess = screen.getByRole("button", {
+      name: `Show less of ${citation.title}`,
+    });
+    expect(showLess.getAttribute("aria-controls")).toBe(excerptId);
+    expect(showLess.getAttribute("aria-expanded")).toBe("true");
+    expect(showLess.textContent).toBe("Show less");
+    expect(excerpt?.classList.contains("citation-snippet--expanded")).toBe(true);
+    expect(excerpt?.textContent).toBe(citation.snippet);
+
+    fireEvent.click(showLess);
+
+    const collapsedButton = screen.getByRole("button", {
+      name: `Show more of ${citation.title}`,
+    });
+    expect(collapsedButton.getAttribute("aria-expanded")).toBe("false");
+    expect(excerpt?.classList.contains("citation-snippet--expanded")).toBe(false);
+  });
+
+  it("maintains independent expansion state for multiple truncated excerpts", () => {
+    mockExcerptMeasurements({ clientHeight: 32, scrollHeight: 80 });
+    const citations = [
+      citationWithSnippet(
+        "First policy",
+        "The first complete supporting excerpt remains independent from every other citation.",
+        "data/acmecorp_internal_docs/first_policy.md",
+      ),
+      citationWithSnippet(
+        "Second policy",
+        "The second complete supporting excerpt has its own disclosure and expansion state.",
+        "data/acmecorp_internal_docs/second_policy.md",
+      ),
+    ];
+
+    render(<CitationList citations={citations} />);
+
+    const firstButton = screen.getByRole("button", {
+      name: "Show more of First policy",
+    });
+    const secondButton = screen.getByRole("button", {
+      name: "Show more of Second policy",
+    });
+    expect(firstButton.getAttribute("aria-controls")).not.toBe(
+      secondButton.getAttribute("aria-controls"),
+    );
+
+    fireEvent.click(firstButton);
+
+    expect(
+      screen
+        .getByRole("button", { name: "Show less of First policy" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(secondButton.getAttribute("aria-expanded")).toBe("false");
   });
 });
