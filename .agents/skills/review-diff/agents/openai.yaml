@@ -1,4 +1,4 @@
 interface:
   display_name: "Review Diff"
-  short_description: "Focused, read-only review of working-tree changes"
-  default_prompt: "Use $review-diff to perform a focused, read-only review of the current working-tree changes."
+  short_description: "Focused pre-commit review with precise Git commands"
+  default_prompt: "Use $review-diff to review the current working-tree changes, assess commit readiness, and suggest precise Git commands."

@@ -12,16 +12,19 @@ Inspect:
 git status --short
 git diff --stat
 git diff --name-only
+git diff --cached --stat
+git diff --cached --name-only
 ```
 
-Review targeted diffs instead of reading every full file:
+Review targeted unstaged and staged diffs instead of reading every full file:
 
 ```powershell
 git diff -- <file>
+git diff --cached -- <file>
 ```
 
-Read every relevant untracked file because it is absent from `git diff`. Do not read
-credentials or authentication state.
+Read every relevant untracked file because it is absent from `git diff`. Follow the
+sensitive-file boundary in `SKILL.md`.
 
 ## 2. Confirm scope
 
@@ -65,8 +68,9 @@ Choose one:
 Base the judgment on concrete findings, scope correctness, and available validation
 evidence. Do not block a commit solely for optional hardening or generic best practices.
 
-Report the judgment first, followed by concrete findings and the smallest relevant
-validation recommendation. When the judgment is `Ready to commit`, always provide
-explicit staging and commit commands limited to the reviewed files. Use
-`git add -A -- <paths>` for deletions or renames, and never default to `git add .`.
-Present the commands as suggestions only; do not execute them.
+Use the output structure in `SKILL.md`. Strict mode may include additional concrete
+release-risk findings, but it must not restore a fixed confirmations matrix or list
+unrelated checks. When the judgment is `Ready to commit`, provide explicit staging and
+commit commands limited to the reviewed files. Use `git add -A -- <paths>` for
+deletions or renames, and never default to `git add .`. Present the commands as
+suggestions only; do not execute them.
