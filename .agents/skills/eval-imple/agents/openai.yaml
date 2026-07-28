@@ -1,0 +1,4 @@
+interface:
+  display_name: "Evaluate and Implement"
+  short_description: "Evaluate a proposed change before implementing it"
+  default_prompt: "Use $eval-imple to evaluate this proposed change and implement it only if justified."

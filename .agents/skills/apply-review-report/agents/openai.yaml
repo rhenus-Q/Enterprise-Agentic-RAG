@@ -1,0 +1,4 @@
+interface:
+  display_name: "Apply Review Report"
+  short_description: "Apply scoped fixes from a project review report"
+  default_prompt: "Use $apply-review-report to apply the actionable findings in this project review report."

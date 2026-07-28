@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Diff"
+  short_description: "Review the working-tree diff for commit readiness"
+  default_prompt: "Use $review-diff to review the current working-tree changes for commit readiness."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Security Review"
+  short_description: "Audit security, privacy, and prompt-injection risks"
+  default_prompt: "Use $security-review to audit this repository for security and privacy risks."

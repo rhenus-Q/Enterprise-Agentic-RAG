@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implement Specification"
+  short_description: "Implement an approved specification or plan"
+  default_prompt: "Use $imple-spec to implement this approved specification or plan."

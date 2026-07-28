@@ -1,0 +1,4 @@
+interface:
+  display_name: "Apply Skill Review"
+  short_description: "Apply fixes from a completed Codex skill review"
+  default_prompt: "Use $apply-skill-review to apply scoped fixes from this skill review report."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Documentation Drift Review"
+  short_description: "Audit documentation against repository reality"
+  default_prompt: "Use $docs-drift-review to find documentation drift and write a report."

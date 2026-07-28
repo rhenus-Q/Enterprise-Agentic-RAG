@@ -1,0 +1,4 @@
+interface:
+  display_name: "New Function Specification"
+  short_description: "Create an implementation-ready function specification"
+  default_prompt: "Use $new-function-spec to turn this feature request into an implementation-ready specification."

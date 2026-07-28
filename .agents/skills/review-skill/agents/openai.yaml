@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Codex Skill"
+  short_description: "Review a Codex skill for safety and project fit"
+  default_prompt: "Use $review-skill to review this Codex skill and write a structured report."

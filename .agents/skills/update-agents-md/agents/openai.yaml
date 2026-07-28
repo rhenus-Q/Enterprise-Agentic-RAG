@@ -1,0 +1,4 @@
+interface:
+  display_name: "Update AGENTS.md"
+  short_description: "Update durable repository guidance after a change"
+  default_prompt: "Use $update-agents-md to record durable guidance from this completed change."

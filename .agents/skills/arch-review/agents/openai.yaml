@@ -1,0 +1,4 @@
+interface:
+  display_name: "Architecture Review"
+  short_description: "Audit architecture and write a structured report"
+  default_prompt: "Use $arch-review to audit this repository architecture and write a report."
