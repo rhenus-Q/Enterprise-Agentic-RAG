@@ -6,11 +6,12 @@ interface StatusPillProps {
 }
 
 const labels: Record<RunStatus, string> = {
-  ok: "Complete",
-  caveat: "Needs review",
-  error: "Degraded",
+  ok: "COMPLETE",
+  caveat: "NEEDS REVIEW",
+  error: "DEGRADED",
 };
 
 export function StatusPill({ status, label }: StatusPillProps) {
-  return <span className={`status-pill status-pill--${status}`}>{label ?? labels[status]}</span>;
+  const visibleLabel = status === "ok" ? labels.ok : (label ?? labels[status]);
+  return <span className={`status-pill status-pill--${status}`}>{visibleLabel}</span>;
 }

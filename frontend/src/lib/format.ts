@@ -36,6 +36,20 @@ export function formatDateTime(timestamp: string): string {
   }).format(new Date(timestamp));
 }
 
+export function formatProviderName(provider: string): string {
+  const normalized = provider.trim();
+
+  if (normalized.toLowerCase() === "openai") {
+    return "OpenAI";
+  }
+
+  if (normalized.toLowerCase() === "ollama") {
+    return "Ollama";
+  }
+
+  return normalized;
+}
+
 export function humanizeToken(value: string): string {
   return value.replaceAll("_", " ");
 }

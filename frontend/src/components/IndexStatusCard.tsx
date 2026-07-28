@@ -1,4 +1,5 @@
 import type { IndexStatus } from "../api/types";
+import { formatProviderName } from "../lib/format";
 
 interface IndexStatusCardProps {
   index: IndexStatus;
@@ -16,16 +17,30 @@ function fingerprintValue(
   fingerprint: Record<string, string> | null,
   key: "embedding_provider" | "embedding_model",
 ): string {
-  return fingerprint?.[key] ?? "Not recorded";
+  const value = fingerprint?.[key];
+
+  if (!value) {
+    return "Not recorded";
+  }
+
+  return key === "embedding_provider" ? formatProviderName(value) : value;
 }
 
 export function IndexStatusCard({ index }: IndexStatusCardProps) {
   return (
     <section className="index-card" aria-labelledby="index-status-heading">
       <div className="section-heading-row">
-        <div>
-          <p className="eyebrow">Retrieval index</p>
-          <h2 id="index-status-heading">Embedding compatibility</h2>
+        <div className="index-identity">
+          <span className="index-mark" aria-hidden="true">
+            <svg viewBox="0 0 36 36">
+              <ellipse cx="18" cy="9" rx="11" ry="4" />
+              <path d="M7 9v9c0 2.2 4.9 4 11 4s11-1.8 11-4V9M7 18v9c0 2.2 4.9 4 11 4s11-1.8 11-4v-9" />
+            </svg>
+          </span>
+          <div>
+            <p className="eyebrow">RETRIEVAL INDEX</p>
+            <h2 id="index-status-heading">Embedding compatibility</h2>
+          </div>
         </div>
         <span
           className={`compatibility-badge ${
@@ -49,13 +64,13 @@ export function IndexStatusCard({ index }: IndexStatusCardProps) {
         <div>
           <dt>Index</dt>
           <dd>
-            <code>{index.collection_name}</code>
+            <code className="index-identifier">{index.collection_name}</code>
           </dd>
         </div>
         <div>
           <dt>Location</dt>
           <dd>
-            <code>{index.persist_directory}</code>
+            <code className="index-identifier">{index.persist_directory}</code>
           </dd>
         </div>
         <div>

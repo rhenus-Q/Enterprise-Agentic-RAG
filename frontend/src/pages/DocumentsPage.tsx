@@ -7,6 +7,7 @@ import {
   type ApiError,
   type DocumentsResponse,
 } from "../api/types";
+import { ContentReveal } from "../components/ContentReveal";
 import { ErrorState } from "../components/ErrorState";
 import { IndexStatusCard } from "../components/IndexStatusCard";
 import { formatBytes, formatDate, humanizeToken } from "../lib/format";
@@ -15,10 +16,71 @@ interface DocumentsPageProps {
   api?: ApiClient;
 }
 
+const DOCUMENT_CARD_SKELETON_COUNT = 6;
+
+function DocumentsLoadingSkeleton() {
+  return (
+    <div
+      className="documents-loading"
+      data-testid="documents-loading-skeleton"
+      role="status"
+    >
+      <span className="sr-only">Loading document metadata…</span>
+
+      <section className="index-card index-card--skeleton" aria-hidden="true">
+        <div className="section-heading-row">
+          <div className="index-identity">
+            <span className="skeleton skeleton--index-mark" />
+            <div className="skeleton-heading-copy">
+              <span className="skeleton skeleton--eyebrow" />
+              <span className="skeleton skeleton--section-title" />
+            </div>
+          </div>
+          <span className="skeleton skeleton--badge" />
+        </div>
+
+        <div className="index-grid">
+          {Array.from({ length: 6 }, (_, index) => (
+            <div className="skeleton-metadata-pair" key={index}>
+              <span className="skeleton skeleton--metadata-label" />
+              <span className="skeleton skeleton--metadata-value" />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="documents-section documents-section--skeleton" aria-hidden="true">
+        <div className="section-heading-row">
+          <div className="skeleton-heading-copy">
+            <span className="skeleton skeleton--eyebrow" />
+            <span className="skeleton skeleton--section-title" />
+          </div>
+          <span className="skeleton skeleton--count-badge" />
+        </div>
+
+        <div className="document-grid">
+          {Array.from({ length: DOCUMENT_CARD_SKELETON_COUNT }, (_, index) => (
+            <article className="document-card document-card--skeleton" key={index}>
+              <div className="document-card-topline">
+                <span className="skeleton skeleton--file-mark" />
+                <span className="skeleton skeleton--category" />
+              </div>
+              <span className="skeleton skeleton--document-title" />
+              <span className="skeleton skeleton--filename" />
+              <span className="skeleton skeleton--document-meta" />
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function DocumentsPage({ api = apiClient }: DocumentsPageProps) {
   const [data, setData] = useState<DocumentsResponse | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
+  const loadingPending = loading && !data && !error;
 
   useEffect(() => {
     let active = true;
@@ -57,41 +119,43 @@ export function DocumentsPage({ api = apiClient }: DocumentsPageProps) {
             retrieval.
           </p>
         </div>
-        {data && (
+        {data ? (
           <div className="page-stat">
             <strong>{data.document_count}</strong>
-            <span>corpus documents</span>
+            <span>DOCUMENTS INDEXED</span>
           </div>
-        )}
+        ) : loadingPending ? (
+          <div
+            className="page-stat page-stat--loading"
+            data-testid="document-count-placeholder"
+            aria-hidden="true"
+          >
+            <span className="skeleton skeleton--stat-value" />
+            <span className="skeleton skeleton--stat-label" />
+          </div>
+        ) : null}
       </header>
 
-      {loading && (
-        <div className="skeleton-panel" role="status">
-          <span className="sr-only">Loading document metadata…</span>
-          <span className="skeleton skeleton--title" aria-hidden="true" />
-          <span className="skeleton skeleton--wide" aria-hidden="true" />
-          <div className="skeleton-row" aria-hidden="true">
-            <span className="skeleton" />
-            <span className="skeleton" />
-            <span className="skeleton" />
-          </div>
-          <span className="skeleton skeleton--medium" aria-hidden="true" />
-        </div>
+      {loadingPending && <DocumentsLoadingSkeleton />}
+
+      {error && (
+        <ContentReveal>
+          <ErrorState error={error} />
+        </ContentReveal>
       )}
-
-      {error && <ErrorState error={error} />}
-
-      {data?.config_error && (
-        <div className="notice notice--warning" role="alert">
-          <strong>Index status is unavailable</strong>
-          <span>{data.config_error}</span>
-        </div>
-      )}
-
-      {data?.index && <IndexStatusCard index={data.index} />}
 
       {data && (
-        <section className="documents-section" aria-labelledby="corpus-heading">
+        <ContentReveal className="documents-content" testId="documents-loaded-content">
+          {data.config_error && (
+            <div className="notice notice--warning" role="alert">
+              <strong>Index status is unavailable</strong>
+              <span>{data.config_error}</span>
+            </div>
+          )}
+
+          {data.index && <IndexStatusCard index={data.index} />}
+
+          <section className="documents-section" aria-labelledby="corpus-heading">
           <div className="section-heading-row">
             <div>
               <p className="eyebrow">Local corpus</p>
@@ -111,7 +175,11 @@ export function DocumentsPage({ api = apiClient }: DocumentsPageProps) {
                 <article className="document-card" key={document.source}>
                   <div className="document-card-topline">
                     <span className="file-mark" aria-hidden="true">
-                      MD
+                      <svg viewBox="0 0 28 32">
+                        <path d="M4.5 1.5h12l7 7v22H4.5z" />
+                        <path d="M16.5 1.5v7h7M8.5 15.5h11M8.5 20h11M8.5 24.5H16" />
+                      </svg>
+                      <span>MD</span>
                     </span>
                     <span className="category-label">
                       {humanizeToken(document.document_category)}
@@ -127,7 +195,8 @@ export function DocumentsPage({ api = apiClient }: DocumentsPageProps) {
               ))}
             </div>
           )}
-        </section>
+          </section>
+        </ContentReveal>
       )}
     </div>
   );

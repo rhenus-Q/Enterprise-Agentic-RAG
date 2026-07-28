@@ -1,4 +1,4 @@
-import { formatDuration, humanizeToken } from "../lib/format";
+import { formatDuration, formatProviderName, humanizeToken } from "../lib/format";
 import type { RunDetail } from "../api/types";
 import { ExecutionTimeline } from "./ExecutionTimeline";
 import { StatusPill } from "./StatusPill";
@@ -7,7 +7,51 @@ interface RunDetailPanelProps {
   run: RunDetail;
 }
 
+type EvidenceKind = "local" | "web" | "other";
+
+interface EvidenceItem {
+  domain: string | null;
+  kind: EvidenceKind;
+  raw: string;
+  title: string;
+  url: string | null;
+}
+
+function evidenceDomain(url: string): string | null {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+function parseEvidence(source: string): EvidenceItem {
+  const raw = source.replace(/^-\s*/, "").trim();
+  const lowerSource = raw.toLowerCase();
+  const kind: EvidenceKind = lowerSource.startsWith("local corpus:")
+    ? "local"
+    : lowerSource.startsWith("web search:")
+      ? "web"
+      : "other";
+  const url = raw.match(/https?:\/\/\S+/)?.[0].replace(/[),.;]+$/, "") ?? null;
+  let title = raw.replace(/^(Local corpus|Web search):\s*/i, "");
+
+  if (url) {
+    title = title.slice(0, title.indexOf(url)).replace(/\s*[—-]\s*$/, "").trim();
+  }
+
+  return {
+    domain: url ? evidenceDomain(url) : null,
+    kind,
+    raw,
+    title: title || raw,
+    url,
+  };
+}
+
 export function RunDetailPanel({ run }: RunDetailPanelProps) {
+  const evidence = run.sources.map(parseEvidence);
+
   return (
     <aside className="run-detail" aria-labelledby="run-detail-heading">
       <div className="section-heading-row">
@@ -25,7 +69,7 @@ export function RunDetailPanel({ run }: RunDetailPanelProps) {
         </div>
         <div>
           <dt>Provider</dt>
-          <dd>{run.provider}</dd>
+          <dd>{formatProviderName(run.provider)}</dd>
         </div>
         <div>
           <dt>Web search</dt>
@@ -61,10 +105,48 @@ export function RunDetailPanel({ run }: RunDetailPanelProps) {
 
       <section className="detail-section" aria-labelledby="run-sources-heading">
         <h3 id="run-sources-heading">Evidence lines</h3>
-        {run.sources.length ? (
-          <ul className="source-lines">
-            {run.sources.map((source) => (
-              <li key={source}>{source.replace(/^-\s*/, "")}</li>
+        {evidence.length ? (
+          <ul className="evidence-list">
+            {evidence.map((item) => (
+              <li
+                className={`evidence-row evidence-row--${item.kind}`}
+                key={item.raw}
+                title={item.raw}
+              >
+                <span className={`evidence-kind evidence-kind--${item.kind}`}>
+                  {item.kind === "local" ? "Local" : item.kind === "web" ? "Web" : "Source"}
+                </span>
+                <div className="evidence-content">
+                  <div className="evidence-title-row">
+                    <strong>{item.title}</strong>
+                    {item.url && (
+                      <a
+                        className="evidence-external"
+                        href={item.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label={`Open ${item.title} in a new tab`}
+                        title={item.url}
+                      >
+                        Open
+                        <span aria-hidden="true">↗</span>
+                      </a>
+                    )}
+                  </div>
+                  <div className="evidence-meta">
+                    <span>
+                      {item.kind === "local"
+                        ? "Local corpus"
+                        : item.domain ?? "Recorded evidence"}
+                    </span>
+                    {item.url && (
+                      <code className="truncate-text" title={item.url}>
+                        {item.url}
+                      </code>
+                    )}
+                  </div>
+                </div>
+              </li>
             ))}
           </ul>
         ) : (

@@ -16,4 +16,27 @@ describe("ExecutionTimeline", () => {
     expect(screen.getAllByRole("listitem")).toHaveLength(response.node_path.length);
     expect(screen.getByText("184.7 ms")).not.toBeNull();
   });
+
+  it("keeps the shared eyebrow while allowing context-specific titles", () => {
+    const response = askFixtures.localSuccess;
+    const { rerender } = render(
+      <ExecutionTimeline
+        title="Execution timeline"
+        nodePath={response.node_path}
+        timings={response.node_timings_ms}
+      />,
+    );
+    expect(screen.getByText("Agent trace")).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Execution timeline" })).not.toBeNull();
+
+    rerender(
+      <ExecutionTimeline
+        title="Node timings"
+        nodePath={response.node_path}
+        timings={response.node_timings_ms}
+      />,
+    );
+    expect(screen.getByText("Agent trace")).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Node timings" })).not.toBeNull();
+  });
 });

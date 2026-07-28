@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { apiClient, demoScenarioController } from "./api/client";
 import type { MockScenario } from "./api/mock";
@@ -19,6 +19,7 @@ const pages: Array<{ id: Page; label: string }> = [
 
 export default function App() {
   const [page, setPage] = useState<Page>("ask");
+  const previousPage = useRef<Page>(page);
   const [status, setStatus] = useState<RuntimeStatus | null>(null);
   const [statusError, setStatusError] = useState<ApiError | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
@@ -68,6 +69,15 @@ export default function App() {
     };
   }, [scenarioVersion]);
 
+  useLayoutEffect(() => {
+    if (previousPage.current === page) {
+      return;
+    }
+
+    previousPage.current = page;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [page]);
+
   function changeScenario(nextScenario: MockScenario) {
     const option = demoScenarioController?.options.find((item) => item.id === nextScenario);
     if (option) {
@@ -82,7 +92,12 @@ export default function App() {
         <div className="header-inner">
           <button className="product-name" type="button" onClick={() => setPage("ask")}>
             <span className="product-mark" aria-hidden="true">
-              AR
+              <svg viewBox="0 0 32 32">
+                <path d="M8.5 23.5 16 7.5l7.5 16M11.1 18.5h9.8" />
+                <circle cx="16" cy="7.5" r="2.1" />
+                <circle cx="8.5" cy="23.5" r="2.1" />
+                <circle cx="23.5" cy="23.5" r="2.1" />
+              </svg>
             </span>
             <span>
               <strong>Agentic RAG</strong>

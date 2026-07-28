@@ -13,7 +13,6 @@ import { AnswerCard } from "../components/AnswerCard";
 import { CitationList } from "../components/CitationList";
 import { ErrorState } from "../components/ErrorState";
 import { ExecutionTimeline } from "../components/ExecutionTimeline";
-import { RuntimeBadge } from "../components/RuntimeBadge";
 
 interface AskPageProps {
   api?: ApiClient;
@@ -30,10 +29,22 @@ function asFallbackPolicy(value: string | null): WebFallbackPolicy | null {
 // Drawn from the shipped AcmeCorp corpus so a first-time visitor can reach a
 // grounded answer without inventing a question.
 const suggestedQuestions = [
-  "How do I request VPN access?",
-  "What is the reimbursement window for business expenses?",
-  "Who is paged first during a Sev-1 incident?",
-  "How long are security event logs retained?",
+  {
+    category: "Access policy",
+    question: "How do I request VPN access?",
+  },
+  {
+    category: "Finance",
+    question: "What is the reimbursement window for business expenses?",
+  },
+  {
+    category: "Incident response",
+    question: "Who is paged first during a Sev-1 incident?",
+  },
+  {
+    category: "Compliance",
+    question: "How long are security event logs retained?",
+  },
 ];
 
 export function AskPage({ api = apiClient, status, statusLoading = false }: AskPageProps) {
@@ -43,6 +54,7 @@ export function AskPage({ api = apiClient, status, statusLoading = false }: AskP
   const [response, setResponse] = useState<AskResponse | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [suggestionsExpanded, setSuggestionsExpanded] = useState(true);
 
   useEffect(() => {
     if (!status) {
@@ -75,6 +87,7 @@ export function AskPage({ api = apiClient, status, statusLoading = false }: AskP
         web_fallback_policy: fallbackPolicy,
       });
       setResponse(result);
+      setSuggestionsExpanded(false);
     } catch (requestError) {
       setError(normalizeApiError(requestError));
     } finally {
@@ -82,121 +95,157 @@ export function AskPage({ api = apiClient, status, statusLoading = false }: AskP
     }
   }
 
+  function updateQuestion(nextQuestion: string) {
+    const isEmpty = nextQuestion.trim().length === 0;
+
+    setQuestion(nextQuestion);
+    if (isEmpty) {
+      setSuggestionsExpanded(true);
+    }
+  }
+
+  function selectSuggestion(nextQuestion: string) {
+    setQuestion(nextQuestion);
+  }
+
   const controlsUnavailable = statusLoading || !status || Boolean(status.config_error);
   const webSearchLocked = status?.web_search_locked === true;
   const hasOutcome = Boolean(response || error);
+  const showSuggestionCards = suggestionsExpanded;
 
   return (
     <div className={`ask-page ${hasOutcome ? "ask-page--answered" : "ask-page--idle"}`}>
       <section className="ask-workspace" aria-labelledby="ask-page-heading">
-        <div className="ask-intro">
-          <p className="eyebrow">Enterprise knowledge</p>
-          <h1 id="ask-page-heading">Ask your knowledge base</h1>
-          <p>
-            Search trusted internal documents, with transparent evidence and the agent path that
-            produced the answer.
-          </p>
-        </div>
-
-        <form className="question-composer" onSubmit={submitQuestion}>
-          <label className="sr-only" htmlFor="question">
-            Question
-          </label>
-          <textarea
-            id="question"
-            name="question"
-            placeholder="Ask about a policy, process, or internal guide…"
-            value={question}
-            onChange={(event) => setQuestion(event.target.value)}
-            disabled={submitting}
-            maxLength={4000}
-            rows={3}
-          />
-
-          <div className="composer-toolbar">
-            <div className="override-controls" aria-label="Run options">
-              <label className={`toggle-control ${webSearchLocked ? "is-locked" : ""}`}>
-                <input
-                  type="checkbox"
-                  checked={webSearchEnabled ?? false}
-                  onChange={(event) => setWebSearchEnabled(event.target.checked)}
-                  disabled={controlsUnavailable || webSearchLocked || submitting}
-                />
-                <span className="toggle-track" aria-hidden="true" />
-                <span>Web search</span>
-              </label>
-
-              <label className="select-control">
-                <span>Fallback</span>
-                <select
-                  aria-label="Web fallback policy"
-                  value={fallbackPolicy ?? ""}
-                  onChange={(event) =>
-                    setFallbackPolicy(asFallbackPolicy(event.target.value || null))
-                  }
-                  disabled={controlsUnavailable || submitting}
-                >
-                  <option value="">Runtime default</option>
-                  <option value="conservative">Conservative</option>
-                  <option value="aggressive">Aggressive</option>
-                  <option value="disabled">Disabled</option>
-                </select>
-              </label>
-
-              {webSearchLocked && <span className="lock-label">Locked by runtime policy</span>}
-            </div>
-
-            <button
-              className="primary-button"
-              type="submit"
-              disabled={submitting || question.trim().length === 0}
-            >
-              {submitting ? (
-                <>
-                  <span className="spinner" aria-hidden="true" />
-                  Running
-                </>
-              ) : (
-                <>
-                  Ask
-                  <span aria-hidden="true">→</span>
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-
-        <div className="ask-runtime-line">
-          <span>Answers include citations and metadata-only execution details.</span>
-        </div>
-
-        {status?.config_error && (
-          <div className="notice notice--warning" role="alert">
-            <strong>Runtime configuration needs attention</strong>
-            <span>{status.config_error}</span>
-          </div>
-        )}
-
-        {!hasOutcome && (
-          <section className="suggestions" aria-labelledby="suggestions-heading">
-            <p className="suggestions-label" id="suggestions-heading">
-              Try one of these
+        <div className="ask-stage">
+          <div className="ask-intro">
+            <p className="eyebrow">Enterprise knowledge assistant</p>
+            <h1 id="ask-page-heading">Ask across your trusted knowledge.</h1>
+            <p>
+              Retrieves evidence, grades relevance, verifies groundedness, and self-corrects weak
+              answers to reduce hallucinations and improve answer reliability.
             </p>
-            <div className="suggestion-chips">
-              {suggestedQuestions.map((suggestion) => (
-                <button
-                  className="suggestion-chip"
-                  type="button"
-                  onClick={() => setQuestion(suggestion)}
-                  disabled={submitting}
-                  key={suggestion}
-                >
-                  {suggestion}
-                </button>
-              ))}
+          </div>
+
+          <form className="question-composer" onSubmit={submitQuestion}>
+            <label className="sr-only" htmlFor="question">
+              Question
+            </label>
+            <textarea
+              id="question"
+              name="question"
+              placeholder="Ask about a policy, process, or internal guide…"
+              value={question}
+              onChange={(event) => updateQuestion(event.target.value)}
+              disabled={submitting}
+              maxLength={4000}
+              rows={3}
+            />
+
+            <div className="composer-toolbar">
+              <div className="override-controls" aria-label="Run options">
+                <label className={`toggle-control ${webSearchLocked ? "is-locked" : ""}`}>
+                  <input
+                    type="checkbox"
+                    checked={webSearchEnabled ?? false}
+                    onChange={(event) => setWebSearchEnabled(event.target.checked)}
+                    disabled={controlsUnavailable || webSearchLocked || submitting}
+                  />
+                  <span className="toggle-track" aria-hidden="true" />
+                  <span>Web search</span>
+                </label>
+
+                <label className="select-control">
+                  <span>Fallback policy</span>
+                  <select
+                    aria-label="Web fallback policy"
+                    value={fallbackPolicy ?? ""}
+                    onChange={(event) =>
+                      setFallbackPolicy(asFallbackPolicy(event.target.value || null))
+                    }
+                    disabled={controlsUnavailable || submitting}
+                  >
+                    <option value="">Runtime default</option>
+                    <option value="conservative">Conservative</option>
+                    <option value="aggressive">Aggressive</option>
+                    <option value="disabled">Disabled</option>
+                  </select>
+                </label>
+
+                {webSearchLocked && <span className="lock-label">Locked by runtime policy</span>}
+              </div>
+
+              <button
+                className={`primary-button ${submitting ? "is-submitting" : ""}`}
+                type="submit"
+                disabled={submitting || question.trim().length === 0}
+                aria-busy={submitting}
+              >
+                {submitting ? (
+                  <>
+                    <span className="spinner" aria-hidden="true" />
+                    Running
+                  </>
+                ) : (
+                  <>
+                    Ask
+                    <span aria-hidden="true">→</span>
+                  </>
+                )}
+              </button>
             </div>
-          </section>
-        )}
+          </form>
+
+          <div className="ask-runtime-line">
+            <span>Answers include citations and metadata-only execution details.</span>
+          </div>
+
+          {status?.config_error && (
+            <div className="notice notice--warning" role="alert">
+              <strong>Runtime configuration needs attention</strong>
+              <span>{status.config_error}</span>
+            </div>
+          )}
+        </div>
+
+        <section
+          className={`suggestions ${showSuggestionCards ? "is-expanded" : "is-collapsed"}`}
+          aria-labelledby="suggestions-heading"
+        >
+          <button
+            className="suggestion-disclosure"
+            type="button"
+            aria-expanded={suggestionsExpanded}
+            aria-controls="suggestion-card-grid"
+            onClick={() => setSuggestionsExpanded((expanded) => !expanded)}
+          >
+            <span id="suggestions-heading">
+              Suggested questions <span aria-hidden="true">·</span> 4
+            </span>
+            <span className="suggestion-chevron" aria-hidden="true">
+              {suggestionsExpanded ? "−" : "+"}
+            </span>
+          </button>
+
+          <div
+            className="suggestion-grid"
+            id="suggestion-card-grid"
+            hidden={!showSuggestionCards}
+          >
+            {suggestedQuestions.map((suggestion) => (
+              <button
+                className="suggestion-card"
+                type="button"
+                aria-label={suggestion.question}
+                onClick={() => selectSuggestion(suggestion.question)}
+                disabled={submitting}
+                key={suggestion.question}
+              >
+                <span className="suggestion-category">{suggestion.category}</span>
+                <span className="suggestion-question">{suggestion.question}</span>
+              </button>
+            ))}
+          </div>
+        </section>
       </section>
 
       {error && <ErrorState error={error} />}
@@ -208,14 +257,30 @@ export function AskPage({ api = apiClient, status, statusLoading = false }: AskP
             <CitationList citations={response.citations} />
           </div>
           <aside className="answer-sidebar">
+            <ExecutionTimeline
+              title="Execution timeline"
+              nodePath={response.node_path}
+              timings={response.node_timings_ms}
+            />
             <section className="run-summary-card">
               <div className="section-heading-row">
                 <div>
-                  <p className="eyebrow">Resolved run</p>
-                  <h2>Runtime</h2>
+                  <p className="eyebrow">RESOLVED RUN</p>
+                  <h2>Operational counters</h2>
                 </div>
-                <RuntimeBadge runtime={response.runtime} />
+                <span
+                  className={`web-availability-badge ${
+                    response.runtime.web_search_enabled
+                      ? ""
+                      : "web-availability-badge--unavailable"
+                  }`}
+                >
+                  {response.runtime.web_search_enabled ? "Web available" : "Web off"}
+                </span>
               </div>
+              <p className="runtime-policy-line">
+                Fallback policy <strong>{response.runtime.web_fallback_policy}</strong>
+              </p>
               <dl className="counter-grid">
                 <div>
                   <dt>LLM calls</dt>
@@ -235,10 +300,6 @@ export function AskPage({ api = apiClient, status, statusLoading = false }: AskP
                 </div>
               </dl>
             </section>
-            <ExecutionTimeline
-              nodePath={response.node_path}
-              timings={response.node_timings_ms}
-            />
           </aside>
         </div>
       )}

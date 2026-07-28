@@ -1,13 +1,10 @@
 import type { RunRuntime, RuntimeStatus } from "../api/types";
+import { formatProviderName } from "../lib/format";
 
 interface RuntimeBadgeProps {
   status?: RuntimeStatus | null;
   runtime?: RunRuntime | null;
   loading?: boolean;
-}
-
-function providerLabel(provider: string): string {
-  return provider === "openai" ? "OpenAI" : provider === "ollama" ? "Ollama" : provider;
 }
 
 export function RuntimeBadge({ status, runtime, loading = false }: RuntimeBadgeProps) {
@@ -19,7 +16,10 @@ export function RuntimeBadge({ status, runtime, loading = false }: RuntimeBadgeP
     return (
       <span className="runtime-badge" title={`Fallback policy: ${runtime.web_fallback_policy}`}>
         <span className="runtime-dot" />
-        {providerLabel(runtime.provider)} · {runtime.web_search_enabled ? "web available" : "web off"}
+        <span className="runtime-copy">
+          <strong>{formatProviderName(runtime.provider)}</strong>
+          <small>{runtime.web_search_enabled ? "Web available" : "Web off"}</small>
+        </span>
       </span>
     );
   }
@@ -36,12 +36,13 @@ export function RuntimeBadge({ status, runtime, loading = false }: RuntimeBadgeP
   const prefix = status.fully_local_mode ? "Local" : status.privacy_mode ? "Private" : "Connected";
 
   return (
-    <span
-      className={`runtime-badge ${isPrivate ? "runtime-badge--private" : ""}`}
-      title={status.chat_model ?? undefined}
-    >
+    <span className={`runtime-badge ${isPrivate ? "runtime-badge--private" : ""}`}>
       <span className="runtime-dot" />
-      {prefix} · {providerLabel(status.provider)}
+      <span className="runtime-copy">
+        <strong>
+          {prefix} · {formatProviderName(status.provider)}
+        </strong>
+      </span>
     </span>
   );
 }

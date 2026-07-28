@@ -8,12 +8,117 @@ import {
   type RunDetail,
   type RunsResponse,
 } from "../api/types";
+import { ContentReveal } from "../components/ContentReveal";
 import { ErrorState } from "../components/ErrorState";
 import { RunDetailPanel } from "../components/RunDetailPanel";
 import { RunsTable } from "../components/RunsTable";
 
 interface RunsPageProps {
   api?: ApiClient;
+}
+
+function RunDetailLoadingSkeleton() {
+  return (
+    <aside
+      className="run-detail run-detail--skeleton"
+      data-testid="run-detail-loading-skeleton"
+      aria-hidden="true"
+    >
+      <div className="section-heading-row">
+        <div className="skeleton-heading-copy">
+          <span className="skeleton skeleton--eyebrow" />
+          <span className="skeleton skeleton--run-title" />
+        </div>
+        <span className="skeleton skeleton--badge" />
+      </div>
+
+      <div className="run-facts">
+        {Array.from({ length: 6 }, (_, index) => (
+          <div className="skeleton-metadata-pair" key={index}>
+            <span className="skeleton skeleton--metadata-label" />
+            <span className="skeleton skeleton--metadata-value" />
+          </div>
+        ))}
+      </div>
+
+      <section className="content-section">
+        <span className="skeleton skeleton--section-title" />
+        <div className="run-timeline-skeleton">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div className="run-timeline-skeleton-row" key={index}>
+              <span className="skeleton skeleton--timeline-node" />
+              <span className="skeleton skeleton--timeline-copy" />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="detail-section">
+        <span className="skeleton skeleton--section-title" />
+        <div className="counter-grid">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div className="skeleton-metadata-pair" key={index}>
+              <span className="skeleton skeleton--metadata-label" />
+              <span className="skeleton skeleton--metadata-value" />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="detail-section">
+        <span className="skeleton skeleton--section-title" />
+        <div className="run-source-skeleton">
+          <span className="skeleton skeleton--wide" />
+          <span className="skeleton skeleton--medium" />
+        </div>
+      </section>
+
+      <p className="trace-note">
+        <span className="skeleton skeleton--medium" />
+      </p>
+    </aside>
+  );
+}
+
+function RunsLoadingSkeleton() {
+  return (
+    <div
+      className="runs-layout runs-loading"
+      data-testid="runs-loading-skeleton"
+      role="status"
+    >
+      <span className="sr-only">Loading execution history…</span>
+
+      <section className="runs-list-section" aria-hidden="true">
+        <div className="section-heading-row">
+          <div className="skeleton-heading-copy">
+            <span className="skeleton skeleton--eyebrow" />
+            <span className="skeleton skeleton--section-title" />
+          </div>
+          <span className="skeleton skeleton--count-badge" />
+        </div>
+        <div className="table-shell runs-table-skeleton">
+          <div className="runs-table-skeleton-head">
+            {Array.from({ length: 6 }, (_, index) => (
+              <span className="skeleton skeleton--table-heading" key={index} />
+            ))}
+          </div>
+          {Array.from({ length: 3 }, (_, rowIndex) => (
+            <div className="runs-table-skeleton-row" key={rowIndex}>
+              <span className="skeleton skeleton--table-question" />
+              {Array.from({ length: 5 }, (_, cellIndex) => (
+                <span className="skeleton skeleton--table-cell" key={cellIndex} />
+              ))}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="run-detail-column" aria-hidden="true">
+        <RunDetailLoadingSkeleton />
+      </div>
+    </div>
+  );
 }
 
 export function RunsPage({ api = apiClient }: RunsPageProps) {
@@ -24,10 +129,10 @@ export function RunsPage({ api = apiClient }: RunsPageProps) {
   const [detailError, setDetailError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
+  const loadingPending = loading && !data && !error;
 
   async function selectRun(runId: string) {
     setSelectedRunId(runId);
-    setDetail(null);
     setDetailError(null);
     setDetailLoading(true);
 
@@ -81,28 +186,32 @@ export function RunsPage({ api = apiClient }: RunsPageProps) {
             executions.
           </p>
         </div>
-        {data && (
+        {data ? (
           <div className="page-stat">
             <strong>{data.count}</strong>
-            <span>of {data.limit} retained</span>
+            <span>OF {data.limit} RETAINED</span>
           </div>
-        )}
+        ) : loadingPending ? (
+          <div
+            className="page-stat page-stat--loading"
+            aria-hidden="true"
+          >
+            <span className="skeleton skeleton--stat-value" />
+            <span className="skeleton skeleton--stat-label" />
+          </div>
+        ) : null}
       </header>
 
-      {loading && (
-        <div className="skeleton-panel" role="status">
-          <span className="sr-only">Loading execution history…</span>
-          <span className="skeleton skeleton--title" aria-hidden="true" />
-          <span className="skeleton skeleton--wide" aria-hidden="true" />
-          <span className="skeleton skeleton--wide" aria-hidden="true" />
-          <span className="skeleton skeleton--medium" aria-hidden="true" />
-        </div>
+      {loadingPending && <RunsLoadingSkeleton />}
+
+      {error && (
+        <ContentReveal>
+          <ErrorState error={error} />
+        </ContentReveal>
       )}
 
-      {error && <ErrorState error={error} />}
-
       {data?.runs.length === 0 && (
-        <div className="empty-state empty-state--runs">
+        <ContentReveal className="empty-state empty-state--runs">
           <span className="empty-state-mark" aria-hidden="true">
             00
           </span>
@@ -111,11 +220,11 @@ export function RunsPage({ api = apiClient }: RunsPageProps) {
             History is in-memory and metadata-only. Completed graph results will appear here until
             the backend restarts.
           </p>
-        </div>
+        </ContentReveal>
       )}
 
       {data && data.runs.length > 0 && (
-        <div className="runs-layout">
+        <ContentReveal className="runs-layout" testId="runs-loaded-content">
           <section className="runs-list-section" aria-labelledby="runs-table-heading">
             <div className="section-heading-row">
               <div>
@@ -131,19 +240,28 @@ export function RunsPage({ api = apiClient }: RunsPageProps) {
             />
           </section>
 
-          <div className="run-detail-column">
-            {detailLoading && (
-              <div className="skeleton-panel skeleton-panel--inline" role="status">
-                <span className="sr-only">Loading run detail…</span>
-                <span className="skeleton skeleton--title" aria-hidden="true" />
-                <span className="skeleton skeleton--wide" aria-hidden="true" />
-                <span className="skeleton skeleton--short" aria-hidden="true" />
-              </div>
+          <div className="run-detail-column" aria-busy={detailLoading}>
+            {detailLoading && !detail && (
+              <>
+                <span className="sr-only" role="status">
+                  Loading run detail…
+                </span>
+                <RunDetailLoadingSkeleton />
+              </>
+            )}
+            {detailLoading && detail && (
+              <span className="sr-only" role="status">
+                Loading selected run detail…
+              </span>
             )}
             {detailError && <ErrorState error={detailError} compact />}
-            {detail && <RunDetailPanel run={detail} />}
+            {detail && (
+              <ContentReveal>
+                <RunDetailPanel run={detail} />
+              </ContentReveal>
+            )}
           </div>
-        </div>
+        </ContentReveal>
       )}
     </div>
   );

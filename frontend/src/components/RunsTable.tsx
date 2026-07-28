@@ -1,4 +1,4 @@
-import { formatDateTime, formatDuration } from "../lib/format";
+import { formatDateTime, formatDuration, formatProviderName } from "../lib/format";
 import type { RunSummary } from "../api/types";
 import { StatusPill } from "./StatusPill";
 
@@ -36,7 +36,7 @@ export function RunsTable({ runs, selectedRunId, onSelect }: RunsTableProps) {
               <td>
                 <StatusPill status={run.status} />
               </td>
-              <td className="table-mono">{run.provider}</td>
+              <td className="table-mono">{formatProviderName(run.provider)}</td>
               <td className="numeric-cell">{formatDuration(run.total_duration_ms)}</td>
               <td>{formatDateTime(run.generated_at)}</td>
               <td className="run-chevron" aria-hidden="true">
