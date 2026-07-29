@@ -41,7 +41,7 @@ jobs:
         run: uv sync --locked --group dev
 
       - name: Run mocked test suites (no API keys required)
-        run: uv run pytest tests/node/ tests/graph/ tests/evals/ -q
+        run: uv run pytest tests/node/ tests/graph/ tests/evals/ tests/server/ -q
 
   lint:
     runs-on: ubuntu-latest

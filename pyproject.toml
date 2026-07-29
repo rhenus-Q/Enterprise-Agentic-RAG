@@ -76,6 +76,11 @@ files = [
     "graph/formatting.py",
     "graph/state.py",
     "graph/consts.py",
+    "server/app.py",
+    "server/schemas.py",
+    "server/runs.py",
+    "server/status.py",
+    "server/documents.py",
 ]
 warn_unused_configs = true
 warn_unused_ignores = true
