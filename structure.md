@@ -507,7 +507,85 @@ Per dependency:
 All privacy-mode guarantees hold on every failure path (a retrieval failure
 in privacy mode still never calls the router, Tavily, or the rewriter).
 
-## 14. Testing overview
+## 14. Web application layer (`server/` + `frontend/`)
+
+A second entry point onto the same engine, added without touching the graph.
+The full rationale — including why the server reports resolved values instead
+of recomputing them — is [ADR 016](docs/adr/016-thin-web-application-layer.md).
+
+**`server/` is an adapter, not a second application.** It imports only
+`graph.engine`, `graph.config`, `graph.consts`, `graph.formatting`,
+`ingestion`, and `main`; it never imports `graph.nodes.*` or the chain
+factories, and it constructs no LLM, embedding, Chroma, or Tavily client, so
+`import server.app` stays side-effect-free and keys-free like every other
+module.
+
+| Module | Responsibility |
+|---|---|
+| `server/app.py` | `create_app()`, the endpoints, error mapping, the lifespan preflight, and an optional `frontend/dist` static mount |
+| `server/schemas.py` | Pydantic request/response models — the API contract the frontend's `api/types.ts` mirrors |
+| `server/runs.py` | `RunStore`: `deque(maxlen=RUN_HISTORY_LIMIT = 50)` + `threading.Lock` + a `run_id` index |
+| `server/status.py` | Resolved runtime status and the index-compatibility ladder |
+| `server/documents.py` | Keys-free corpus listing (filesystem + fingerprint sidecar only) |
+
+| Endpoint | Behavior |
+|---|---|
+| `POST /api/ask` | Sync `def` (threadpool) → `engine.answer_question()` with a `cancel_event`; builds citations from `raw_state["documents"]` (300-char snippets, deduplicated) and appends a metadata-only history record |
+| `POST /api/ask/cancel` | Sets the in-flight run's event, waits for the ask lock, returns `{cancelled, idle}` (ADR 017) |
+| `GET /api/status` | Resolved provider/mode, budgets, timeout, index compatibility, preflight result |
+| `GET /api/documents` | Corpus metadata + the same index block; works with no keys and no network |
+| `GET /api/runs`, `GET /api/runs/{run_id}` | Newest-first summaries and run detail, or 404 |
+
+Design points that carry the guarantees across the HTTP boundary:
+
+* **Resolved values are reported, never recomputed.** `AnswerResult` already
+  carries the `web_search_enabled` / `web_fallback_policy` the run actually
+  used (privacy lock included, §9), so the API echoes them. `web_search_locked`
+  on `/api/status` is a display flag only — the lock itself stays in
+  `engine.seed_state()`.
+* **A `stop_reason` is never an HTTP error.** All nine values return 200 with
+  the same `STOP_REASON_NOTES` caveat the CLI prints (§10). HTTP errors are
+  reserved for HTTP-layer problems: 422 validation, 409 `run_in_progress`, 503
+  `preflight_failed` / `config_error`, 404 `run_not_found`, 499
+  `run_cancelled`, and 500 `internal_error` carrying the exception **type**
+  only — the same logging rule as §13.
+* **Single in-flight ask.** Thread safety of the cached chains, retriever, and
+  compiled graph is unverified here, so `app.state.ask_lock` is acquired
+  non-blocking and a concurrent question gets 409 without the engine being
+  touched. Read-only endpoints are not serialized.
+* **Metadata-only history.** Each record is `engine.build_trace(result)` plus
+  `provider` and a derived `status` (`ok` / `caveat` / `error`) — no answer
+  text, snippets, `page_content`, prompts, or raw state. A record exists only
+  when the engine *returned* a result, degraded runs included; HTTP-layer
+  failures and cancellations are reported live and never stored. History is
+  lost on restart and is not shared across workers, so uvicorn runs
+  single-process.
+* **Preflight runs once, at startup, and does not block startup.** A
+  `PreflightError` is printed to the server console (as the CLI does) and
+  recorded on `app.state`; `/api/status` and `/api/documents` keep serving and
+  report it, while `/api/ask` returns 503 until the configuration is fixed and
+  the process restarted.
+* **Index compatibility mirrors preflight** (`missing_index` →
+  `legacy_no_fingerprint` → `provider_mismatch` → `model_mismatch` →
+  `compatible`, plus `index_unreadable`), including the asymmetry from §9: a
+  missing fingerprint is legacy-OpenAI in OpenAI mode and a reindex trigger in
+  local mode. Preflight raises rather than returning a verdict, so this is
+  mirrored logic and a known maintenance coupling (ADR 016).
+* **Sanitized payloads.** No response contains an endpoint URL or hostname
+  (notably not `OLLAMA_BASE_URL`), an absolute filesystem path, or a raw
+  exception message; `persist_directory` / `collection_name` are the
+  repo-relative constants from `active_index_config()`.
+
+**`frontend/`** is Vite + React + TypeScript with three views (Ask, Documents,
+Runs), plain CSS, and no router, state, or UI library. It renders only what the
+API reported — a failing `/api/status` produces an explicit "backend
+unreachable" state rather than defaults. The mock/real client switch is the
+module constant `USE_MOCKS` in `src/api/client.ts` (no `VITE_*` variable), and
+fixtures are typed with `api/types.ts` so mock/real drift is a compile error.
+There is no token/step streaming: `answer_question()` returns after the run, so
+the execution timeline renders post-hoc.
+
+## 15. Testing overview
 
 | Suite | What it covers | External calls |
 |---|---|---|
@@ -515,6 +593,7 @@ in privacy mode still never calls the router, Tavily, or the rewriter).
 | `tests/graph/` | The three routing functions (every branch incl. defaults), privacy toggle, stop reasons, budget limits and counters, caveat formatting, external-failure degradation (incl. failed-generation-is-never-graded), and compiled-graph end-to-end runs that drive real retry loops to exhaustion and assert negative guarantees (no router / web / rewriter calls in privacy mode; no spend past a budget) | None — fully mocked |
 | `tests/chains/` | The six LCEL chains against the real `gpt-5-mini` (prompt + structured-output behavior) | **Real OpenAI API** — gated by the `requires_openai` marker; do not run without explicit approval |
 | `tests/evals/` | The eval harness's pure helpers: dataset loading/validation (incl. the shipped dataset), per-row checks, metrics, report rendering | None — pure functions |
+| `tests/server/` | The FastAPI layer (§14): ask shape and citation building, cancellation, status/index compatibility and sanitization, documents listing, run store bounds and 404s, and the full error map | None — `graph.engine.answer_question` is monkeypatched; no keys, no network |
 
 Separate from the test suites, `evals/` holds a **behavioral eval harness**:
 a 24-question JSONL dataset (local-corpus / web-fallback /
@@ -529,14 +608,19 @@ state seeding is never duplicated; privacy-mode rows pass
 `web_fallback_policy`. The full run needs real API keys and is deliberately
 excluded from CI; `--validate-only` checks the dataset with no API calls.
 
-Run the mocked suites with `uv run pytest tests/node/ tests/graph/ tests/evals/ -v`
-(no API keys required).
+Run the mocked suites with
+`uv run pytest tests/node/ tests/graph/ tests/evals/ tests/server/ -v`
+(no API keys required). The frontend's critical-state suite runs separately
+with `cd frontend; npx vitest run`.
 
-## 15. Known limitations & future improvements
+## 16. Known limitations & future improvements
 
 Limitations (deliberate scope):
 
-* Single-turn CLI; no conversation memory or API surface.
+* Single-turn; no conversation memory, in the CLI or the web app.
+* The web layer (§14) is single-user: no authentication, one in-flight
+  question at a time, in-memory run history lost on restart, and no
+  token/step streaming.
 * Observability currently has two layers: LangSmith tracing can be enabled via environment variables for full LangChain/LangGraph trace inspection, and the engine records lightweight CI-safe metadata (`run_id`, node path, per-node timings, total duration, counters, stop reasons, and optional trace JSON). However, console logging is still `print()`-based, there is no structured logging or metrics backend, and the documentation does not yet include trace screenshots or trace-link evidence.
 * Sequential per-chunk / per-result grading (latency and cost scale with k).
 * Grounding feedback is a fixed instruction; the grader returns no rationale about *which* claims were unsupported.
@@ -544,7 +628,8 @@ Limitations (deliberate scope):
 
 Future improvements (rough priority): structured logging and metrics-friendly observability; README/report evidence for LangSmith traces; grader-scored (LLM-as-judge) metrics on top of the deterministic eval harness; rationale-bearing grounding feedback; batched grading.
 
-GitHub Actions CI (`.github/workflows/ci.yml`) runs two parallel jobs on every push and pull request — both keys-free:
+GitHub Actions CI (`.github/workflows/ci.yml`) runs three parallel jobs on every push and pull request — all keys-free:
 
-* **`mocked-tests`**: the fully mocked suites (`tests/node/` + `tests/graph/` + `tests/evals/`); the key-gated `tests/chains/` suite and the full eval run are excluded.
-* **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the engine-API surface: `graph/engine.py`, `graph/config.py`, `graph/formatting.py`, `graph/state.py`, `graph/consts.py`).
+* **`mocked-tests`**: the fully mocked suites (`tests/node/` + `tests/graph/` + `tests/evals/` + `tests/server/`); the key-gated `tests/chains/` suite and the full eval run are excluded.
+* **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the engine-API surface — `graph/engine.py`, `graph/config.py`, `graph/formatting.py`, `graph/state.py`, `graph/consts.py` — plus the five `server/*.py` modules).
+* **`frontend`**: `tsc --noEmit`, `vitest run`, and `vite build`.

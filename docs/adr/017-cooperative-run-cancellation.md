@@ -1,4 +1,4 @@
-# ADR 016: Cooperative run cancellation
+# ADR 017: Cooperative run cancellation
 
 Status: Accepted
 

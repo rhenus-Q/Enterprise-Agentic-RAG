@@ -86,7 +86,9 @@ State is a `TypedDict` defined in `graph/state.py` with fourteen fields: the wor
 | Web search         | Tavily (`langchain-tavily`)                                                            |
 | Chains             | LangChain LCEL                                                                         |
 | Package management | uv (`pyproject.toml` + committed `uv.lock`)                                            |
-| Testing            | pytest (mocked unit tests + key-gated integration tests)                               |
+| Web API            | FastAPI + uvicorn (`server/`) — a thin adapter over the engine                          |
+| Web UI             | Vite + React + TypeScript (`frontend/`), plain CSS, no UI/router/state library          |
+| Testing            | pytest (mocked unit tests + key-gated integration tests); vitest for the frontend      |
 
 ## Project Structure
 
@@ -97,8 +99,10 @@ State is a `TypedDict` defined in `graph/state.py` with fourteen fields: the wor
 ├── data/
 │   └── acmecorp_internal_docs/  # Synthetic AcmeCorp corpus: 6 fictional internal policy/guide documents
 ├── structure.md             # Architecture deep-dive: full workflow, state machine, design decisions
+├── server/                  # FastAPI adapter over graph.engine (app, schemas, run store, status, documents)
+├── frontend/                # Vite + React + TypeScript UI: Ask / Documents / Runs
 ├── docs/
-│   └── adr/                 # Architecture Decision Records 001–013 (with index in README.md)
+│   └── adr/                 # Architecture Decision Records 001–017 (with index in README.md)
 ├── evals/
 │   ├── questions.jsonl      # Behavioral eval dataset (24 rows, 6 categories)
 │   ├── run_eval.py          # Eval runner: real graph runs + deterministic checks (not in CI)
@@ -126,6 +130,7 @@ State is a `TypedDict` defined in `graph/state.py` with fourteen fields: the wor
     ├── node/                # Unit tests — all external dependencies mocked, no API keys needed
     ├── graph/               # Routing / privacy-toggle / compiled-graph tests — fully mocked
     ├── evals/               # Unit tests for the eval harness's pure helpers — fully mocked
+    ├── server/              # FastAPI endpoint tests — engine monkeypatched, no keys, no network
     └── chains/              # Integration tests — call the real gpt-5-mini, need OPENAI_API_KEY
 ```
 
@@ -588,6 +593,58 @@ LLM is not asked to generate them, so prompts and model behavior are
 unchanged. When a run ends with a caveat, the caveat is printed *before* the
 sources, so a sources list never implies a failed answer was verified.
 
+## Web application (API + UI)
+
+Besides the CLI, the same engine is exposed through a small FastAPI service
+(`server/`) and a React UI (`frontend/`) with three views: **Ask** (answer,
+caveat, citations with evidence snippets, and the executed node timeline),
+**Documents** (corpus metadata plus index/fingerprint status and an explicit
+reindex-required callout), and **Runs** (recent executions and run detail).
+
+The server is deliberately a **thin adapter**: it calls
+`graph.engine.answer_question()` and *reports* what the run resolved — it never
+re-derives the privacy lock, the fallback policy, or the run counters. The
+frontend renders only what the API returned; a failing `/api/status` shows an
+explicit "backend unreachable" state rather than defaults. Rationale and
+trade-offs: [ADR 016](docs/adr/016-thin-web-application-layer.md).
+
+```powershell
+# 1. Backend (single process — run history is in-memory)
+uv run uvicorn server.app:app --port 8000
+
+# 2. Frontend, in a second shell (dev server on :5173, /api proxied to :8000)
+cd frontend; npm install; npm run dev
+
+# …or build once and let FastAPI serve the UI at http://127.0.0.1:8000
+cd frontend; npm run build
+```
+
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /api/ask` | Run one question; returns the answer, `stop_reason` + caveat, citations, node path/timings, counters, and the resolved runtime policy |
+| `POST /api/ask/cancel` | Stop the in-flight run and answer once the slot is free ([ADR 017](docs/adr/017-cooperative-run-cancellation.md)) |
+| `GET /api/status` | Resolved provider/mode, budgets, timeout, index compatibility, preflight result |
+| `GET /api/documents` | Corpus document metadata + index status (keys-free) |
+| `GET /api/runs`, `GET /api/runs/{run_id}` | Bounded, metadata-only run history and run detail |
+
+Things worth knowing before pointing anything real at it:
+
+* **One question at a time.** Thread safety of the cached chains, retriever,
+  and compiled graph is unverified here, so asks are serialized behind a lock
+  and a concurrent request gets HTTP 409 instead of an assumption.
+* **A `stop_reason` is never an HTTP error.** Degraded runs return 200 with the
+  same honest caveat the CLI prints. Errors are reserved for HTTP-layer
+  problems (422 / 409 / 503 / 500, plus 499 for a cancelled run).
+* **Run history is in-memory, bounded (50), and metadata-only** — no answer
+  text, snippets, or `page_content`, and it is lost on restart. Run uvicorn
+  single-process; a multi-worker deployment would split the history.
+* **Responses are sanitized**: no endpoint URLs or hostnames (including
+  `OLLAMA_BASE_URL`), no absolute paths, no raw exception messages — a failed
+  startup preflight prints its actionable text to the server console and the
+  API returns only a pointer to it.
+* **No authentication, no document administration.** Reindexing stays
+  `uv run python ingestion.py`; the UI only reports when it is required.
+
 ## Run the tests
 
 ```powershell
@@ -600,6 +657,12 @@ uv run pytest tests/graph/ -v
 # Eval-harness helper tests — fully mocked, NO API keys required
 uv run pytest tests/evals/ -v
 
+# Backend API tests — fully mocked, NO API keys required
+uv run pytest tests/server/ -v
+
+# Frontend critical-state tests (needs Node)
+cd frontend; npx vitest run
+
 # Integration tests — call the real gpt-5-mini, require OPENAI_API_KEY (skipped if unset)
 uv run pytest tests/chains/ -v
 
@@ -607,15 +670,18 @@ uv run pytest tests/chains/ -v
 uv run pytest -v
 ```
 
-CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs two parallel
-jobs on every push and pull request — both keys-free:
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs three parallel
+jobs on every push and pull request — all keys-free:
 
-* **`mocked-tests`**: the three fully mocked suites (`tests/node/`,
-  `tests/graph/`, `tests/evals/`), which also doubles as a regression test that
-  imports stay side-effect-free.
+* **`mocked-tests`**: the four fully mocked suites (`tests/node/`,
+  `tests/graph/`, `tests/evals/`, `tests/server/`), which also doubles as a
+  regression test that imports stay side-effect-free.
 * **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the
-  engine-API surface: `graph/engine.py`, `graph/config.py`,
-  `graph/formatting.py`, `graph/state.py`, `graph/consts.py`).
+  engine-API surface plus the server package: `graph/engine.py`,
+  `graph/config.py`, `graph/formatting.py`, `graph/state.py`,
+  `graph/consts.py`, and the five `server/*.py` modules).
+* **`frontend`**: `tsc --noEmit`, `vitest run`, and `vite build` against the
+  committed `package-lock.json`.
 
 The key-gated integration suite (`tests/chains/`) and the full eval run are
 deliberately excluded from CI.
@@ -642,8 +708,10 @@ uv run pre-commit run --all-files
 ```
 
 Mypy is scoped to the engine-API surface (`graph/engine.py`, `graph/config.py`,
-`graph/formatting.py`, `graph/state.py`, `graph/consts.py`); nodes, chains,
-tests, and `ingestion.py` are outside scope. Mypy is **not** a pre-commit hook
+`graph/formatting.py`, `graph/state.py`, `graph/consts.py`) plus the server
+package (`server/app.py`, `server/schemas.py`, `server/runs.py`,
+`server/status.py`, `server/documents.py`); nodes, chains, tests, and
+`ingestion.py` are outside scope. Mypy is **not** a pre-commit hook
 (hook-venv isolation makes it unreliable for LangChain-typed code); run it
 directly or via CI instead.
 
@@ -678,27 +746,30 @@ The major design decisions — `stop_reason` semantics, privacy mode,
 meaningful retries, the web-result relevance gate, run budgets, graceful
 degradation, deterministic provenance, the synthetic corpus, the eval
 harness, the prompt-injection defense, the web-fallback policy, the
-prompt-injection hardening, and the eval-harness v2 expansion — are
-documented as short ADRs (001–013) in [`docs/adr/`](docs/adr/), each
+prompt-injection hardening, the eval-harness v2 expansion, the local
+provider and deployment-mode flags, cooperative run cancellation, and the
+thin web application layer — are
+documented as short ADRs (001–017) in [`docs/adr/`](docs/adr/), each
 covering the context, the decision, its consequences, the trade-offs
 accepted, and the alternatives deliberately not chosen. Start with the
 [index](docs/adr/README.md).
 
 ### Mocked unit tests vs. API-based chain tests
 
-|                | `tests/node/` + `tests/graph/` + `tests/evals/` (unit)                                                                       | `tests/chains/` (integration)                                                                 |
+|                | `tests/node/` + `tests/graph/` + `tests/evals/` + `tests/server/` (unit)                                                     | `tests/chains/` (integration)                                                                 |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| What is tested | Node functions (state in/out), routing decisions, the compiled graph with mocked chains, and the eval harness's pure helpers | The LCEL chains: real prompts + structured output against the live model                      |
-| External calls | **None** — retriever, graders, Tavily, and the generation seam are monkeypatched at their lazy `get_*()` factories           | Real OpenAI API calls                                                                         |
+| What is tested | Node functions (state in/out), routing decisions, the compiled graph with mocked chains, the eval harness's pure helpers, and the FastAPI endpoints | The LCEL chains: real prompts + structured output against the live model                      |
+| External calls | **None** — retriever, graders, Tavily, the generation seam, and `answer_question` itself are monkeypatched at their lazy `get_*()` / module seams | Real OpenAI API calls                                                                         |
 | Requirements   | No API keys                                                                                                                  | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
 | Speed / cost   | Seconds, free                                                                                                                | ~1 minute, small API cost                                                                     |
-| Status         | 305 tests passing (69 node + 200 graph + 36 evals)                                                                           | 38 tests passing                                                                              |
+| Status         | 587 tests passing (89 node + 353 graph + 106 evals + 39 server)                                                              | 38 tests passing                                                                              |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 
 ## Current Limitations
 
-* **Single-turn CLI** — no conversation memory; each question is independent. No API/web surface.
+* **Single-turn** — no conversation memory; each question is independent, in the CLI and in the web app alike.
+* **The web layer is single-user by design** — no authentication, one in-flight question at a time (409 otherwise), run history in-memory and lost on restart, and no token/step streaming: the execution timeline renders after the run finishes.
 * **Observability is split across two layers, but not yet production-grade** — LangSmith tracing is supported through environment variables, and the engine records lightweight per-run metadata (`run_id`, node path, timings, counters, stop reasons, and optional trace JSON). However, console logs are still `print()`-based, there is no structured logging or metrics backend, and the README does not yet include trace screenshots or saved LangSmith trace examples.
 * **Per-document sequential grading** — relevance grading makes one LLM call per chunk/result, so latency and cost scale with the number of items graded.
 * **Grounding feedback is coarse-grained** — failed grounding currently produces a fixed corrective instruction, not a rationale listing which claims were unsupported.
