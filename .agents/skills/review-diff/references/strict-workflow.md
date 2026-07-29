@@ -61,16 +61,15 @@ release-readiness question and the repository guidance permits them.
 Choose one:
 
 - `Ready to commit`
-- `Ready after targeted validation`
+- `Ready after minor check`
 - `Not ready`
 - `Needs clarification`
 
 Base the judgment on concrete findings, scope correctness, and available validation
 evidence. Do not block a commit solely for optional hardening or generic best practices.
 
-Use the output structure in `SKILL.md`. Strict mode may include additional concrete
-release-risk findings, but it must not restore a fixed confirmations matrix or list
-unrelated checks. When the judgment is `Ready to commit`, provide explicit staging and
-commit commands limited to the reviewed files. Use `git add -A -- <paths>` for
-deletions or renames, and never default to `git add .`. Present the commands as
-suggestions only; do not execute them.
+Use the finding markers, output structure, commit recommendation rules, and required
+`### Confirmations` matrix in `SKILL.md`. Strict mode may include additional concrete
+release-risk findings, but it must remain evidence-backed and proportionate. Do not
+turn optional hardening, future architecture, or unrelated cleanup into warnings or
+blockers.
