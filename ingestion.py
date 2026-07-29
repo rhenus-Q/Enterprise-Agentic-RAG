@@ -37,8 +37,11 @@ from graph.config import (
 load_dotenv()
 
 
-# Corpus location, anchored to this file's directory so ingestion works from any CWD.
-CORPUS_DIR = Path(__file__).parent / "data" / "acmecorp_internal_docs"
+# Repository root, anchored to this file's directory so ingestion works from any CWD.
+PROJECT_ROOT = Path(__file__).parent
+
+# Corpus location.
+CORPUS_DIR = PROJECT_ROOT / "data" / "acmecorp_internal_docs"
 
 # document_category metadata per file (provenance / future filtering).
 # Files not listed here fall back to "internal_document".
@@ -85,6 +88,32 @@ def _extract_title(text: str, fallback: str) -> str:
     return fallback
 
 
+def corpus_source_key(path: Path) -> str:
+    """
+    Canonical `source` citation key for one local-corpus document.
+
+    The single producer of that key: ingestion writes it into Document
+    metadata, and the web API reports the same string for the same file, so a
+    citation returned by /api/ask can be matched against a /api/documents
+    entry. Deriving it here rather than formatting a literal prefix at each
+    call site is what keeps the two from drifting if the corpus ever moves.
+
+    Always a repo-relative POSIX path, never an absolute one: the key is a
+    public identifier served over HTTP, so a corpus outside the repository
+    (a test tmp_path, a relocated deployment) degrades to the bare file name
+    rather than disclosing the server's filesystem layout.
+    """
+
+    candidate = Path(path)
+
+    try:
+        relative = candidate.resolve().relative_to(PROJECT_ROOT.resolve())
+    except (OSError, ValueError):
+        return candidate.name
+
+    return relative.as_posix()
+
+
 def load_documents():
     """
     Load the local Markdown corpus from CORPUS_DIR.
@@ -107,7 +136,7 @@ def load_documents():
             Document(
                 page_content=text,
                 metadata={
-                    "source": f"data/acmecorp_internal_docs/{path.name}",
+                    "source": corpus_source_key(path),
                     "title": _extract_title(text, path.stem),
                     "source_type": "local_corpus",
                     "document_category": DOCUMENT_CATEGORIES.get(path.name, "internal_document"),

@@ -11,6 +11,7 @@ const compatibilityLabels: Record<IndexStatus["compatibility"], string> = {
   provider_mismatch: "Provider mismatch",
   model_mismatch: "Model mismatch",
   missing_index: "Index missing",
+  index_unreadable: "Index unreadable",
 };
 
 function fingerprintValue(
@@ -27,6 +28,8 @@ function fingerprintValue(
 }
 
 export function IndexStatusCard({ index }: IndexStatusCardProps) {
+  const unreadable = index.compatibility === "index_unreadable";
+
   return (
     <section className="index-card" aria-labelledby="index-status-heading">
       <div className="section-heading-row">
@@ -44,7 +47,7 @@ export function IndexStatusCard({ index }: IndexStatusCardProps) {
         </div>
         <span
           className={`compatibility-badge ${
-            index.reindex_required ? "compatibility-badge--warning" : ""
+            index.reindex_required || unreadable ? "compatibility-badge--warning" : ""
           }`}
         >
           {compatibilityLabels[index.compatibility]}
@@ -56,6 +59,16 @@ export function IndexStatusCard({ index }: IndexStatusCardProps) {
           <strong>Reindex required</strong>
           <span>
             Run <code>uv run python ingestion.py</code> for the active embedding configuration.
+          </span>
+        </div>
+      )}
+
+      {unreadable && (
+        <div className="notice notice--warning reindex-callout" role="alert">
+          <strong>Index could not be inspected</strong>
+          <span>
+            The server could not read the index location, so its compatibility is unknown. Check the
+            directory&apos;s permissions. A rebuild may not be necessary.
           </span>
         </div>
       )}

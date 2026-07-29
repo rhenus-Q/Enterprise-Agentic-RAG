@@ -38,6 +38,10 @@ load_dotenv()
 
 PREFLIGHT_FAILURE_MESSAGE = "Startup preflight failed — see the server console for details."
 RUN_IN_PROGRESS_MESSAGE = "Another question is currently being processed."
+# Business endpoints never echo the raw configuration ValueError: those messages
+# quote the offending environment value. /api/status is the diagnostic surface
+# and reports a sanitized, stable description of what needs fixing.
+CONFIG_ERROR_MESSAGE = "Runtime configuration is invalid — see /api/status for details."
 LOCAL_SNIPPET_MAX_CHARS = 300
 
 _ERROR_STOP_REASONS = {
@@ -238,20 +242,20 @@ def create_app() -> FastAPI:
                         web_fallback_policy=payload.web_fallback_policy,
                     ),
                 )
-            except ValueError as exc:
+            except ValueError:
                 return JSONResponse(
                     status_code=503,
-                    content={"error": "config_error", "message": str(exc)},
+                    content={"error": "config_error", "message": CONFIG_ERROR_MESSAGE},
                 )
             except Exception as exc:
                 return _internal_error(exc)
 
             try:
                 provider = config.llm_provider()
-            except ValueError as exc:
+            except ValueError:
                 return JSONResponse(
                     status_code=503,
-                    content={"error": "config_error", "message": str(exc)},
+                    content={"error": "config_error", "message": CONFIG_ERROR_MESSAGE},
                 )
 
             try:

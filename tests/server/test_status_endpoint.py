@@ -8,7 +8,13 @@ from fastapi.testclient import TestClient
 
 import ingestion
 import main
+from graph import engine
 from server.app import create_app
+from server.status import (
+    CONFIG_ERROR_FULLY_LOCAL_MODE,
+    CONFIG_ERROR_LLM_PROVIDER,
+    CONFIG_ERROR_PRIVACY_MODE,
+)
 
 OPENAI_FINGERPRINT = {
     "embedding_provider": "openai",
@@ -59,7 +65,7 @@ def test_status_reports_openai_default_mode(monkeypatch):
     assert payload["chat_model"] == "gpt-5-mini"
     assert payload["embedding_provider"] == "openai"
     assert payload["privacy_mode"] is False
-    assert payload["fully_local_mode"] is False
+    assert payload["local_mode"] is False
     assert payload["web_search_enabled_default"] is True
     assert payload["web_search_locked"] is False
     assert payload["config_error"] is None
@@ -72,12 +78,16 @@ def test_status_reports_privacy_lock(monkeypatch):
     payload = _get_status(monkeypatch)
 
     assert payload["privacy_mode"] is True
-    assert payload["fully_local_mode"] is False
+    assert payload["local_mode"] is False
     assert payload["web_search_enabled_default"] is False
     assert payload["web_search_locked"] is True
 
 
 def test_status_reports_resolved_local_mode(monkeypatch):
+    # WEB_SEARCH_ENABLED is explicitly ON so the assertions below prove the
+    # local-mode lock rather than an ambient default: seed_state() forces web
+    # search off for local mode, so the reported default must be False too.
+    monkeypatch.setenv("WEB_SEARCH_ENABLED", "true")
     monkeypatch.setenv("LLM_PROVIDER", "ollama")
     monkeypatch.setenv("LOCAL_CHAT_MODEL", "local-chat-model")
     monkeypatch.setenv("LOCAL_EMBEDDING_MODEL", "local-embedding-model")
@@ -94,8 +104,30 @@ def test_status_reports_resolved_local_mode(monkeypatch):
     assert payload["chat_model"] == "local-chat-model"
     assert payload["embedding_provider"] == "ollama"
     assert payload["embedding_model"] == "local-embedding-model"
-    assert payload["fully_local_mode"] is True
+    assert payload["local_mode"] is True
+    assert payload["web_search_enabled_default"] is False
     assert payload["web_search_locked"] is True
+
+
+def test_local_mode_default_matches_the_engine_lock(monkeypatch):
+    """The reported default must equal what seed_state() actually resolves."""
+
+    monkeypatch.setenv("WEB_SEARCH_ENABLED", "true")
+    monkeypatch.setenv("FULLY_LOCAL_MODE", "true")
+    _patch_index(
+        monkeypatch,
+        expected=LOCAL_FINGERPRINT,
+        stored=LOCAL_FINGERPRINT,
+        persist_directory="chroma_db_local",
+    )
+
+    payload = _get_status(monkeypatch)
+    seeded = engine.seed_state("Question")
+
+    assert payload["web_search_enabled_default"] is False
+    assert payload["web_search_locked"] is True
+    assert seeded["web_search_enabled"] is False
+    assert payload["web_search_enabled_default"] == seeded["web_search_enabled"]
 
 
 def test_invalid_provider_is_a_structured_200_config_error(monkeypatch):
@@ -104,9 +136,42 @@ def test_invalid_provider_is_a_structured_200_config_error(monkeypatch):
     payload = _get_status(monkeypatch)
 
     assert payload["provider"] is None
+    assert payload["local_mode"] is None
     assert payload["index"] is None
-    assert payload["config_error"]
-    assert "Invalid LLM_PROVIDER" in payload["config_error"]
+    assert payload["config_error"] == CONFIG_ERROR_LLM_PROVIDER
+    # Actionable, but the rejected value is never echoed back.
+    assert "bogus" not in json.dumps(payload)
+
+
+@pytest.mark.parametrize(
+    ("variable", "expected_message"),
+    [
+        ("PRIVACY_MODE", CONFIG_ERROR_PRIVACY_MODE),
+        ("FULLY_LOCAL_MODE", CONFIG_ERROR_FULLY_LOCAL_MODE),
+    ],
+)
+def test_unparseable_mode_flags_name_the_failing_variable(
+    monkeypatch,
+    variable,
+    expected_message,
+):
+    monkeypatch.setenv(variable, "sometimes-SENTINEL")
+
+    payload = _get_status(monkeypatch)
+
+    assert payload["config_error"] == expected_message
+    assert variable in payload["config_error"]
+    assert "SENTINEL" not in json.dumps(payload)
+
+
+def test_contradictory_local_mode_reports_the_provider_diagnostic(monkeypatch):
+    monkeypatch.setenv("FULLY_LOCAL_MODE", "true")
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+
+    payload = _get_status(monkeypatch)
+
+    assert payload["config_error"] == CONFIG_ERROR_LLM_PROVIDER
+    assert payload["provider"] is None
 
 
 @pytest.mark.parametrize(
@@ -168,6 +233,71 @@ def test_legacy_local_index_requires_reindex(monkeypatch):
 
     assert payload["index"]["compatibility"] == "legacy_no_fingerprint"
     assert payload["index"]["reindex_required"] is True
+
+
+def _assert_index_unreadable(payload: dict, secret: str) -> None:
+    """An unreadable index is structural, sanitized, and not a config error."""
+
+    index = payload["index"]
+    assert index["compatibility"] == "index_unreadable"
+    # Unknown, not absent — and a permission problem is not fixed by reindexing.
+    assert index["exists"] is None
+    assert index["reindex_required"] is False
+    assert index["stored_fingerprint"] is None
+    assert payload["config_error"] is None
+    # The rest of the runtime resolved fine and is still reported.
+    assert payload["provider"] == "openai"
+
+    serialized = json.dumps(payload)
+    assert secret not in serialized
+    assert "PermissionError" not in serialized
+    assert "OSError" not in serialized
+    assert Path(index["persist_directory"]).is_absolute() is False
+
+
+def test_unreadable_index_directory_is_reported_structurally(monkeypatch):
+    secret = "C:\\private\\absolute\\chroma_db"
+
+    def deny(_path):
+        raise PermissionError(f"[Errno 13] Permission denied: {secret}")
+
+    _patch_preflight(monkeypatch)
+    monkeypatch.setattr(
+        ingestion,
+        "active_index_config",
+        lambda: ("chroma_db", "agentic_rag_docs"),
+    )
+    monkeypatch.setattr(ingestion, "active_embedding_fingerprint", lambda: OPENAI_FINGERPRINT)
+    monkeypatch.setattr(ingestion, "index_exists", deny)
+
+    with TestClient(create_app()) as client:
+        response = client.get("/api/status")
+
+    assert response.status_code == 200
+    _assert_index_unreadable(response.json(), secret)
+
+
+def test_unreadable_fingerprint_is_reported_structurally(monkeypatch):
+    secret = "/srv/private/chroma_db/embedding_fingerprint.json"
+
+    def fail_read(_path):
+        raise OSError(f"[Errno 5] Input/output error: {secret}")
+
+    _patch_preflight(monkeypatch)
+    monkeypatch.setattr(
+        ingestion,
+        "active_index_config",
+        lambda: ("chroma_db", "agentic_rag_docs"),
+    )
+    monkeypatch.setattr(ingestion, "active_embedding_fingerprint", lambda: OPENAI_FINGERPRINT)
+    monkeypatch.setattr(ingestion, "index_exists", lambda _path: True)
+    monkeypatch.setattr(ingestion, "read_index_fingerprint", fail_read)
+
+    with TestClient(create_app()) as client:
+        response = client.get("/api/status")
+
+    assert response.status_code == 200
+    _assert_index_unreadable(response.json(), secret)
 
 
 def test_status_never_exposes_local_endpoint_or_absolute_paths(monkeypatch):

@@ -61,9 +61,11 @@ class AskResponse(BaseModel):
 
 
 class IndexStatus(BaseModel):
+    # `exists` is None when the index could not be inspected at all (see the
+    # "index_unreadable" compatibility state) — unknown, not absent.
     persist_directory: str
     collection_name: str
-    exists: bool
+    exists: bool | None
     stored_fingerprint: dict[str, str] | None
     expected_fingerprint: dict[str, str]
     compatibility: str
@@ -76,12 +78,15 @@ class PreflightStatus(BaseModel):
 
 
 class RuntimeStatus(BaseModel):
+    # `local_mode` is the EFFECTIVE resolved runtime mode (config.local_mode_enabled()),
+    # not the literal FULLY_LOCAL_MODE environment variable: LLM_PROVIDER=ollama alone
+    # produces a fully local deployment with FULLY_LOCAL_MODE unset.
     provider: str | None
     chat_model: str | None
     embedding_provider: str | None
     embedding_model: str | None
     privacy_mode: bool | None
-    fully_local_mode: bool | None
+    local_mode: bool | None
     web_search_enabled_default: bool | None
     web_search_locked: bool | None
     web_fallback_policy_default: str | None

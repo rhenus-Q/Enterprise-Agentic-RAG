@@ -67,6 +67,17 @@ export const indexFixtures: Record<IndexCompatibility, IndexStatus> = {
     compatibility: "missing_index",
     reindex_required: true,
   },
+  index_unreadable: {
+    persist_directory: "chroma_db",
+    collection_name: "agentic_rag_docs",
+    // Unknown rather than absent: the server could not inspect the location,
+    // so it does not claim a reindex would help.
+    exists: null,
+    stored_fingerprint: null,
+    expected_fingerprint: openAiFingerprint,
+    compatibility: "index_unreadable",
+    reindex_required: false,
+  },
 };
 
 const baseRuntimeStatus: RuntimeStatus = {
@@ -75,7 +86,7 @@ const baseRuntimeStatus: RuntimeStatus = {
   embedding_provider: "openai",
   embedding_model: "text-embedding-ada-002",
   privacy_mode: false,
-  fully_local_mode: false,
+  local_mode: false,
   web_search_enabled_default: true,
   web_search_locked: false,
   web_fallback_policy_default: "conservative",
@@ -104,7 +115,7 @@ export const runtimeFixtures = {
     chat_model: "qwen3:4b-instruct-2507-q4_K_M",
     embedding_provider: "ollama",
     embedding_model: "qwen3-embedding:0.6b",
-    fully_local_mode: true,
+    local_mode: true,
     web_search_enabled_default: false,
     web_search_locked: true,
     index: {
@@ -128,7 +139,7 @@ export const runtimeFixtures = {
     embedding_provider: null,
     embedding_model: null,
     privacy_mode: null,
-    fully_local_mode: null,
+    local_mode: null,
     web_search_enabled_default: null,
     web_search_locked: null,
     web_fallback_policy_default: null,
@@ -136,7 +147,10 @@ export const runtimeFixtures = {
     llm_request_timeout_seconds: null,
     index: null,
     preflight: { ok: true, message: null },
-    config_error: "Invalid LLM_PROVIDER value 'bogus'.",
+    // Sanitized and stable: the server never echoes the offending value.
+    config_error:
+      "LLM_PROVIDER is not a valid provider selection. Use 'openai' or 'ollama'; " +
+      "note that FULLY_LOCAL_MODE=true requires 'ollama'.",
   } satisfies RuntimeStatus,
 };
 

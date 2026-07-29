@@ -6,7 +6,8 @@ export type IndexCompatibility =
   | "legacy_no_fingerprint"
   | "provider_mismatch"
   | "model_mismatch"
-  | "missing_index";
+  | "missing_index"
+  | "index_unreadable";
 
 export interface AskRequest {
   question: string;
@@ -59,7 +60,8 @@ export interface AskResponse {
 export interface IndexStatus {
   persist_directory: string;
   collection_name: string;
-  exists: boolean;
+  /** null when the index could not be inspected — unknown, not absent. */
+  exists: boolean | null;
   stored_fingerprint: Record<string, string> | null;
   expected_fingerprint: Record<string, string>;
   compatibility: IndexCompatibility;
@@ -77,7 +79,8 @@ export interface RuntimeStatus {
   embedding_provider: string | null;
   embedding_model: string | null;
   privacy_mode: boolean | null;
-  fully_local_mode: boolean | null;
+  /** Effective resolved runtime mode, not the FULLY_LOCAL_MODE variable. */
+  local_mode: boolean | null;
   web_search_enabled_default: boolean | null;
   web_search_locked: boolean | null;
   web_fallback_policy_default: string | null;

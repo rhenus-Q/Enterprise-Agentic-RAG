@@ -17,6 +17,14 @@ class RunStore:
     """Keep recent run records in memory, newest record last."""
 
     def __init__(self, limit: int = RUN_HISTORY_LIMIT) -> None:
+        # Rejected rather than clamped: a store that silently retains nothing
+        # would report limit=0 over the API and drop every run, which reads as
+        # "no runs happened". The eviction branch in add() also assumes at
+        # least one record can be held.
+        if limit < 1:
+            raise ValueError("RunStore limit must be at least 1")
+
+        self._limit = limit
         self._records: deque[dict[str, Any]] = deque(maxlen=limit)
         self._by_run_id: dict[str, dict[str, Any]] = {}
         self._lock = Lock()
@@ -25,9 +33,7 @@ class RunStore:
     def limit(self) -> int:
         """Maximum number of records retained."""
 
-        maxlen = self._records.maxlen
-        assert maxlen is not None
-        return maxlen
+        return self._limit
 
     def add(self, record: Mapping[str, Any] | RunDetail) -> None:
         """Validate and append a metadata-only run record."""
@@ -40,7 +46,7 @@ class RunStore:
             if existing is not None:
                 self._records.remove(existing)
 
-            if len(self._records) == self.limit:
+            if len(self._records) == self._limit:
                 evicted = self._records[0]
                 self._by_run_id.pop(evicted["run_id"], None)
 

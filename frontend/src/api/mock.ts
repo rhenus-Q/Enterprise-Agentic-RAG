@@ -182,12 +182,12 @@ function requestErrorForScenario(): ApiError | null {
         },
       });
     case "config-error":
-      return new ApiError("The runtime configuration is invalid.", {
+      return new ApiError("Runtime configuration is invalid — see /api/status for details.", {
         status: 503,
         code: "config_error",
         payload: {
           error: "config_error",
-          message: "The runtime configuration is invalid.",
+          message: "Runtime configuration is invalid — see /api/status for details.",
         },
       });
     case "internal-error":

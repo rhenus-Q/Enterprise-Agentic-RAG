@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 import ingestion
 import main
 from graph import config, engine
-from server.app import PREFLIGHT_FAILURE_MESSAGE, create_app
+from server.app import CONFIG_ERROR_MESSAGE, PREFLIGHT_FAILURE_MESSAGE, create_app
 
 FINGERPRINT = {
     "embedding_provider": "openai",
@@ -109,8 +109,10 @@ def test_request_time_config_error_returns_503_and_is_not_recorded(monkeypatch):
     monkeypatch.setattr(main, "run_startup_preflight", lambda: None)
     monkeypatch.setattr(engine, "answer_question", lambda _question, _options: _answer_result())
 
+    raw_message = "Invalid LLM_PROVIDER value 'bogus-SENTINEL'."
+
     def fail_provider():
-        raise ValueError("Invalid request-time provider configuration.")
+        raise ValueError(raw_message)
 
     monkeypatch.setattr(config, "llm_provider", fail_provider)
     application = create_app()
@@ -120,8 +122,12 @@ def test_request_time_config_error_returns_503_and_is_not_recorded(monkeypatch):
         runs_response = client.get("/api/runs")
 
     assert response.status_code == 503
+    # Business endpoints never echo the raw config error: it quotes the
+    # offending environment value. /api/status carries the diagnostic instead.
     assert response.json() == {
         "error": "config_error",
-        "message": "Invalid request-time provider configuration.",
+        "message": CONFIG_ERROR_MESSAGE,
     }
+    assert raw_message not in response.text
+    assert "SENTINEL" not in response.text
     assert runs_response.json()["count"] == 0

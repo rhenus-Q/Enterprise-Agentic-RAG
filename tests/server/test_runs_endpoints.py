@@ -2,6 +2,7 @@
 
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 
 import main
@@ -43,6 +44,26 @@ def _record(run_id: str, generated_at: str, *, status: str = "ok") -> dict:
         "raw_state": {"documents": []},
         "secret": "FORBIDDEN-SECRET-MARKER",
     }
+
+
+@pytest.mark.parametrize("limit", [0, -1])
+def test_run_store_rejects_a_limit_that_cannot_hold_a_record(limit):
+    # A store retaining nothing would report limit=0 and silently drop every
+    # run, which is indistinguishable from "no runs happened".
+    with pytest.raises(ValueError):
+        RunStore(limit=limit)
+
+
+def test_run_store_replaces_a_repeated_run_id_without_growing():
+    store = RunStore(limit=2)
+    store.add(_record("run-1", "2026-01-01T00:00:00+00:00"))
+    store.add(_record("run-1", "2026-01-01T00:05:00+00:00", status="caveat"))
+
+    summaries = store.list_summaries()
+
+    assert [item["run_id"] for item in summaries] == ["run-1"]
+    assert summaries[0]["generated_at"] == "2026-01-01T00:05:00+00:00"
+    assert summaries[0]["status"] == "caveat"
 
 
 def test_run_store_is_bounded_newest_first_and_evicts_lookup():

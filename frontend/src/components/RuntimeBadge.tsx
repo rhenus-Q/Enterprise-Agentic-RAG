@@ -32,8 +32,8 @@ export function RuntimeBadge({ status, runtime, loading = false }: RuntimeBadgeP
     return <span className="runtime-badge runtime-badge--error">Configuration error</span>;
   }
 
-  const isPrivate = status.privacy_mode || status.fully_local_mode;
-  const prefix = status.fully_local_mode ? "Local" : status.privacy_mode ? "Private" : "Connected";
+  const isPrivate = status.privacy_mode || status.local_mode;
+  const prefix = status.local_mode ? "Local" : status.privacy_mode ? "Private" : "Connected";
 
   return (
     <span className={`runtime-badge ${isPrivate ? "runtime-badge--private" : ""}`}>
