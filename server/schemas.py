@@ -18,6 +18,14 @@ class AskRequest(BaseModel):
     web_fallback_policy: WebFallbackPolicy | None = None
 
 
+class CancelResponse(BaseModel):
+    # `idle` is the useful half: it reports that the server actually finished
+    # unwinding the run, so the caller knows a new question will not collide
+    # with it. `cancelled` only says a run was there to signal.
+    cancelled: bool
+    idle: bool
+
+
 class Citation(BaseModel):
     kind: CitationKind
     title: str | None

@@ -1,7 +1,10 @@
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { apiClient } from "../api/client";
 import {
+  BACKEND_UNREACHABLE_CODE,
+  isRequestCancelled,
+  isRetryableError,
   normalizeApiError,
   type ApiClient,
   type ApiError,
@@ -18,6 +21,16 @@ interface AskPageProps {
   api?: ApiClient;
   status: RuntimeStatus | null;
   statusLoading?: boolean;
+  /**
+   * Hides the page without unmounting it. App keeps this page mounted across
+   * tab changes so an in-flight run survives navigation — see App.tsx.
+   */
+  hidden?: boolean;
+  /**
+   * True when the app-level banner is already reporting an unreachable
+   * backend, so this page can stay quiet instead of saying it twice.
+   */
+  globalNoticeVisible?: boolean;
 }
 
 function asFallbackPolicy(value: string | null): WebFallbackPolicy | null {
@@ -47,14 +60,46 @@ const suggestedQuestions = [
   },
 ];
 
-export function AskPage({ api = apiClient, status, statusLoading = false }: AskPageProps) {
+export function AskPage({
+  api = apiClient,
+  status,
+  statusLoading = false,
+  hidden = false,
+  globalNoticeVisible = false,
+}: AskPageProps) {
   const [question, setQuestion] = useState("");
   const [webSearchEnabled, setWebSearchEnabled] = useState<boolean | null>(null);
   const [fallbackPolicy, setFallbackPolicy] = useState<WebFallbackPolicy | null>(null);
   const [response, setResponse] = useState<AskResponse | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [suggestionsExpanded, setSuggestionsExpanded] = useState(true);
+  // Identifies the run that owns the UI. A stopped or superseded run clears
+  // it, which is how a late-arriving response knows not to claim the composer.
+  const activeRun = useRef<AbortController | null>(null);
+  const errorRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    return () => {
+      activeRun.current?.abort();
+      activeRun.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!error || hidden) {
+      return;
+    }
+
+    // Best effort: a long answer above can still push the message out of view,
+    // and jsdom has no scrollIntoView at all — neither may break rendering.
+    const prefersReducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    errorRef.current?.scrollIntoView?.({
+      block: "nearest",
+      behavior: prefersReducedMotion ? "auto" : "smooth",
+    });
+  }, [error, hidden]);
 
   useEffect(() => {
     if (!status) {
@@ -76,21 +121,71 @@ export function AskPage({ api = apiClient, status, statusLoading = false }: AskP
       return;
     }
 
+    const run = new AbortController();
+    activeRun.current = run;
+
     setSubmitting(true);
     setResponse(null);
     setError(null);
 
     try {
-      const result = await api.ask({
-        question: cleanedQuestion,
-        web_search_enabled: status?.web_search_locked ? false : webSearchEnabled,
-        web_fallback_policy: fallbackPolicy,
-      });
+      const result = await api.ask(
+        {
+          question: cleanedQuestion,
+          web_search_enabled: status?.web_search_locked ? false : webSearchEnabled,
+          web_fallback_policy: fallbackPolicy,
+        },
+        { signal: run.signal },
+      );
+
+      if (activeRun.current !== run) {
+        return;
+      }
+
       setResponse(result);
       setSuggestionsExpanded(false);
     } catch (requestError) {
+      // A stopped run has already returned the composer to idle, and a stop is
+      // not a failure — rendering an error state for it would blame the
+      // backend for something the user chose.
+      if (activeRun.current !== run || isRequestCancelled(requestError)) {
+        return;
+      }
+
       setError(normalizeApiError(requestError));
     } finally {
+      if (activeRun.current === run) {
+        activeRun.current = null;
+        setSubmitting(false);
+      }
+    }
+  }
+
+  async function stopRun() {
+    const run = activeRun.current;
+    if (!run || stopping) {
+      return;
+    }
+
+    // Disowned before awaiting, not after: the server answers the abandoned
+    // request at the same moment it frees the slot, so a late outcome must
+    // already read as superseded by the time it lands. Stop means stop —
+    // anything that arrives after the click is discarded, including a success.
+    activeRun.current = null;
+
+    // The server is asked to stop first and the composer only reopens once it
+    // answers. Aborting locally is not enough: the graph keeps running, keeps
+    // holding the single-flight slot, and the next question would collide
+    // with it.
+    setStopping(true);
+    try {
+      await api.cancelRun();
+    } catch {
+      // Best effort — a failed cancel must still release the composer rather
+      // than strand the user in a state with no way out.
+    } finally {
+      run.abort();
+      setStopping(false);
       setSubmitting(false);
     }
   }
@@ -99,6 +194,9 @@ export function AskPage({ api = apiClient, status, statusLoading = false }: AskP
     const isEmpty = nextQuestion.trim().length === 0;
 
     setQuestion(nextQuestion);
+    // Feedback about the previous attempt stops being true the moment the
+    // question changes, so it goes rather than lingering as stale alarm.
+    setError(null);
     if (isEmpty) {
       setSuggestionsExpanded(true);
     }
@@ -106,15 +204,23 @@ export function AskPage({ api = apiClient, status, statusLoading = false }: AskP
 
   function selectSuggestion(nextQuestion: string) {
     setQuestion(nextQuestion);
+    setError(null);
   }
 
   const controlsUnavailable = statusLoading || !status || Boolean(status.config_error);
   const webSearchLocked = status?.web_search_locked === true;
-  const hasOutcome = Boolean(response || error);
+  // The app-level banner already reports an unreachable backend; saying it a
+  // second time here would present one outage as two problems.
+  const visibleError =
+    error && globalNoticeVisible && error.code === BACKEND_UNREACHABLE_CODE ? null : error;
+  const hasOutcome = Boolean(response || visibleError);
   const showSuggestionCards = suggestionsExpanded;
 
   return (
-    <div className={`ask-page ${hasOutcome ? "ask-page--answered" : "ask-page--idle"}`}>
+    <div
+      className={`ask-page ${hasOutcome ? "ask-page--answered" : "ask-page--idle"}`}
+      hidden={hidden}
+    >
       <section className="ask-workspace" aria-labelledby="ask-page-heading">
         <div className="ask-stage">
           <div className="ask-intro">
@@ -174,30 +280,49 @@ export function AskPage({ api = apiClient, status, statusLoading = false }: AskP
                 {webSearchLocked && <span className="lock-label">Locked by runtime policy</span>}
               </div>
 
-              <button
-                className={`primary-button ${submitting ? "is-submitting" : ""}`}
-                type="submit"
-                disabled={submitting || question.trim().length === 0}
-                aria-busy={submitting}
-              >
-                {submitting ? (
-                  <>
-                    <span className="spinner" aria-hidden="true" />
-                    Running
-                  </>
-                ) : (
-                  <>
-                    Ask
-                    <span aria-hidden="true">→</span>
-                  </>
-                )}
-              </button>
+              {/* One control, never two: while a run is in flight the primary
+                  action becomes Stop, so the composer always offers a single
+                  obvious next step. */}
+              {submitting ? (
+                <button
+                  className="primary-button is-submitting"
+                  type="button"
+                  onClick={() => void stopRun()}
+                  disabled={stopping}
+                  aria-busy={true}
+                >
+                  <span className="stop-glyph" aria-hidden="true" />
+                  {stopping ? "Stopping…" : "Stop"}
+                </button>
+              ) : (
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={question.trim().length === 0}
+                  aria-busy={false}
+                >
+                  Ask
+                  <span aria-hidden="true">→</span>
+                </button>
+              )}
             </div>
           </form>
 
           <div className="ask-runtime-line">
             <span>Answers include citations and metadata-only execution details.</span>
           </div>
+
+          {/* Feedback for pressing Ask sits with the composer, above the
+              suggestions — at the foot of the page it landed below the fold,
+              so the button appeared to do nothing. */}
+          {visibleError && (
+            <div className="ask-error" ref={errorRef}>
+              <ErrorState
+                error={visibleError}
+                tone={isRetryableError(visibleError) ? "warning" : "danger"}
+              />
+            </div>
+          )}
 
           {status?.config_error && (
             <div className="notice notice--warning" role="alert">
@@ -247,8 +372,6 @@ export function AskPage({ api = apiClient, status, statusLoading = false }: AskP
           </div>
         </section>
       </section>
-
-      {error && <ErrorState error={error} />}
 
       {response && (
         <div className="answer-layout">

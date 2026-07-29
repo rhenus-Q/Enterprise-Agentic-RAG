@@ -3,9 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   ApiError,
+  isRequestCancelled,
+  requestCancelledError,
   type ApiClient,
+  type AskOptions,
   type AskRequest,
   type AskResponse,
+  type CancelRunResponse,
 } from "../api/types";
 import {
   askFixtures,
@@ -18,9 +22,12 @@ import { AskPage } from "./AskPage";
 
 afterEach(cleanup);
 
-function clientWithAsk(ask: (request: AskRequest) => Promise<AskResponse>): ApiClient {
+function clientWithAsk(
+  ask: (request: AskRequest, options?: AskOptions) => Promise<AskResponse>,
+): ApiClient {
   return {
     ask,
+    cancelRun: vi.fn().mockResolvedValue({ cancelled: true, idle: true }),
     getStatus: vi.fn().mockResolvedValue(runtimeFixtures.openai),
     getDocuments: vi.fn().mockResolvedValue(populatedDocumentsResponse),
     getRuns: vi.fn().mockResolvedValue(emptyRunsResponse),
@@ -130,7 +137,7 @@ describe("AskPage", () => {
     expect(suggestionGrid().hidden).toBe(false);
   });
 
-  it("disables the Ask button and preserves its accessible loading state during submission", async () => {
+  it("swaps the Ask button for an active Stop control during submission", async () => {
     let resolveRequest: ((response: AskResponse) => void) | undefined;
     const pending = new Promise<AskResponse>((resolve) => {
       resolveRequest = resolve;
@@ -146,9 +153,11 @@ describe("AskPage", () => {
 
     await waitFor(() => {
       expect((screen.getByLabelText("Question") as HTMLTextAreaElement).disabled).toBe(true);
-      const runningButton = screen.getByRole("button", { name: "Running" });
-      expect((runningButton as HTMLButtonElement).disabled).toBe(true);
-      expect(runningButton.getAttribute("aria-busy")).toBe("true");
+      // One control only: Ask is replaced by Stop rather than joined by it.
+      const stopButton = screen.getByRole("button", { name: "Stop" });
+      expect((stopButton as HTMLButtonElement).disabled).toBe(false);
+      expect(stopButton.getAttribute("aria-busy")).toBe("true");
+      expect(screen.queryByRole("button", { name: "Ask" })).toBeNull();
       expect(
         (screen.getByRole("button", {
           name: /Suggested questions/,
@@ -204,6 +213,142 @@ describe("AskPage", () => {
     });
   });
 
+  it("asks the server to cancel and reopens the composer only once it confirms", async () => {
+    let confirmCancel: (() => void) | undefined;
+    const cancelPending = new Promise<CancelRunResponse>((resolve) => {
+      confirmCancel = () => resolve({ cancelled: true, idle: true });
+    });
+    const ask = vi.fn(
+      (_request: AskRequest, options?: AskOptions) =>
+        new Promise<AskResponse>((_resolve, rejectRequest) => {
+          options?.signal?.addEventListener("abort", () => rejectRequest(requestCancelledError()));
+        }),
+    );
+    const api = clientWithAsk(ask);
+    api.cancelRun = vi.fn().mockReturnValue(cancelPending);
+
+    render(<AskPage api={api} status={runtimeFixtures.openai} />);
+    enterQuestion();
+    fireEvent.click(askButton());
+
+    fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+
+    // Reopening before the backend confirms is what produced a 409 on the
+    // next question, so the composer stays shut until then.
+    const stoppingButton = await screen.findByRole("button", { name: "Stopping…" });
+    expect((stoppingButton as HTMLButtonElement).disabled).toBe(true);
+    expect(api.cancelRun).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      confirmCancel?.();
+      await cancelPending;
+    });
+
+    await waitFor(() => {
+      expect(askButton().disabled).toBe(false);
+      expect((screen.getByLabelText("Question") as HTMLTextAreaElement).disabled).toBe(false);
+    });
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    // A stop is the user's choice, not a backend failure.
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("counts both the local abort and the backend's 499 as cancellations", () => {
+    expect(isRequestCancelled(requestCancelledError())).toBe(true);
+    expect(isRequestCancelled(new ApiError("stopped", { code: "run_cancelled" }))).toBe(true);
+    expect(isRequestCancelled(new ApiError("boom", { code: "internal_error" }))).toBe(false);
+  });
+
+  it("treats the backend's 499 for a stopped run as a cancellation, not a failure", async () => {
+    let failRequest: (() => void) | undefined;
+    const ask = vi.fn(
+      () =>
+        new Promise<AskResponse>((_resolve, rejectRequest) => {
+          failRequest = () =>
+            rejectRequest(
+              new ApiError("The request was not successful.", {
+                status: 499,
+                code: "run_cancelled",
+                payload: { error: "run_cancelled" },
+              }),
+            );
+        }),
+    );
+    let confirmCancel: (() => void) | undefined;
+    const cancelPending = new Promise<CancelRunResponse>((resolve) => {
+      confirmCancel = () => resolve({ cancelled: true, idle: true });
+    });
+    const api = clientWithAsk(ask);
+    api.cancelRun = vi.fn().mockReturnValue(cancelPending);
+
+    render(<AskPage api={api} status={runtimeFixtures.openai} />);
+    enterQuestion();
+    fireEvent.click(askButton());
+    fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+
+    // The backend answers the abandoned request as it frees the slot, which
+    // lands before the cancel call resolves.
+    await act(async () => {
+      failRequest?.();
+      confirmCancel?.();
+      await cancelPending;
+    });
+
+    await waitFor(() => expect(askButton().disabled).toBe(false));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("discards an answer that arrives after the run was stopped", async () => {
+    let resolveRequest: ((response: AskResponse) => void) | undefined;
+    const pending = new Promise<AskResponse>((resolve) => {
+      resolveRequest = resolve;
+    });
+    const api = clientWithAsk(() => pending);
+
+    render(<AskPage api={api} status={runtimeFixtures.openai} />);
+    enterQuestion();
+    fireEvent.click(askButton());
+    fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+
+    await act(async () => {
+      resolveRequest?.(askFixtures.localSuccess);
+      await pending;
+    });
+
+    // Stop means stop: a result that wins the race is not shown.
+    await waitFor(() => expect(askButton().disabled).toBe(false));
+    expect(screen.queryByRole("heading", { name: "Execution timeline" })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("preserves an in-flight run while the page is hidden", async () => {
+    let resolveRequest: ((response: AskResponse) => void) | undefined;
+    const pending = new Promise<AskResponse>((resolve) => {
+      resolveRequest = resolve;
+    });
+    const props = {
+      api: clientWithAsk(() => pending),
+      status: runtimeFixtures.openai,
+    };
+
+    const { rerender } = render(<AskPage {...props} hidden={false} />);
+    enterQuestion();
+    fireEvent.click(askButton());
+    await screen.findByRole("button", { name: "Stop" });
+
+    // Navigating away and back must not restart or discard the run.
+    rerender(<AskPage {...props} hidden />);
+    rerender(<AskPage {...props} hidden={false} />);
+    expect(screen.getByRole("button", { name: "Stop" })).not.toBeNull();
+
+    await act(async () => {
+      resolveRequest?.(askFixtures.localSuccess);
+      await pending;
+    });
+
+    expect(screen.getByRole("heading", { name: "Execution timeline" })).not.toBeNull();
+  });
+
   it("shows the busy message returned by a 409 response", async () => {
     const api = clientWithAsk(() =>
       Promise.reject(
@@ -221,7 +366,61 @@ describe("AskPage", () => {
     enterQuestion();
     fireEvent.click(screen.getByRole("button", { name: "Ask" }));
 
-    expect(await screen.findByText("Another question is currently being processed.")).not.toBeNull();
+    const alert = await screen.findByRole("alert");
+    expect(within(alert).getByText("Another question is currently being processed.")).not.toBeNull();
+    // A busy server is not a failure, and the message belongs beside the
+    // composer rather than at the foot of the page, below the suggestions.
+    expect(alert.getAttribute("data-tone")).toBe("warning");
+    expect(document.querySelector(".ask-stage .ask-error")).not.toBeNull();
     expect(suggestionGrid().hidden).toBe(false);
+  });
+
+  it("uses the danger tone for a failure the user cannot retry away", async () => {
+    const api = clientWithAsk(() =>
+      Promise.reject(
+        new ApiError("boom", {
+          status: 500,
+          code: "internal_error",
+          payload: { error: "internal_error", exception_type: "RuntimeError" },
+        }),
+      ),
+    );
+    render(<AskPage api={api} status={runtimeFixtures.openai} />);
+    enterQuestion();
+    fireEvent.click(askButton());
+
+    expect((await screen.findByRole("alert")).getAttribute("data-tone")).toBe("danger");
+  });
+
+  it("stays quiet about an unreachable backend the app banner already reports", async () => {
+    const api = clientWithAsk(() =>
+      Promise.reject(
+        new ApiError("The backend could not be reached.", {
+          code: "backend_unreachable",
+          networkError: true,
+        }),
+      ),
+    );
+    render(<AskPage api={api} status={runtimeFixtures.openai} globalNoticeVisible />);
+    enterQuestion();
+    fireEvent.click(askButton());
+
+    await waitFor(() => expect(askButton().disabled).toBe(false));
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("clears the previous error once the question is edited", async () => {
+    const api = clientWithAsk(() =>
+      Promise.reject(new ApiError("boom", { status: 500, code: "internal_error" })),
+    );
+    render(<AskPage api={api} status={runtimeFixtures.openai} />);
+    enterQuestion();
+    fireEvent.click(askButton());
+    expect(await screen.findByRole("alert")).not.toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Question"), {
+      target: { value: "a different question" },
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

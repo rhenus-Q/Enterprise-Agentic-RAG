@@ -44,3 +44,24 @@ describe("App scrolling", () => {
     expect(screen.getByRole("main").parentElement).toBe(appShell);
   });
 });
+
+describe("Ask page persistence", () => {
+  it("keeps the same Ask page mounted and hidden while another tab is active", () => {
+    vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+    render(<App />);
+
+    const askPage = document.querySelector<HTMLElement>(".ask-page");
+    expect(askPage).not.toBeNull();
+    expect(askPage!.hidden).toBe(false);
+
+    // Hidden rather than unmounted, so an in-flight run keeps its state and
+    // its answer still lands when the request finishes.
+    fireEvent.click(screen.getByRole("button", { name: "Documents" }));
+    expect(document.querySelector(".ask-page")).toBe(askPage);
+    expect(askPage!.hidden).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    expect(document.querySelector(".ask-page")).toBe(askPage);
+    expect(askPage!.hidden).toBe(false);
+  });
+});

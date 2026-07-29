@@ -156,14 +156,19 @@ export default function App() {
       )}
 
       <main className={`page-frame page-frame--${page}`}>
-        {page === "ask" && (
-          <AskPage
-            api={apiClient}
-            status={status}
-            statusLoading={statusLoading}
-            key={`ask-${scenarioVersion}`}
-          />
-        )}
+        {/* Ask stays mounted and is hidden instead of unmounted: a run takes
+            tens of seconds, and unmounting would discard the in-flight request
+            and drop its answer when the user looks at another tab. Documents
+            and Runs stay conditional, so they keep refetching on tab entry. */}
+        <AskPage
+          api={apiClient}
+          status={status}
+          statusLoading={statusLoading}
+          hidden={page !== "ask"}
+          globalNoticeVisible={Boolean(statusError)}
+          key={`ask-${scenarioVersion}`}
+        />
+
         {page === "documents" && (
           <DocumentsPage api={apiClient} key={`documents-${scenarioVersion}`} />
         )}

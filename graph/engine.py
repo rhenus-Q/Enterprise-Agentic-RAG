@@ -39,6 +39,7 @@ needs no API keys and no network.
 import hashlib
 import json
 import re
+import threading
 import time
 import uuid
 from contextlib import nullcontext
@@ -56,6 +57,18 @@ from graph.formatting import source_lines
 from graph.state import GraphState
 
 
+class RunCancelled(Exception):
+    """
+    Raised when a caller cancelled the run via AnswerOptions.cancel_event.
+
+    A cancelled run is abandoned, not degraded: it produces no AnswerResult,
+    so it has no stop_reason and never reaches history or a caveat. That is
+    deliberate — `stop_reason` describes how the *graph* ended, and adding a
+    value for "someone else stopped it" would put a caller's decision into a
+    vocabulary the nodes, formatting, and evals all share.
+    """
+
+
 @dataclass
 class AnswerOptions:
     """
@@ -69,12 +82,19 @@ class AnswerOptions:
     run_id: caller-provided run identifier, preserved verbatim; when None a
     fresh one is generated. trace_path: when set, a metadata-only trace JSON
     (see build_trace) is written there after the run; default None = no file.
+
+    cancel_event: when set by another thread, the run stops at the next node
+    boundary and raises RunCancelled. Cooperative by design — nothing
+    interrupts a node that is already running, so cancellation latency is one
+    node (bounded by LLM_REQUEST_TIMEOUT_SECONDS). Default None = a run that
+    cannot be cancelled, which is every CLI and eval run.
     """
 
     web_search_enabled: bool | None = None
     web_fallback_policy: str | None = None
     run_id: str | None = None
     trace_path: str | Path | None = None
+    cancel_event: threading.Event | None = None
 
 
 @dataclass
@@ -188,7 +208,9 @@ def seed_state(
 
 
 def _run_graph_with_trace(
-    app: Any, initial_state: GraphState
+    app: Any,
+    initial_state: GraphState,
+    cancel_event: threading.Event | None = None,
 ) -> tuple[dict[str, Any], list[str], list[dict[str, Any]]]:
     """
     Execute the compiled graph, collecting the node path and per-step
@@ -201,6 +223,11 @@ def _run_graph_with_trace(
     exactly; tracing is purely additive and cannot change routing, retries,
     stop_reason, or any node behavior. Objects without `stream` (e.g.
     minimal test fakes) fall back to `invoke()` with an empty trace.
+
+    The stream is also the cancellation seam: each chunk is a node boundary,
+    the only place a run can be stopped without interrupting work in flight.
+    The invoke() fallback exposes no boundaries, so a run on that path
+    completes even when cancelled.
     """
 
     stream = getattr(app, "stream", None)
@@ -213,6 +240,12 @@ def _run_graph_with_trace(
 
     previous = time.perf_counter()
     for chunk in stream(initial_state, stream_mode="updates"):
+        # Checked before the chunk is merged: the run is being discarded, so
+        # the completed node's update has no reader. Leaving the loop closes
+        # the stream, which is what releases the caller's single-flight slot.
+        if cancel_event is not None and cancel_event.is_set():
+            raise RunCancelled("The run was cancelled at a node boundary.")
+
         now = time.perf_counter()
         for node_name, update in chunk.items():
             node_path.append(node_name)
@@ -363,6 +396,11 @@ def answer_question(
     timings are collected, and when options.trace_path is set a
     metadata-only trace JSON is written after the run (see build_trace).
 
+    Cancellation: when options.cancel_event is set from another thread, the
+    run stops at the next node boundary and raises RunCancelled instead of
+    returning. No AnswerResult, no trace file, nothing for the caller to
+    record — a cancelled run leaves no trace of having been attempted.
+
     Input redaction: secret-like values in `question` are scrubbed to
     [REDACTED] before the question enters GraphState, so no secret reaches the
     retriever, router, generator, graders, or the outbound web-search query.
@@ -412,7 +450,9 @@ def answer_question(
     # Resolved via the module attribute so tests can monkeypatch graph.graph.app.
     started = time.perf_counter()
     with tracing_guard:
-        result, node_path, node_timings = _run_graph_with_trace(graph_runtime.app, initial_state)
+        result, node_path, node_timings = _run_graph_with_trace(
+            graph_runtime.app, initial_state, options.cancel_event
+        )
     total_duration_ms = round((time.perf_counter() - started) * 1000.0, 2)
 
     answer_result = AnswerResult(

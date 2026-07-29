@@ -15,6 +15,16 @@ export interface AskRequest {
   web_fallback_policy: WebFallbackPolicy | null;
 }
 
+export interface AskOptions {
+  /**
+   * Aborts the HTTP request. Scope is the browser request only: the server
+   * runs the graph synchronously and exposes no cancellation surface, so the
+   * run itself continues, still costs provider calls, and still lands in run
+   * history. Callers must not present a stop as "the run was cancelled".
+   */
+  signal?: AbortSignal;
+}
+
 export interface Citation {
   kind: CitationKind;
   title: string | null;
@@ -137,6 +147,12 @@ export interface RunsResponse {
   limit: number;
 }
 
+export interface CancelRunResponse {
+  cancelled: boolean;
+  /** True once the server finished unwinding, so a new question will not 409. */
+  idle: boolean;
+}
+
 export interface ApiErrorPayload {
   error?: string;
   message?: string;
@@ -167,8 +183,62 @@ export class ApiError extends Error {
   }
 }
 
+export const REQUEST_CANCELLED_CODE = "request_cancelled";
+
+/**
+ * The backend's code for a run it stopped on request (HTTP 499).
+ *
+ * Distinct from REQUEST_CANCELLED_CODE only in who noticed first — the browser
+ * aborting locally, or the server finishing the cancellation and answering the
+ * abandoned request. Both describe the same user action.
+ */
+export const RUN_CANCELLED_CODE = "run_cancelled";
+
+/**
+ * The error both clients raise when the caller aborted the request.
+ *
+ * Shared so the mock and real clients stay interchangeable: a stop must look
+ * identical in both, and must never be mistaken for a connectivity failure.
+ */
+export function requestCancelledError(): ApiError {
+  return new ApiError("The request was stopped.", { code: REQUEST_CANCELLED_CODE });
+}
+
+/**
+ * True for either shape of "the user stopped this run".
+ *
+ * Both must be excluded from error rendering: a stop is a choice the user
+ * made, and reporting it as a failed request blames the system for it.
+ */
+export function isRequestCancelled(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    (error.code === REQUEST_CANCELLED_CODE || error.code === RUN_CANCELLED_CODE)
+  );
+}
+
+export const RUN_IN_PROGRESS_CODE = "run_in_progress";
+export const BACKEND_UNREACHABLE_CODE = "backend_unreachable";
+
+/**
+ * Codes that mean "try again shortly" rather than "something is broken".
+ *
+ * Kept apart from the failure codes so a busy server can be answered in a
+ * calmer register than an internal error: same copy, different tone.
+ */
+const RETRYABLE_ERROR_CODES: ReadonlySet<string> = new Set([RUN_IN_PROGRESS_CODE]);
+
+export function isRetryableError(error: ApiError): boolean {
+  return RETRYABLE_ERROR_CODES.has(error.code);
+}
+
 export interface ApiClient {
-  ask(request: AskRequest): Promise<AskResponse>;
+  ask(request: AskRequest, options?: AskOptions): Promise<AskResponse>;
+  /**
+   * Stops the in-flight run server-side. Resolves once the backend is free,
+   * so the caller can re-enable its composer without racing a 409.
+   */
+  cancelRun(): Promise<CancelRunResponse>;
   getStatus(): Promise<RuntimeStatus>;
   getDocuments(): Promise<DocumentsResponse>;
   getRuns(): Promise<RunsResponse>;

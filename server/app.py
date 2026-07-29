@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock
 from typing import Any
 
 from dotenv import load_dotenv
@@ -20,6 +20,7 @@ from server.runs import RunStore
 from server.schemas import (
     AskRequest,
     AskResponse,
+    CancelResponse,
     Citation,
     DocumentsResponse,
     NodeTiming,
@@ -43,6 +44,18 @@ RUN_IN_PROGRESS_MESSAGE = "Another question is currently being processed."
 # and reports a sanitized, stable description of what needs fixing.
 CONFIG_ERROR_MESSAGE = "Runtime configuration is invalid — see /api/status for details."
 LOCAL_SNIPPET_MAX_CHARS = 300
+
+# Non-standard "client closed request", the same convention nginx uses. A
+# cancelled run is neither a success (no answer) nor a server fault, and the
+# caller that asked for it has already stopped listening — the status exists so
+# the response can never be mistaken for an AskResponse.
+HTTP_CLIENT_CLOSED_REQUEST = 499
+
+# How long POST /api/ask/cancel waits for the graph thread to unwind before
+# answering. Cancellation lands at the next node boundary, so the bound is one
+# node: an LLM step that has already started still runs to its own timeout.
+CANCEL_WAIT_MARGIN_SECONDS = 15.0
+DEFAULT_CANCEL_WAIT_SECONDS = 75.0
 
 _ERROR_STOP_REASONS = {
     consts.STOP_REASON_RETRIEVAL_ERROR,
@@ -175,6 +188,17 @@ def _build_ask_response(
     )
 
 
+def _cancel_wait_seconds() -> float:
+    """Bound the cancel wait by the same timeout that bounds one node."""
+
+    try:
+        return float(config.llm_request_timeout_seconds()) + CANCEL_WAIT_MARGIN_SECONDS
+    except ValueError:
+        # A misconfigured timeout is /api/status's problem to report, not a
+        # reason to refuse to wait.
+        return DEFAULT_CANCEL_WAIT_SECONDS
+
+
 def _internal_error(exc: Exception) -> JSONResponse:
     return JSONResponse(
         status_code=500,
@@ -206,6 +230,8 @@ def create_app() -> FastAPI:
     application = FastAPI(lifespan=lifespan)
     application.state.run_store = RunStore()
     application.state.ask_lock = Lock()
+    # The in-flight run's cancel switch, or None when nothing is running.
+    application.state.ask_cancel = None
 
     @application.exception_handler(Exception)
     async def unexpected_exception_handler(_request: Request, exc: Exception) -> JSONResponse:
@@ -233,6 +259,11 @@ def create_app() -> FastAPI:
                 },
             )
 
+        # Published only while the lock is held, so a cancel can only ever
+        # reach the run that is actually in flight.
+        cancel_event = Event()
+        request.app.state.ask_cancel = cancel_event
+
         try:
             try:
                 result = engine.answer_question(
@@ -240,7 +271,16 @@ def create_app() -> FastAPI:
                     engine.AnswerOptions(
                         web_search_enabled=payload.web_search_enabled,
                         web_fallback_policy=payload.web_fallback_policy,
+                        cancel_event=cancel_event,
                     ),
+                )
+            except engine.RunCancelled:
+                # Deliberately not recorded: the caller withdrew the question,
+                # so there is no run to report and nobody left reading. The
+                # status only exists to keep this off the AskResponse contract.
+                return JSONResponse(
+                    status_code=HTTP_CLIENT_CLOSED_REQUEST,
+                    content={"error": "run_cancelled"},
                 )
             except ValueError:
                 return JSONResponse(
@@ -277,7 +317,36 @@ def create_app() -> FastAPI:
 
             return response
         finally:
+            # Cleared before the lock is released, so a cancel that wins the
+            # lock immediately after can never observe a finished run's switch.
+            request.app.state.ask_cancel = None
             ask_lock.release()
+
+    @application.post("/api/ask/cancel", response_model=CancelResponse)
+    def cancel_ask(request: Request) -> CancelResponse:
+        """
+        Stop the in-flight run and answer once the server is free again.
+
+        Waiting for the lock rather than returning immediately is the point:
+        it makes the response mean "you can ask again", which is what the
+        caller actually needs to know. Without it the client would race the
+        run it just cancelled and collect a 409 for its next question.
+        """
+
+        cancel_event: Event | None = getattr(request.app.state, "ask_cancel", None)
+        if cancel_event is None:
+            return CancelResponse(cancelled=False, idle=True)
+
+        cancel_event.set()
+
+        # Sync endpoint: FastAPI runs it in the threadpool, so blocking here
+        # holds a worker thread, never the event loop.
+        ask_lock = request.app.state.ask_lock
+        idle = ask_lock.acquire(timeout=_cancel_wait_seconds())
+        if idle:
+            ask_lock.release()
+
+        return CancelResponse(cancelled=True, idle=idle)
 
     @application.get("/api/status", response_model=RuntimeStatus)
     def get_status(request: Request) -> RuntimeStatus:

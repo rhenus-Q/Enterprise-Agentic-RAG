@@ -632,6 +632,13 @@ h3 {
   min-height: calc(100vh - 68px);
 }
 
+/* The page stays mounted while another tab is showing (App.tsx), so it needs
+   an explicit rule: the layout modifiers below set `display`, which would
+   otherwise defeat the `hidden` attribute. */
+.ask-page[hidden] {
+  display: none;
+}
+
 .ask-page--idle {
   display: flex;
   align-items: flex-start;
@@ -897,10 +904,43 @@ h3 {
   transform: none;
 }
 
+/* In flight the primary action is the stop control, so it keeps the muted
+   running treatment but is interactive — it is no longer disabled. */
 .ask-page .primary-button.is-submitting {
   border-color: #9fcbbf;
   color: #175f56;
   background: #c8e4dd;
+}
+
+/* Waiting for the server to confirm the stop — the same treatment, but the
+   action is already spent. */
+.ask-page .primary-button.is-submitting:disabled {
+  cursor: progress;
+}
+
+.ask-page .primary-button.is-submitting:hover,
+.ask-page .primary-button.is-submitting:active {
+  border-color: #7fb3a6;
+  color: #12514a;
+  background: #b7dcd2;
+  box-shadow: none;
+  transform: none;
+}
+
+/* Carries both signals at once: the square reads as stop, the pulse as still
+   running. */
+.stop-glyph {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: currentColor;
+  animation: stop-glyph-pulse 1400ms ease-in-out infinite;
+}
+
+@keyframes stop-glyph-pulse {
+  50% {
+    opacity: 0.4;
+  }
 }
 
 .ask-page .primary-button:disabled:not(.is-submitting):hover,
@@ -910,21 +950,6 @@ h3 {
   background: #6daeab;
   box-shadow: none;
   transform: none;
-}
-
-.spinner {
-  width: 15px;
-  height: 15px;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: spin 700ms linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 @keyframes skeleton-pulse {
@@ -944,7 +969,7 @@ h3 {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .spinner,
+  .stop-glyph,
   .skeleton {
     animation: none !important;
   }
@@ -2191,6 +2216,40 @@ h3 {
   width: 100%;
   padding: 11px 13px;
   margin: 0;
+}
+
+/* Inside the ask stage the card is composer feedback, not a page-level
+   block: full bleed to the composer's edges rather than centred on its own. */
+.ask-error {
+  margin-top: 14px;
+}
+
+.ask-error .error-state {
+  width: 100%;
+  margin: 0;
+}
+
+/* A busy server clears on its own — it gets the amber register, not the red
+   one reserved for a system that needs attention. Copy is unchanged. */
+.error-state--warning {
+  border-color: var(--amber-line);
+  color: #794b13;
+  background: var(--amber-soft);
+}
+
+.error-state--warning .error-mark {
+  border-color: #d9b070;
+}
+
+/* Both classes, not just the modifier: the base `.error-state p` rule further
+   down has equal specificity (0,1,1) and would otherwise win on source order,
+   leaving red body text on the amber card. */
+.error-state.error-state--warning p {
+  color: #8a5a1a;
+}
+
+.error-state--warning .http-code {
+  color: #9a6a22;
 }
 
 .error-mark {

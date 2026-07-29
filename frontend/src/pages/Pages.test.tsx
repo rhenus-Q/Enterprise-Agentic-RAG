@@ -24,6 +24,7 @@ afterEach(() => {
 function readOnlyClient(): ApiClient {
   return {
     ask: vi.fn().mockResolvedValue(askFixtures.localSuccess),
+    cancelRun: vi.fn().mockResolvedValue({ cancelled: true, idle: true }),
     getStatus: vi.fn().mockResolvedValue(runtimeFixtures.openai),
     getDocuments: vi.fn().mockResolvedValue(populatedDocumentsResponse),
     getRuns: vi.fn().mockResolvedValue(populatedRunsResponse),

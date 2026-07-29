@@ -9,9 +9,12 @@ import {
 } from "../mocks/fixtures";
 import {
   ApiError,
+  requestCancelledError,
   type ApiClient,
+  type AskOptions,
   type AskRequest,
   type AskResponse,
+  type CancelRunResponse,
   type DocumentsResponse,
   type IndexStatus,
   type RunDetail,
@@ -79,15 +82,39 @@ const options: MockScenarioOption[] = [
 let activeScenario: MockScenario = "ask-local";
 const listeners = new Set<() => void>();
 
-function delay<T>(value: T, milliseconds = 180): Promise<T> {
-  return new Promise((resolve) => {
-    window.setTimeout(() => resolve(value), milliseconds);
+// Abort handling mirrors the real client so a stop behaves the same in both:
+// the pending timer is cleared and the promise rejects with the shared
+// cancellation error rather than resolving into a stale answer.
+function onAbort(signal: AbortSignal | undefined, timer: number, cancel: () => void): () => void {
+  if (!signal) {
+    return () => undefined;
+  }
+
+  const handler = () => {
+    window.clearTimeout(timer);
+    cancel();
+  };
+
+  if (signal.aborted) {
+    handler();
+    return () => undefined;
+  }
+
+  signal.addEventListener("abort", handler, { once: true });
+  return () => signal.removeEventListener("abort", handler);
+}
+
+function delay<T>(value: T, milliseconds = 180, signal?: AbortSignal): Promise<T> {
+  return new Promise((resolve, rejectPromise) => {
+    const timer = window.setTimeout(() => resolve(value), milliseconds);
+    onAbort(signal, timer, () => rejectPromise(requestCancelledError()));
   });
 }
 
-function reject(error: ApiError, milliseconds = 180): Promise<never> {
+function reject(error: ApiError, milliseconds = 180, signal?: AbortSignal): Promise<never> {
   return new Promise((_, rejectPromise) => {
-    window.setTimeout(() => rejectPromise(error), milliseconds);
+    const timer = window.setTimeout(() => rejectPromise(error), milliseconds);
+    onAbort(signal, timer, () => rejectPromise(requestCancelledError()));
   });
 }
 
@@ -219,9 +246,15 @@ function requestErrorForScenario(): ApiError | null {
 }
 
 export const mockApiClient: ApiClient = {
-  ask(_request: AskRequest): Promise<AskResponse> {
+  ask(_request: AskRequest, options?: AskOptions): Promise<AskResponse> {
     const error = requestErrorForScenario();
-    return error ? reject(error, 320) : delay(askResponseForScenario(), 520);
+    return error
+      ? reject(error, 320, options?.signal)
+      : delay(askResponseForScenario(), 520, options?.signal);
+  },
+  cancelRun(): Promise<CancelRunResponse> {
+    // Stands in for the real endpoint's wait for the graph thread to unwind.
+    return delay({ cancelled: true, idle: true }, 240);
   },
   getStatus(): Promise<RuntimeStatus> {
     if (activeScenario === "backend-unreachable") {

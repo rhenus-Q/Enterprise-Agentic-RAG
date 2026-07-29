@@ -3,6 +3,12 @@ import type { ApiError } from "../api/types";
 interface ErrorStateProps {
   error: ApiError;
   compact?: boolean;
+  /**
+   * Visual weight only — the copy is unchanged. "warning" is for conditions
+   * that clear on their own (a busy server); "danger" is for a system that
+   * needs attention.
+   */
+  tone?: "danger" | "warning";
 }
 
 interface ErrorCopy {
@@ -54,14 +60,21 @@ function copyForError(error: ApiError): ErrorCopy {
   }
 }
 
-export function ErrorState({ error, compact = false }: ErrorStateProps) {
+export function ErrorState({ error, compact = false, tone = "danger" }: ErrorStateProps) {
   const copy = copyForError(error);
 
   return (
     <div
-      className={`error-state ${compact ? "error-state--compact" : ""}`}
+      className={[
+        "error-state",
+        compact ? "error-state--compact" : "",
+        tone === "warning" ? "error-state--warning" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
       role="alert"
       data-error-code={error.code}
+      data-tone={tone}
     >
       <span className="error-mark" aria-hidden="true">
         !
