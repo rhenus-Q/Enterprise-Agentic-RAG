@@ -11,7 +11,7 @@ import {
   type RuntimeStatus,
 } from "./types";
 
-const USE_MOCKS = true;
+const USE_MOCKS = false;
 
 function isErrorPayload(value: unknown): value is ApiErrorPayload {
   return typeof value === "object" && value !== null;
