@@ -3,8 +3,18 @@ import { describe, expect, it } from "vitest";
 import { formatCategoryName, formatProviderName } from "./format";
 
 describe("formatCategoryName", () => {
-  it.each(["hr", "Hr", "HR", "  hr  "])("renders %j as HR", (category) => {
-    expect(formatCategoryName(category)).toBe("HR");
+  it.each([
+    ["it_security", "IT_security"],
+    ["IT_SECURITY", "IT_security"],
+    ["finance", "Finance"],
+    ["operations", "Operations"],
+    ["compliance", "Compliance"],
+    ["hr", "HR"],
+    ["Hr", "HR"],
+    ["HR", "HR"],
+    ["  hr  ", "HR"],
+  ])("renders %j as %s", (category, expected) => {
+    expect(formatCategoryName(category)).toBe(expected);
   });
 
   it.each([

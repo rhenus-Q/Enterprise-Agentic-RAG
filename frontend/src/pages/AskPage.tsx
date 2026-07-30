@@ -133,7 +133,7 @@ export function AskPage({
         {
           question: cleanedQuestion,
           web_search_enabled: status?.web_search_locked ? false : webSearchEnabled,
-          web_fallback_policy: fallbackPolicy,
+          web_fallback_policy: status?.web_search_locked ? null : fallbackPolicy,
         },
         { signal: run.signal },
       );
@@ -264,16 +264,22 @@ export function AskPage({
                   <span>Fallback policy</span>
                   <select
                     aria-label="Web fallback policy"
-                    value={fallbackPolicy ?? ""}
+                    value={webSearchLocked ? "runtime_locked" : (fallbackPolicy ?? "")}
                     onChange={(event) =>
                       setFallbackPolicy(asFallbackPolicy(event.target.value || null))
                     }
-                    disabled={controlsUnavailable || submitting}
+                    disabled={controlsUnavailable || webSearchLocked || submitting}
                   >
-                    <option value="">Runtime default</option>
-                    <option value="conservative">Conservative</option>
-                    <option value="aggressive">Aggressive</option>
-                    <option value="disabled">Disabled</option>
+                    {webSearchLocked ? (
+                      <option value="runtime_locked">Not applicable</option>
+                    ) : (
+                      <>
+                        <option value="">Runtime default</option>
+                        <option value="conservative">Conservative</option>
+                        <option value="aggressive">Aggressive</option>
+                        <option value="disabled">Disabled</option>
+                      </>
+                    )}
                   </select>
                 </label>
 

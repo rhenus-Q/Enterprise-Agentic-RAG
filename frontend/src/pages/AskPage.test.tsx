@@ -54,11 +54,43 @@ function suggestionGrid(): HTMLDivElement {
 }
 
 describe("AskPage", () => {
-  it("disables the web-search override when runtime policy locks it", () => {
-    render(<AskPage api={clientWithAsk(vi.fn())} status={runtimeFixtures.privacy} />);
-    expect((screen.getByRole("checkbox", { name: "Web search" }) as HTMLInputElement).disabled).toBe(
-      true,
-    );
+  it("locks web options and submits no fallback override when runtime policy locks them", async () => {
+    const ask = vi.fn().mockResolvedValue(askFixtures.localSuccess);
+
+    render(<AskPage api={clientWithAsk(ask)} status={runtimeFixtures.local} />);
+
+    const webSearch = screen.getByRole("checkbox", {
+      name: "Web search",
+    }) as HTMLInputElement;
+    const fallbackPolicy = screen.getByRole("combobox", {
+      name: "Web fallback policy",
+    }) as HTMLSelectElement;
+
+    expect(webSearch.disabled).toBe(true);
+    expect(fallbackPolicy.disabled).toBe(true);
+    expect(fallbackPolicy.value).toBe("runtime_locked");
+    expect(fallbackPolicy.selectedOptions[0]?.textContent).toBe("Not applicable");
+
+    enterQuestion();
+    fireEvent.click(askButton());
+
+    await waitFor(() => expect(ask).toHaveBeenCalledTimes(1));
+    expect(ask.mock.calls[0]?.[0]).toMatchObject({
+      web_search_enabled: false,
+      web_fallback_policy: null,
+    });
+  });
+
+  it("keeps the configured fallback policy selectable when runtime policy is unlocked", () => {
+    render(<AskPage api={clientWithAsk(vi.fn())} status={runtimeFixtures.openai} />);
+
+    const fallbackPolicy = screen.getByRole("combobox", {
+      name: "Web fallback policy",
+    }) as HTMLSelectElement;
+
+    expect(fallbackPolicy.disabled).toBe(false);
+    expect(fallbackPolicy.value).toBe("conservative");
+    expect(fallbackPolicy.selectedOptions[0]?.textContent).toBe("Conservative");
   });
 
   it("disables the Ask button for a blank question", () => {

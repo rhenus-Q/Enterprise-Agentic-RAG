@@ -50,6 +50,14 @@ export function formatProviderName(provider: string): string {
   return normalized;
 }
 
+const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
+  it_security: "IT_security",
+  finance: "Finance",
+  operations: "Operations",
+  compliance: "Compliance",
+  hr: "HR",
+};
+
 export function formatCategoryName(value: string | null | undefined): string {
   const normalized = value?.trim() ?? "";
 
@@ -57,8 +65,10 @@ export function formatCategoryName(value: string | null | undefined): string {
     return "";
   }
 
-  if (normalized.toLowerCase() === "hr") {
-    return "HR";
+  const configuredName = CATEGORY_DISPLAY_NAMES[normalized.toLowerCase()];
+
+  if (configuredName) {
+    return configuredName;
   }
 
   return normalized
