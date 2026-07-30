@@ -17,10 +17,13 @@ export interface AskRequest {
 
 export interface AskOptions {
   /**
-   * Aborts the HTTP request. Scope is the browser request only: the server
-   * runs the graph synchronously and exposes no cancellation surface, so the
-   * run itself continues, still costs provider calls, and still lands in run
-   * history. Callers must not present a stop as "the run was cancelled".
+   * Aborts the HTTP request locally. This is separate from actually stopping
+   * the run: `cancelRun()` (ADR 017) tells the backend to cancel the
+   * in-flight graph execution, which is what stops it from costing further
+   * provider calls or landing in run history. AskPage asks the server to
+   * cancel first and only aborts this request afterwards, once the server
+   * confirms the run has stopped — so `signal` alone is not "the run was
+   * cancelled".
    */
   signal?: AbortSignal;
 }

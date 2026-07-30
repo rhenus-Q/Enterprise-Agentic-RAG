@@ -1,4 +1,4 @@
-import { formatDuration, formatProviderName, humanizeToken } from "../lib/format";
+import { formatDuration, formatProviderName, humanizeToken, safeExternalUrl } from "../lib/format";
 import type { RunDetail } from "../api/types";
 import { ExecutionTimeline } from "./ExecutionTimeline";
 import { StatusPill } from "./StatusPill";
@@ -33,7 +33,10 @@ function parseEvidence(source: string): EvidenceItem {
     : lowerSource.startsWith("web search:")
       ? "web"
       : "other";
-  const url = raw.match(/https?:\/\/\S+/)?.[0].replace(/[),.;]+$/, "") ?? null;
+  const rawUrl = raw.match(/https?:\/\/\S+/)?.[0].replace(/[),.;]+$/, "") ?? null;
+  // The regex above already only matches http(s), so this is defense-in-depth
+  // consistency with CitationList rather than a fix for a live gap here.
+  const url = safeExternalUrl(rawUrl);
   let title = raw.replace(/^(Local corpus|Web search):\s*/i, "");
 
   if (url) {

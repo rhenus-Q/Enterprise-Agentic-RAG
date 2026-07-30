@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import ingestion
 from graph import config
-from graph.chains._llm import OPENAI_CHAT_MODEL
 from server.schemas import IndexStatus, PreflightStatus, RuntimeStatus
 
 # Compatibility state used when the index could not be inspected at all
@@ -156,7 +155,7 @@ def build_runtime_status(preflight: PreflightStatus) -> RuntimeStatus:
 
     return RuntimeStatus(
         provider=provider,
-        chat_model=config.local_chat_model() if local_mode else OPENAI_CHAT_MODEL,
+        chat_model=config.local_chat_model() if local_mode else config.OPENAI_CHAT_MODEL,
         embedding_provider=expected["embedding_provider"],
         embedding_model=expected["embedding_model"],
         privacy_mode=privacy_enabled,

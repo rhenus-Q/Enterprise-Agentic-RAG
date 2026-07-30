@@ -8,7 +8,7 @@ import {
 } from "react";
 
 import type { Citation } from "../api/types";
-import { formatCategoryName } from "../lib/format";
+import { formatCategoryName, safeExternalUrl } from "../lib/format";
 
 interface CitationListProps {
   citations: Citation[];
@@ -147,7 +147,8 @@ export function CitationList({ citations }: CitationListProps) {
       <ol className="citation-list">
         {citations.map((citation, index) => {
           const title = citationTitle(citation);
-          const domain = citation.url ? citationDomain(citation.url) : null;
+          const safeUrl = safeExternalUrl(citation.url);
+          const domain = safeUrl ? citationDomain(safeUrl) : null;
           const filename = citation.source ? shortSourceName(citation.source) : null;
           const category = formatCategoryName(citation.document_category);
 
@@ -192,18 +193,18 @@ export function CitationList({ citations }: CitationListProps) {
                   </>
                 )}
                 {domain && <span className="citation-domain">{domain}</span>}
-                {domain && citation.url && (
+                {domain && safeUrl && (
                   <span className="citation-meta-separator" aria-hidden="true">
                     ·
                   </span>
                 )}
-                {citation.url && (
+                {safeUrl && (
                   <a
                     className="citation-open-link"
-                    href={citation.url}
+                    href={safeUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    title={citation.url}
+                    title={safeUrl}
                     aria-label={`Open ${title} in a new tab`}
                   >
                     Open <span aria-hidden="true">↗</span>

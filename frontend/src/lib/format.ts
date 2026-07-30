@@ -70,3 +70,24 @@ export function formatCategoryName(value: string | null | undefined): string {
 export function humanizeToken(value: string): string {
   return value.replaceAll("_", " ");
 }
+
+/**
+ * Returns `url` only if it is `http:`/`https:`, otherwise null.
+ *
+ * Citation URLs originate from Tavily web results, which the relevance gate
+ * checks for topicality, not safety (structure.md §7 calls this input "the
+ * least trusted in the system"). Never render a `javascript:` or `data:`
+ * URL as a clickable href.
+ */
+export function safeExternalUrl(url: string | null | undefined): string | null {
+  if (!url) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? url : null;
+  } catch {
+    return null;
+  }
+}

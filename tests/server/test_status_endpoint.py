@@ -1,6 +1,7 @@
 """Contract and sanitization tests for GET /api/status."""
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ from fastapi.testclient import TestClient
 
 import ingestion
 import main
+import server
 from graph import engine
 from server.app import create_app
 from server.status import (
@@ -319,3 +321,29 @@ def test_status_never_exposes_local_endpoint_or_absolute_paths(monkeypatch):
     assert "OLLAMA_BASE_URL" not in serialized
     assert "base_url" not in serialized
     assert Path(payload["index"]["persist_directory"]).is_absolute() is False
+
+
+def test_server_modules_do_not_import_chains_or_nodes():
+    """ADR 016 / structure.md §14 / CLAUDE.md all state that server/ imports
+    only graph.engine, graph.config, graph.consts, graph.formatting,
+    ingestion, and main -- never graph.nodes.* or the chain factories.
+
+    A sys.modules check would not catch a violation here: importing
+    graph.engine already pulls in graph.graph (to compile the StateGraph),
+    which legitimately imports graph.chains.* and graph.nodes for real, so
+    both are already present in sys.modules by the time any server test runs.
+    What must stay true is that no server/*.py file itself contains an import
+    statement naming graph.chains or graph.nodes -- a lexical check on the
+    source, not a runtime check on the import graph.
+    """
+
+    server_dir = Path(server.__file__).parent
+    forbidden = re.compile(r"^\s*(from|import)\s+graph\.(chains|nodes)\b", re.MULTILINE)
+
+    offending = [
+        path.name
+        for path in sorted(server_dir.glob("*.py"))
+        if forbidden.search(path.read_text(encoding="utf-8"))
+    ]
+
+    assert offending == []

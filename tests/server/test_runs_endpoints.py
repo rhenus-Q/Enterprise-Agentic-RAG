@@ -6,8 +6,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 import main
+from graph import engine
 from server.app import create_app
 from server.runs import RunStore
+from server.schemas import RunDetail
 
 
 def _record(run_id: str, generated_at: str, *, status: str = "ok") -> dict:
@@ -140,6 +142,56 @@ def test_runs_endpoints_return_summary_and_detail_shapes(monkeypatch):
         "raw_state",
     ):
         assert forbidden not in serialized
+
+
+def test_build_trace_output_satisfies_the_rundetail_contract():
+    """engine.build_trace() is the single serializer server/app.py uses to
+    build history records (plus provider/status/retries/web_search_count),
+    and RunStore.add() validates the result against RunDetail. Pin the
+    field-level contract here so a renamed or reshaped trace key fails this
+    fast, obvious test instead of a 500 the next time a real run is
+    recorded."""
+
+    result = engine.AnswerResult(
+        question="What is the VPN policy?",
+        answer="Use an approved device and MFA.",
+        stop_reason="budget_exhausted",
+        sources=["- Local corpus: VPN Access Policy"],
+        retries=2,
+        tracked_llm_calls=5,
+        web_search_count=1,
+        web_result_grading_count=3,
+        web_search_enabled=True,
+        web_fallback_policy="conservative",
+        raw_state={"documents": []},
+        run_id="run-contract-1",
+        node_path=["retrieve", "generate"],
+        node_timings_ms=[{"node": "retrieve", "duration_ms": 1.0}],
+        total_duration_ms=5.0,
+        question_sha256="a" * 64,
+        input_redacted=False,
+    )
+
+    record = engine.build_trace(result)
+    # The four keys server/app.py adds on top of build_trace()'s output.
+    record.update(
+        {
+            "provider": "openai",
+            "status": "caveat",
+            "retries": result.retries,
+            "web_search_count": result.web_search_count,
+        }
+    )
+
+    # RunDetail.model_validate silently drops extra keys but raises on any
+    # missing required field, so this is the meaningful assertion: every
+    # field RunDetail declares must already be present in the record.
+    assert set(RunDetail.model_fields) <= set(record)
+
+    detail = RunDetail.model_validate(record)
+    assert detail.run_id == "run-contract-1"
+    assert detail.provider == "openai"
+    assert detail.status == "caveat"
 
 
 def test_unknown_run_returns_404(monkeypatch):

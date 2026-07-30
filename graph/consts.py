@@ -18,7 +18,12 @@ CLEAR_TRANSIENT_TOOL_ERROR = "clear_transient_tool_error"
 # eval harness (which inspects source metadata), so they never drift.
 WEB_SEARCH_SOURCE = "web_search"
 
-# Values for GraphState["stop_reason"] ("" = normal finish).
+# Values for GraphState["stop_reason"] ("" = normal finish). A new value here
+# must also be added to graph/formatting.py::STOP_REASON_NOTES (the caveat
+# text) and covered by server/app.py's stop_reason -> status classification
+# (_run_status() / _ERROR_STOP_REASONS) — both are pinned by a parametrized
+# test in tests/server/test_ask_endpoint.py that iterates every STOP_REASON_*
+# constant defined here.
 STOP_REASON_WEB_SEARCH_DISABLED = "web_search_disabled"
 STOP_REASON_WEB_FALLBACK_DISABLED = (
     "web_fallback_disabled"  # WEB_FALLBACK_POLICY=disabled blocked a local run's web retry

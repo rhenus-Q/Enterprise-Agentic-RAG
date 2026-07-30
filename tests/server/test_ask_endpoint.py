@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from langchain_core.documents import Document
 
 import main
-from graph import engine, formatting
+from graph import consts, engine, formatting
 from graph.consts import WEB_SEARCH_SOURCE
 from server.app import create_app
 
@@ -179,6 +179,57 @@ def test_invalid_questions_return_422_without_running_or_recording(monkeypatch, 
         assert response.status_code == 422
         assert calls == []
         assert application.state.run_store.list_summaries() == []
+
+
+def test_run_history_bookkeeping_failure_does_not_lose_the_answer(monkeypatch, capsys):
+    """The run already completed and was paid for by the time the run-store
+    write happens; a bookkeeping failure there must not turn a successfully
+    generated answer into a 500 (matches engine._write_trace()'s rule that an
+    observability failure never loses the result)."""
+
+    _patch_successful_preflight(monkeypatch)
+    result = _answer_result()
+    monkeypatch.setattr(engine, "answer_question", lambda _question, _options: result)
+    application = create_app()
+
+    def fail_add(_record):
+        raise RuntimeError("run store is broken")
+
+    monkeypatch.setattr(application.state.run_store, "add", fail_add)
+
+    with TestClient(application) as client:
+        response = client.post("/api/ask", json={"question": "Question"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["run_id"] == result.run_id
+    assert payload["answer"] == result.answer
+    assert application.state.run_store.get(result.run_id) is None
+    assert "RuntimeError" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "stop_reason",
+    [value for name, value in vars(consts).items() if name.startswith("STOP_REASON_")],
+)
+def test_every_stop_reason_gets_a_status_and_a_pinned_caveat(monkeypatch, stop_reason):
+    """graph/consts.py defines the full stop_reason vocabulary; server/app.py's
+    stop_reason -> status classification and formatting.STOP_REASON_NOTES must
+    both cover every value, or a future reason silently renders as a benign
+    caveat pill instead of the caveat text it actually maps to (see the
+    pointer comment on graph/consts.py's STOP_REASON_* block)."""
+
+    _patch_successful_preflight(monkeypatch)
+    result = _answer_result(stop_reason=stop_reason)
+    monkeypatch.setattr(engine, "answer_question", lambda _question, _options: result)
+    application = create_app()
+
+    with TestClient(application) as client:
+        response = client.post("/api/ask", json={"question": "Question"})
+
+    payload = response.json()
+    assert payload["status"] in {"caveat", "error"}
+    assert payload["caveat"] == formatting.STOP_REASON_NOTES[stop_reason]
 
 
 def test_concurrent_ask_returns_409_without_engine_call_or_history(monkeypatch):

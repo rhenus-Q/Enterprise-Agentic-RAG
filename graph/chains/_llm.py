@@ -21,15 +21,12 @@ from typing import Any
 from langchain_openai import ChatOpenAI
 
 from graph.config import (
+    OPENAI_CHAT_MODEL,
     llm_request_timeout_seconds,
     local_chat_model,
     local_mode_enabled,
     ollama_base_url,
 )
-
-# The OpenAI chat model every chain used before this factory existed, and
-# still uses whenever LLM_PROVIDER is unset or "openai".
-OPENAI_CHAT_MODEL = "gpt-5-mini"
 
 
 def _chat_ollama_class() -> Any:

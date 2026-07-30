@@ -220,6 +220,13 @@ PROVIDER_OLLAMA = "ollama"
 
 _LLM_PROVIDERS = (PROVIDER_OPENAI, PROVIDER_OLLAMA)
 
+# The OpenAI chat model every chain uses whenever LLM_PROVIDER is unset or
+# "openai" (graph/chains/_llm.py::get_chat_model()). Not env-configurable,
+# unlike the local-provider models below. Lives here rather than in _llm.py
+# so callers outside the graph (e.g. server/status.py) can read it without
+# importing the chains package.
+OPENAI_CHAT_MODEL = "gpt-5-mini"
+
 # Local-mode development defaults. Both tags were verified as installed on the
 # development endpoint rather than assumed — a wrong embedding tag would
 # silently build an index against the wrong model. Any locally hosted model can

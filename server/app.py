@@ -301,6 +301,14 @@ def create_app() -> FastAPI:
             try:
                 status = _run_status(result.stop_reason)
                 response = _build_ask_response(result, provider, status)
+            except Exception as exc:
+                return _internal_error(exc)
+
+            # The run already completed and was paid for: a bookkeeping failure
+            # here must not discard the answer we already built. Matches
+            # engine._write_trace()'s rule that an observability failure never
+            # loses the result — only the type is logged, never the message.
+            try:
                 record = engine.build_trace(result)
                 record.update(
                     {
@@ -313,7 +321,7 @@ def create_app() -> FastAPI:
                 run_store: RunStore = request.app.state.run_store
                 run_store.add(record)
             except Exception as exc:
-                return _internal_error(exc)
+                print(f"---RUN HISTORY RECORD FAILED ({type(exc).__name__})---")
 
             return response
         finally:
