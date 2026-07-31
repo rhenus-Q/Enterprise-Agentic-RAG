@@ -96,4 +96,7 @@ Doc/
 frontend/node_modules/
 # TypeScript build cache
 *.tsbuildinfo
+# Vitest coverage output: embeds absolute source paths and inlined source text.
+# frontend/dist is already covered by the generic dist/ rule above.
+frontend/coverage/
 

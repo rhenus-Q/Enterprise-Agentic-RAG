@@ -232,6 +232,41 @@ def test_every_stop_reason_gets_a_status_and_a_pinned_caveat(monkeypatch, stop_r
     assert payload["caveat"] == formatting.STOP_REASON_NOTES[stop_reason]
 
 
+@pytest.mark.parametrize(
+    "hostile_url",
+    ["javascript:alert(1)", "data:text/html;base64,PHNjcmlwdD4=", "file:///etc/passwd"],
+)
+def test_citation_urls_with_an_unsafe_scheme_are_not_served(monkeypatch, hostile_url):
+    """A web result passes a relevance gate, not a safety gate, and its URL lands
+    in an href. The scheme is validated at the server, so the API contract does
+    not depend on React happening to block javascript: URLs."""
+
+    _patch_successful_preflight(monkeypatch)
+    result = _answer_result()
+    result.raw_state["documents"] = [
+        Document(
+            page_content="web supplement",
+            metadata={
+                "source": WEB_SEARCH_SOURCE,
+                "web_sources": [
+                    {"title": "Hostile", "url": hostile_url},
+                    {"title": "Legitimate", "url": "https://example.com/guide"},
+                ],
+                "search_query": "remote access guidance",
+            },
+        )
+    ]
+    monkeypatch.setattr(engine, "answer_question", lambda _question, _options: result)
+    application = create_app()
+
+    with TestClient(application) as client:
+        response = client.post("/api/ask", json={"question": "Question"})
+
+    citations = response.json()["citations"]
+    assert [citation["url"] for citation in citations] == ["https://example.com/guide"]
+    assert hostile_url not in json.dumps(citations)
+
+
 def test_concurrent_ask_returns_409_without_engine_call_or_history(monkeypatch):
     _patch_successful_preflight(monkeypatch)
     calls = []

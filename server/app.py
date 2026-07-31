@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from threading import Event, Lock
 from typing import Any
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -45,6 +46,10 @@ RUN_IN_PROGRESS_MESSAGE = "Another question is currently being processed."
 CONFIG_ERROR_MESSAGE = "Runtime configuration is invalid — see /api/status for details."
 LOCAL_SNIPPET_MAX_CHARS = 300
 
+# Citation URLs come from graded web results and end up in an href, so the
+# scheme is validated before they cross the HTTP boundary.
+_SAFE_URL_SCHEMES = frozenset({"http", "https"})
+
 # Non-standard "client closed request", the same convention nginx uses. A
 # cancelled run is neither a success (no answer) nor a server fault, and the
 # caller that asked for it has already stopped listening — the status exists so
@@ -78,6 +83,30 @@ def _optional_text(value: Any) -> str | None:
     return text or None
 
 
+def _safe_external_url(value: Any) -> str | None:
+    """
+    Keep a web-result URL only when its scheme is http/https.
+
+    The relevance grader checks topicality, not safety, so a page that survives
+    it can still carry a hostile URL — and this one ends up in an <a href> in a
+    browser. React blocks `javascript:` today, but that is framework behavior
+    rather than something this API promises, so the scheme is checked here at
+    the trust boundary where the contract is actually made. Mirrors
+    frontend/src/lib/format.ts::safeExternalUrl().
+    """
+
+    url = _optional_text(value)
+    if url is None:
+        return None
+
+    try:
+        scheme = urlparse(url).scheme.lower()
+    except ValueError:
+        return None
+
+    return url if scheme in _SAFE_URL_SCHEMES else None
+
+
 def _build_citations(documents: Any) -> list[Citation]:
     citations: list[Citation] = []
     seen: set[tuple[str, str | None, str | None, str | None, str | None]] = set()
@@ -102,7 +131,10 @@ def _build_citations(documents: Any) -> list[Citation]:
             for entry in metadata.get("web_sources") or []:
                 if not isinstance(entry, dict):
                     continue
-                url = _optional_text(entry.get("url"))
+                # An unsafe scheme is treated exactly like a missing URL: the
+                # page is not cited, and if no page survives, the query-only
+                # citation below still reports that a web search happened.
+                url = _safe_external_url(entry.get("url"))
                 if url is None:
                     continue
                 found_web_source = True
