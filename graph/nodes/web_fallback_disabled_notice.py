@@ -10,7 +10,7 @@ def web_fallback_disabled_notice(state: GraphState):
     grounded but not-useful answer, and the fallback policy forbids escalating
     a local run to web search (web search itself may be enabled — this is the
     policy, not the privacy switch). Records a machine-readable stop reason so
-    the caller (main.py) can attach a user-facing caveat to the final answer.
+    the caller (CLI or web API) can attach a user-facing caveat to the final answer.
     The generation itself is left untouched.
     """
 

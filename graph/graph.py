@@ -5,7 +5,8 @@ Purpose:
 - Assemble the Agentic RAG workflow as a LangGraph StateGraph.
 - Wire the nodes (retrieve / grade_documents / generate / websearch) together
   with conditional edges driven by the router and the two graders.
-- Export the compiled `app`, which main.py invokes.
+- Export the compiled `app`, which graph/engine.py runs on behalf of every
+  caller (CLI, web API, eval harness).
 
 Workflow (see structure.md):
 
@@ -40,16 +41,21 @@ any-irrelevant-doc-triggers-web behavior; "disabled" keeps local retrieval
 paths local entirely — including the post-generation not-useful retry, which
 ends through the web_fallback_disabled notice on local-only runs.
 
-Privacy mode: when state["web_search_enabled"] is False (seeded from the
-WEB_SEARCH_ENABLED env var by graph/engine.py::seed_state()), every websearch route above is disabled —
+Privacy mode: when state["web_search_enabled"] is False (resolved by
+graph/engine.py::seed_state()), every websearch route above is disabled —
 questions are never sent to an external search service. Routing falls back to
 vector retrieval / direct generation, and "grounded but not useful" ends the run
 with the grounded answer instead of searching the web.
+WEB_SEARCH_ENABLED is only the overridable default here: PRIVACY_MODE=true and
+local-provider mode are absolute locks that seed_state() applies after the
+per-run resolution, so an explicit AnswerOptions(web_search_enabled=True)
+cannot reopen web search (see ADR 014 / ADR 015).
 
 Failure surfacing: runs that cannot end with a passing answer (web search
 disabled, or MAX_RETRIES exhausted while a quality gate still fails) terminate
-through small notice nodes that record state["stop_reason"], so main.py can
-attach a user-facing caveat instead of presenting the answer as successful.
+through small notice nodes that record state["stop_reason"], which
+graph/formatting.py maps to a user-facing caveat for the CLI and the web API
+instead of presenting the answer as successful.
 
 Insufficient-context bypass: when generation produced the deterministic
 insufficient-context answer (no usable documents; flagged by the generate node

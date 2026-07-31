@@ -113,7 +113,7 @@ uv run ruff check .
 uv run ruff format --check .
 uv run mypy
 uv run pytest tests/evals/ -q
-uv run pytest tests/node/ tests/graph/ tests/evals/ -q
+uv run pytest tests/ --ignore=tests/chains/ -q
 uv run python evals/run_eval.py --validate-only
 ```
 

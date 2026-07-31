@@ -1,6 +1,6 @@
 # Agentic RAG Assistant for Enterprise Document Q&A
 
-[![CI](https://github.com/rhenus-Q/Enterprise-Office-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/rhenus-Q/Enterprise-Office-Agent/actions/workflows/ci.yml)
+[![CI](https://github.com/rhenus-Q/Enterprise-Agentic-RAG/actions/workflows/ci.yml/badge.svg)](https://github.com/rhenus-Q/Enterprise-Agentic-RAG/actions/workflows/ci.yml)
 
 **A self-correcting, enterprise-style document Q&A assistant built with LangGraph (CRAG pattern).**
 
@@ -126,7 +126,8 @@ State is a `TypedDict` defined in `graph/state.py` with fourteen fields: the wor
 │                            #   hallucination_grader, answer_grader, query_rewriter
 │                            #   (each behind a lazy get_*() factory)
 └── tests/
-    ├── conftest.py          # Loads .env; provides the `requires_openai` skip marker
+    ├── conftest.py          # Loads .env; provides the `requires_openai` skip marker; autouse fixture
+    │                        #   clears the mode/provider env vars so a local .env cannot decide assertions
     ├── node/                # Unit tests — all external dependencies mocked, no API keys needed
     ├── graph/               # Routing / privacy-toggle / compiled-graph tests — fully mocked
     ├── evals/               # Unit tests for the eval harness's pure helpers — fully mocked
@@ -140,8 +141,8 @@ Requires **Python ≥ 3.11** and [uv](https://docs.astral.sh/uv/).
 
 ```powershell
 # 1. Clone and enter the project
-git clone https://github.com/rhenus-Q/Enterprise-Office-Agent.git
-cd Enterprise-Office-Agent
+git clone https://github.com/rhenus-Q/Enterprise-Agentic-RAG.git
+cd Enterprise-Agentic-RAG
 
 # 2. Install dependencies (creates .venv from the committed uv.lock)
 uv sync --group dev
@@ -767,7 +768,7 @@ accepted, and the alternatives deliberately not chosen. Start with the
 | External calls | **None** — retriever, graders, Tavily, the generation seam, and `answer_question` itself are monkeypatched at their lazy `get_*()` / module seams | Real OpenAI API calls                                                                         |
 | Requirements   | No API keys                                                                                                                  | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
 | Speed / cost   | Seconds, free                                                                                                                | ~1 minute, small API cost                                                                     |
-| Status         | 587 tests passing (89 node + 353 graph + 106 evals + 39 server)                                                              | 38 tests passing                                                                              |
+| Status         | Four suites, all passing: `tests/node/`, `tests/graph/`, `tests/evals/`, `tests/server/`                                     | Passing (run on demand)                                                                       |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 

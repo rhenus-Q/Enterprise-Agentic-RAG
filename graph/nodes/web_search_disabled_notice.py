@@ -10,7 +10,7 @@ def web_search_disabled_notice(state: GraphState):
     either the answer is grounded but does not fully answer the question, or
     generation produced the deterministic insufficient-context answer (no
     usable documents, no earlier failure recorded). Records a machine-readable
-    stop reason so the caller (main.py) can attach a user-facing caveat to the
+    stop reason so the caller (CLI or web API) can attach a user-facing caveat to the
     final answer. The generation itself is left untouched.
     """
 

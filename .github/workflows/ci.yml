@@ -11,10 +11,12 @@
 # (evals/run_eval.py) costs real API money; both are deliberately excluded from
 # CI.
 #
-# lint: runs ruff (lint + format check) and mypy (scoped to graph/engine.py,
-# graph/config.py, graph/formatting.py, graph/state.py, graph/consts.py).
-# No API keys required. Runs in parallel with mocked-tests so test feedback
-# is never delayed by lint failures.
+# lint: runs ruff (lint + format check) and mypy. The mypy scope is the
+# [tool.mypy] files list in pyproject.toml — the engine-API surface
+# (graph/engine.py, graph/config.py, graph/formatting.py, graph/state.py,
+# graph/consts.py) plus the five server/*.py modules. No API keys required.
+# Runs in parallel with mocked-tests so test feedback is never delayed by
+# lint failures.
 #
 # frontend: installs the committed npm dependency graph with Node 20, then
 # type-checks, tests, and builds the Vite application without watch mode.

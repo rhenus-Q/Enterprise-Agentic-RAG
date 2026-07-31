@@ -66,7 +66,7 @@ Example:
 * `uv run ruff format --check .` — passed.
 * `uv run mypy` — passed.
 * `uv run pytest tests/evals/ -q` — passed.
-* `uv run pytest tests/node/ tests/graph/ tests/evals/ -q` — passed.
+* `uv run pytest tests/ --ignore=tests/chains/ -q` — passed.
 * `uv run python evals/run_eval.py --validate-only` — passed.
 
 If full eval was run, include:
