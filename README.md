@@ -10,6 +10,50 @@ This project implements an internal-document Q&A assistant as an **agentic RAG w
 
 The knowledge base is a **synthetic enterprise corpus**: six fictional AcmeCorp internal documents (VPN access policy, expense reimbursement policy, security incident response playbook, on-call & escalation policy, data retention policy, employee onboarding guide) under [`data/acmecorp_internal_docs/`](data/acmecorp_internal_docs/). The documents are entirely fictional — no real company data — but written with realistic structure (effective dates, owners, thresholds, SLAs, escalation paths, exceptions), so privacy mode, provenance, and the quality gates operate on enterprise-shaped content rather than tutorial pages.
 
+## Product Tour
+
+The web workspace exposes the same Agentic RAG graph through three focused views:
+**Ask**, **Documents**, and **Runs**. OpenAI mode supports policy-controlled web
+fallback, while Ollama mode keeps model inference, embeddings, and retrieval on the
+configured local-provider boundary.
+
+**1. OpenAI workspace with web fallback controls**
+
+The main workspace surfaces suggested enterprise questions, optional web search, and
+the per-run fallback policy without exposing graph internals to the user.
+
+![OpenAI Ask workspace with web search and fallback policy controls](docs/assets/screenshots/openai/openai-home-web-enabled.png)
+
+**2. Grounded answer, evidence, and agent execution**
+
+A completed run presents the answer beside its node timeline and operational counters,
+then links it to the local source documents used as evidence.
+
+![Completed OpenAI RAG answer with execution timeline, counters, and evidence sources](docs/assets/screenshots/openai/openai-complete-rag-run.png)
+
+**3. Metadata-only run observability**
+
+The Runs view records provider, duration, retries, node timings, stop reason, counters,
+and evidence labels while keeping answers, document bodies, prompts, and raw graph state
+out of history.
+
+![OpenAI run history with metadata-only execution details](docs/assets/screenshots/openai/openai-run-history.png)
+
+**4. Fully local Ollama workspace**
+
+Local-provider mode visibly disables web search and locks the fallback control through
+runtime policy, preserving the configured Ollama-compatible endpoint as the deployment
+trust boundary.
+
+![Ollama Ask workspace with web search disabled by runtime policy](docs/assets/screenshots/ollama/ollama-home-local-mode.png)
+
+**5. Provider-scoped local retrieval index**
+
+The Documents view confirms that the Ollama deployment uses its own Chroma collection
+and validates the stored embedding provider and model before retrieval.
+
+![Ollama document index health and embedding compatibility](docs/assets/screenshots/ollama/ollama-index-health.png)
+
 ## Key Features
 
 * **Question routing** — an LLM router sends knowledge-base questions to vector retrieval and out-of-scope questions straight to web search.
