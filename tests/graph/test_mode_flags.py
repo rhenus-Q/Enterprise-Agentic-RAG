@@ -37,7 +37,7 @@ from graph.config import (
     privacy_mode,
     web_search_enabled,
 )
-from graph.consts import RETRIEVE, WEBSEARCH
+from graph.consts import RETRIEVE, STOP_REASON_BUDGET_EXHAUSTED, WEBSEARCH
 from graph.engine import AnswerOptions, answer_question, seed_state
 
 TRUTHY = ["true", "1", "yes", "on", "TRUE", "  Yes  ", "ON"]
@@ -461,3 +461,68 @@ def test_validate_only_bypasses_preflight_with_an_invalid_flag(monkeypatch, caps
 
     assert run_eval_main(["--validate-only"]) == 0
     assert "Dataset OK" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# CLI entry point (main.main())
+# ---------------------------------------------------------------------------
+# The startup checks above decide what main() does before its loop; these two
+# tests cover the loop itself, the shipped surface both of them end in.
+
+
+def _cli_tripwire(*_args, **_kwargs):
+    raise AssertionError("main() must not reach this after a failed startup check")
+
+
+def test_cli_prints_the_formatted_answer_with_the_caveat_above_the_sources(monkeypatch, capsys):
+    # format_answer is well covered on its own; what is not is how main()
+    # applies it. A regression that printed the caveat below the Sources
+    # section would make a degraded answer look verified.
+    monkeypatch.setenv("WEB_SEARCH_ENABLED", "true")  # keep the privacy banner out of the way
+    monkeypatch.setattr(main_module, "run_startup_preflight", lambda: None)
+
+    replies = iter(["  What is the VPN policy?  ", "", "exit"])
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(replies))
+
+    asked = []
+    raw_state = {
+        "generation": "ANSWER TEXT",
+        "stop_reason": STOP_REASON_BUDGET_EXHAUSTED,
+        "documents": [Document(page_content="chunk", metadata={"title": "VPN Access Policy"})],
+    }
+
+    def fake_answer_question(question):
+        asked.append(question)
+        return SimpleNamespace(raw_state=raw_state)
+
+    monkeypatch.setattr(main_module, "answer_question", fake_answer_question)
+
+    exit_code = main_module.main()
+
+    out = capsys.readouterr().out
+    note = main_module.STOP_REASON_NOTES[STOP_REASON_BUDGET_EXHAUSTED]
+
+    assert exit_code == 0
+    assert asked == ["What is the VPN policy?"]  # stripped; blank input and "exit" never run
+    assert out.index("ANSWER TEXT") < out.index(note) < out.index(main_module.SOURCES_HEADER)
+    assert "- Local corpus: VPN Access Policy" in out
+    assert "Bye." in out
+
+
+def test_cli_stops_on_a_failed_startup_check_without_running_the_graph(monkeypatch, capsys):
+    def failing_preflight():
+        raise main_module.PreflightError(
+            "Local chat model 'test-chat:1b' is not installed at http://localhost:11434."
+        )
+
+    monkeypatch.setattr(main_module, "run_startup_preflight", failing_preflight)
+    monkeypatch.setattr(main_module, "answer_question", _cli_tripwire)
+    monkeypatch.setattr("builtins.input", _cli_tripwire)
+
+    exit_code = main_module.main()
+
+    out = capsys.readouterr().out
+
+    assert exit_code == 1
+    assert "Startup check failed" in out
+    assert "is not installed" in out  # the actionable message reaches the operator

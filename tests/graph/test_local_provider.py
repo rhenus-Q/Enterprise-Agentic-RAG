@@ -24,6 +24,9 @@ success criterion of local mode.
 """
 
 import importlib
+import os
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -249,6 +252,54 @@ def test_no_chain_module_constructs_a_provider_client_directly():
             offenders.append(module_name)
 
     assert offenders == []
+
+
+# The probe runs in a fresh interpreter on purpose: in this process the modules
+# are already imported, so only a cold import proves what an import does. It is
+# also why the check cannot use importlib.reload() -- reloading a chain module
+# would leave graph.graph bound to the pre-reload factory object, whose cache no
+# fixture clears afterwards.
+_IMPORT_PROBE = """
+import importlib
+
+for name in ("graph.graph", "graph.nodes", "graph.chains", "graph.engine", "ingestion", "main"):
+    importlib.import_module(name)
+
+constructed = [
+    module + "." + factory
+    for module, factory in %s
+    if getattr(importlib.import_module(module), factory).cache_info().currsize
+]
+print("CONSTRUCTED:" + ",".join(constructed))
+"""
+
+
+def test_importing_the_project_constructs_no_external_client():
+    # CLAUDE.md's import rule, made executable: every external client lives
+    # behind a lazy @lru_cache factory, so importing any module must leave all
+    # of those caches empty. An eagerly built client that does not validate
+    # credentials at construction time (Chroma, a local Ollama client) would
+    # otherwise pass CI while breaking the invariant the whole mocked test
+    # strategy rests on. The API-key variables are stripped from the child
+    # environment as well, so CI additionally proves the imports need no keys.
+    factories = list(CHAIN_FACTORIES) + [
+        ("graph.chains._llm", "get_chat_model"),
+        ("ingestion", "get_retriever"),
+    ]
+    environment = {key: value for key, value in os.environ.items() if not key.endswith("_API_KEY")}
+
+    completed = subprocess.run(
+        [sys.executable, "-c", _IMPORT_PROBE % (factories,)],
+        cwd=str(ingestion_module.PROJECT_ROOT),
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    reported = [line for line in completed.stdout.splitlines() if line.startswith("CONSTRUCTED:")]
+    assert reported == ["CONSTRUCTED:"], completed.stdout
 
 
 def test_get_chat_model_returns_the_openai_client_by_default(monkeypatch):

@@ -7,6 +7,10 @@ no LLM is involved, no document content is exposed. Local corpus documents
 and the web supplement are distinguished by the shared WEB_SEARCH_SOURCE
 metadata marker.
 
+The last section covers the other end of the same contract: the pure helpers in
+ingestion.py that WRITE that metadata (title, source key, chunk ids), so the
+producer and the consumer of a citation are pinned in one place.
+
 All external seams are mocked -- no API keys or network required.
 """
 
@@ -16,6 +20,7 @@ from types import SimpleNamespace
 from langchain_core.documents import Document
 
 import graph.graph as graph_module
+import ingestion as ingestion_module
 from graph.consts import (
     STOP_REASON_WEB_SEARCH_ERROR,
     WEB_SEARCH_SOURCE,
@@ -373,3 +378,90 @@ def test_app_web_routed_answer_cites_actual_pages_when_urls_present(monkeypatch)
     assert "- Web search: Big Story — https://news.example/story" in formatted
     assert '"current events"' not in formatted  # page-level beats query-level
     assert "Local corpus" not in formatted
+
+
+# ---------------------------------------------------------------------------
+# ingestion.py -- the pure helpers that produce the metadata above
+# ---------------------------------------------------------------------------
+# Loading, titling and chunking only: no Chroma, no embeddings, no API keys.
+# The Sources section, /api/documents and the eval harness's provenance checks
+# all read metadata written here, and idempotent re-ingestion is nothing more
+# than _chunk_ids() being deterministic.
+
+
+def test_extract_title_uses_the_h1_heading():
+    text = "---\nfront matter\n---\n\n# VPN Access Policy\n\nBody text.\n"
+
+    assert ingestion_module._extract_title(text, "vpn_policy") == "VPN Access Policy"
+
+
+def test_extract_title_falls_back_when_the_document_has_no_h1():
+    # A "## Section" heading is not an H1, so the fallback (the file stem) is
+    # what ends up in the Sources line.
+    text = "no heading here\n\n## Section\n"
+
+    assert ingestion_module._extract_title(text, "vpn_policy") == "vpn_policy"
+
+
+def test_corpus_source_key_is_a_repo_relative_posix_path():
+    path = ingestion_module.CORPUS_DIR / "vpn_policy.md"
+
+    assert ingestion_module.corpus_source_key(path) == "data/acmecorp_internal_docs/vpn_policy.md"
+
+
+def test_corpus_source_key_outside_the_repository_degrades_to_the_file_name(tmp_path):
+    # The key is a public identifier served over HTTP, so a corpus outside the
+    # repo must not leak the server's filesystem layout.
+    outside = tmp_path / "somewhere" / "private" / "doc.md"
+
+    assert ingestion_module.corpus_source_key(outside) == "doc.md"
+
+
+def test_load_documents_attaches_full_provenance_metadata(monkeypatch, tmp_path):
+    (tmp_path / "vpn_policy.md").write_text("# VPN Access Policy\n\nBody.\n", encoding="utf-8")
+    (tmp_path / "unlisted_note.md").write_text("plain note\n", encoding="utf-8")
+    monkeypatch.setattr(ingestion_module, "CORPUS_DIR", tmp_path)
+
+    metadata = {doc.metadata["source"]: doc.metadata for doc in ingestion_module.load_documents()}
+
+    assert set(metadata) == {"vpn_policy.md", "unlisted_note.md"}
+    assert metadata["vpn_policy.md"]["title"] == "VPN Access Policy"
+    assert metadata["vpn_policy.md"]["document_category"] == "it_security"
+    # Unmapped file: title falls back to the stem, category to the generic one.
+    assert metadata["unlisted_note.md"]["title"] == "unlisted_note"
+    assert metadata["unlisted_note.md"]["document_category"] == "internal_document"
+    assert {entry["source_type"] for entry in metadata.values()} == {"local_corpus"}
+
+
+def test_metadata_survives_chunking():
+    # Provenance is attached per document but cited per chunk, so every chunk
+    # has to carry the whole metadata dict unchanged.
+    original = {
+        "source": "data/acmecorp_internal_docs/vpn_policy.md",
+        "title": "VPN Access Policy",
+        "source_type": "local_corpus",
+        "document_category": "it_security",
+    }
+
+    chunks = ingestion_module.split_documents(
+        [Document(page_content="sentence. " * 400, metadata=dict(original))]
+    )
+
+    assert len(chunks) > 1  # the document really was split
+    assert all(chunk.metadata == original for chunk in chunks)
+
+
+def test_chunk_ids_are_deterministic_and_unique_within_a_document():
+    # "Re-running ingestion never duplicates chunks" IS this determinism: the
+    # same corpus must produce the same ids so the rebuild replaces rows.
+    splits = [
+        Document(page_content="a", metadata={"source": "docs/a.md"}),
+        Document(page_content="b", metadata={"source": "docs/a.md"}),
+        Document(page_content="c", metadata={"source": "docs/b.md"}),
+    ]
+
+    ids = ingestion_module._chunk_ids(splits)
+
+    assert ids == ["docs/a.md::chunk-0", "docs/a.md::chunk-1", "docs/b.md::chunk-0"]
+    assert ingestion_module._chunk_ids(splits) == ids
+    assert len(set(ids)) == len(ids)

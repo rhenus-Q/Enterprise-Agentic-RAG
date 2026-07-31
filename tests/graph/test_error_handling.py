@@ -15,6 +15,7 @@ from types import SimpleNamespace
 import pytest
 from langchain_core.documents import Document
 
+import graph.consts as consts_module
 import graph.graph as graph_module
 from graph.consts import (
     RETRIEVE,
@@ -30,6 +31,7 @@ from graph.nodes.tool_error_notice import tool_error_notice
 from main import (
     GENERATION_ERROR_NOTE,
     RETRIEVAL_ERROR_NOTE,
+    STOP_REASON_NOTES,
     TOOL_ERROR_NOTE,
     WEB_SEARCH_ERROR_NOTE,
     format_answer,
@@ -463,3 +465,37 @@ def test_app_successful_answer_keeps_retrieval_error(monkeypatch):
 
     assert result["generation"] == "FINAL ANSWER"
     assert result["stop_reason"] == STOP_REASON_RETRIEVAL_ERROR
+
+
+# ---------------------------------------------------------------------------
+# stop_reason vocabulary <-> user-facing caveats
+# ---------------------------------------------------------------------------
+
+
+def _declared_stop_reasons():
+    """
+    Every stop_reason value defined in graph/consts.py, read from the constants
+    instead of hand-listed, so a newly added reason joins these checks by
+    itself rather than waiting for someone to remember this file.
+    """
+
+    return {value for name, value in vars(consts_module).items() if name.startswith("STOP_REASON_")}
+
+
+def test_every_stop_reason_has_a_caveat_note():
+    # A reason with no note makes STOP_REASON_NOTES.get() return None, so the
+    # degraded answer prints with no caveat at all -- indistinguishable from a
+    # clean one, which is the exact outcome the stop_reason design exists to
+    # prevent. The reverse direction matters too: a note for a value no node
+    # can record is dead text nobody will ever see.
+    assert _declared_stop_reasons() == set(STOP_REASON_NOTES)
+
+
+@pytest.mark.parametrize("stop_reason", sorted(_declared_stop_reasons()))
+def test_format_answer_appends_the_caveat_for_every_stop_reason(stop_reason):
+    # Checked through the public formatter, the way the CLI, the eval harness
+    # and the API consume it: the caveat is present and sits directly under the
+    # answer, never below the Sources section.
+    formatted = format_answer({"generation": "ANSWER", "stop_reason": stop_reason, "documents": []})
+
+    assert formatted == f"ANSWER\n\n{STOP_REASON_NOTES[stop_reason]}"

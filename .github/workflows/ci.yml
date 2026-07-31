@@ -1,12 +1,15 @@
 # CI: three parallel jobs, all keys-free.
 #
-# mocked-tests: runs the fully mocked test suites (tests/node/ + tests/graph/ +
-# tests/evals/) on every push and pull request. These suites mock every external
-# dependency at its lazy factory seam (tests/evals/ covers only the eval
-# harness's pure helpers), so the job needs NO API keys (OpenAI / Tavily /
-# LangSmith). The integration suite (tests/chains/) calls the real model and the
-# full eval run (evals/run_eval.py) costs real API money; both are deliberately
-# excluded from CI.
+# mocked-tests: runs every fully mocked test suite (tests/node/ + tests/graph/ +
+# tests/evals/ + tests/server/) on every push and pull request. The suites are
+# collected by ignoring tests/chains/ rather than by listing directories, so a
+# newly added mocked suite runs in CI automatically instead of passing locally
+# and silently never running here. These suites mock every external dependency
+# at its lazy factory seam (tests/evals/ covers only the eval harness's pure
+# helpers), so the job needs NO API keys (OpenAI / Tavily / LangSmith). The
+# integration suite (tests/chains/) calls the real model and the full eval run
+# (evals/run_eval.py) costs real API money; both are deliberately excluded from
+# CI.
 #
 # lint: runs ruff (lint + format check) and mypy (scoped to graph/engine.py,
 # graph/config.py, graph/formatting.py, graph/state.py, graph/consts.py).
@@ -41,7 +44,7 @@ jobs:
         run: uv sync --locked --group dev
 
       - name: Run mocked test suites (no API keys required)
-        run: uv run pytest tests/node/ tests/graph/ tests/evals/ tests/server/ -q
+        run: uv run pytest tests/ --ignore=tests/chains/ -q
 
   lint:
     runs-on: ubuntu-latest
