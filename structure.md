@@ -503,6 +503,7 @@ Per dependency:
 | Query rewriter (`rewrite_query`) | `search_query=""` → next search uses the original question; loop stays fully gated | yes |
 | Retrieval grader (`grade_documents` / `websearch`) | Ungraded chunk/result dropped; remaining items still graded; web fallback requested for dropped local chunks | yes |
 | Hallucination / answer grader (`grade_generation`) | `tool_error` → notice node → `END`; answer delivered explicitly unverified | no |
+| Question router (`route_question`) | Route to `RETRIEVE` (the destination privacy mode returns) — no `stop_reason`: the entry point is a pure edge with no node ahead of it to record one | yes |
 
 All privacy-mode guarantees hold on every failure path (a retrieval failure
 in privacy mode still never calls the router, Tavily, or the rewriter).

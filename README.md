@@ -23,7 +23,7 @@ The knowledge base is a **synthetic enterprise corpus**: six fictional AcmeCorp 
 * **Bounded self-correction with honest failure reporting** — a `retries` counter in graph state caps the regenerate/web-search loop (`MAX_RETRIES = 5`), the final allowed generation is still fully graded before the protective stop, and if it still fails a gate the answer is delivered with an explicit warning instead of being presented as successful.
 * **Meaningful retries** — each retry changes the input instead of replaying it at `temperature=0`: a failed grounding check injects a corrective instruction into the next generation, and a failed usefulness check rewrites the web-search query (with the fresh web supplement *replacing* the stale one, not stacking duplicates).
 * **Per-run cost budget** — counted LLM calls, web searches, and web-result grades are tracked in state and capped by env-configurable budgets; an exhausted budget stops the run safely with an explicit caveat instead of spending indefinitely.
-* **Graceful degradation on external failures** — a failing dependency (Chroma retriever, Tavily, the generation LLM, any grader, the query rewriter) never crashes the graph: the run degrades (web fallback, local-only answer, original-question search) or stops safely, records a machine-readable `stop_reason`, and the CLI appends an honest caveat. Ungraded content is never trusted, and an answer whose verification failed is never presented as verified.
+* **Graceful degradation on external failures** — a failing dependency (Chroma retriever, Tavily, the generation LLM, the question router, any grader, the query rewriter) never crashes the graph: the run degrades (web fallback, local-only answer, original-question search) or stops safely, records a machine-readable `stop_reason`, and the CLI appends an honest caveat. Ungraded content is never trusted, and an answer whose verification failed is never presented as verified.
 * **Answer provenance** — every answer built from documents ends with a deterministic `Sources:` section distinguishing local corpus documents (by title or URL) from the web-search supplement. Web provenance is **page-level**: each relevant result's title and URL are preserved and cited (`Web search: <title> — <url>`), falling back to the query-level citation when Tavily returns no URLs. Formatting is metadata-only after the graph finishes — no LLM-generated citations, no prompt changes, no document content exposed.
 * **Side-effect-free imports** — every external client (`ChatOpenAI`, `OpenAIEmbeddings`, `Chroma`, Tavily) is built inside a lazy `@lru_cache` factory. Importing any module requires no API keys and no network, which makes the whole graph unit-testable with plain `monkeypatch`.
 * **Two-tier test suite** — fully mocked node tests that run with zero API keys, plus clearly separated integration tests against the real model.
@@ -512,6 +512,11 @@ a caveat appended by the CLI:
 | Query rewriter                               | Fall back to searching with the original question; the retry loop continues fully gated                        | `tool_error`       |
 | Relevance grader (local chunk or web result) | Drop the ungraded content — unvetted content never reaches generation; the rest continues                      | `tool_error`       |
 | Hallucination / answer grader                | Stop and deliver the answer explicitly flagged as unverified                                                   | `tool_error`       |
+| Question router                              | Route to vector retrieval — the conservative destination privacy mode also uses; the run stays fully gated     | *(none)*           |
+
+Routing is the one failure without a `stop_reason`: it happens on the graph's
+pure conditional entry point, which cannot write state because no node runs
+before it.
 
 Degraded runs keep their `stop_reason` to the end with one deliberate
 exception: a *transient* `tool_error` (a dropped chunk/result or a failed

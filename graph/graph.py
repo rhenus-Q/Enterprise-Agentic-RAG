@@ -59,13 +59,14 @@ answer. The run ends honestly instead of looping toward a misleading
 max-retries warning.
 
 Graceful degradation: external dependency failures (Chroma retriever, Tavily,
-the generation LLM, the graders, the query rewriter) never crash the graph.
-Nodes catch the failure at the call site, degrade or stop safely, and record a
-stop_reason (retrieval_error / web_search_error / generation_error /
-tool_error). Grader failures inside the pure grade_generation edge route to
-the tool_error notice node; a failed generation routes straight to END,
-ungraded. Console banners log only the exception type, never messages that
-could carry secrets.
+the generation LLM, the question router, the graders, the query rewriter) never
+crash the graph. Nodes catch the failure at the call site, degrade or stop
+safely, and record a stop_reason (retrieval_error / web_search_error /
+generation_error / tool_error). Grader failures inside the pure grade_generation
+edge route to the tool_error notice node; a failed generation routes straight to
+END, ungraded. A router failure degrades to retrieval without a stop_reason —
+the entry point is a pure edge with no node ahead of it to record one. Console
+banners log only the exception type, never messages that could carry secrets.
 """
 
 from dotenv import load_dotenv
@@ -168,6 +169,13 @@ def route_question(state: GraphState) -> str:
 
     With web search disabled (privacy mode), skip the router LLM entirely: every
     question goes to vector retrieval and never reaches an external service.
+
+    Router failure degrades to RETRIEVE rather than crashing: this is the first
+    external call of every non-privacy run, and it sits on a pure conditional
+    entry point that cannot write a stop_reason (there is no node ahead of it).
+    RETRIEVE is the conservative destination — the same one privacy mode
+    returns — so a routing failure keeps the question off a third-party search
+    service and the run still degrades through every existing gate.
     """
 
     print("---ROUTE QUESTION---")
@@ -177,7 +185,13 @@ def route_question(state: GraphState) -> str:
         return RETRIEVE
 
     question = state["question"]
-    route = get_question_router().invoke({"question": question})
+
+    try:
+        route = get_question_router().invoke({"question": question})
+    except Exception as exc:
+        # Log only the exception type: messages may carry secrets.
+        print(f"---ROUTER FAILED ({type(exc).__name__}), ROUTE TO RETRIEVE---")
+        return RETRIEVE
 
     if route.datasource == WEBSEARCH:
         print("---ROUTE TO WEB SEARCH---")

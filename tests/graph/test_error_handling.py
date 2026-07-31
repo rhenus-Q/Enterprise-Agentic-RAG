@@ -23,7 +23,7 @@ from graph.consts import (
     STOP_REASON_TOOL_ERROR,
     STOP_REASON_WEB_SEARCH_ERROR,
 )
-from graph.graph import grade_generation
+from graph.graph import grade_generation, route_question
 from graph.nodes.clear_transient_tool_error import clear_transient_tool_error
 from graph.nodes.generate import GENERATION_FAILED_ANSWER
 from graph.nodes.tool_error_notice import tool_error_notice
@@ -45,6 +45,14 @@ def _patch_router(monkeypatch, datasource):
         graph_module,
         "get_question_router",
         lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(datasource=datasource)),
+    )
+
+
+def _patch_raising_router(monkeypatch):
+    monkeypatch.setattr(
+        graph_module,
+        "get_question_router",
+        lambda: SimpleNamespace(invoke=lambda p: (_ for _ in ()).throw(RuntimeError("down"))),
     )
 
 
@@ -193,6 +201,20 @@ def _initial_state(**overrides):
 
 
 # ---------------------------------------------------------------------------
+# route_question error routing (pure entry edge)
+# ---------------------------------------------------------------------------
+
+
+def test_router_failure_routes_to_retrieve(monkeypatch):
+    # The router is the first external call of a non-privacy run and sits on a
+    # pure edge that cannot record a stop_reason; a failure must degrade to the
+    # conservative local path instead of escaping the graph.
+    _patch_raising_router(monkeypatch)
+
+    assert route_question(_initial_state()) == RETRIEVE  # must not raise
+
+
+# ---------------------------------------------------------------------------
 # grade_generation error routing (pure reads)
 # ---------------------------------------------------------------------------
 
@@ -282,6 +304,18 @@ def test_format_answer_no_caveat_on_success():
 # ---------------------------------------------------------------------------
 # Compiled graph end-to-end
 # ---------------------------------------------------------------------------
+
+
+def test_app_survives_router_failure_and_answers_from_local_documents(monkeypatch):
+    _patch_raising_router(monkeypatch)
+    _patch_graders(monkeypatch, grounded=True, useful=True)
+    web_calls = _patch_all_node_seams(monkeypatch)
+
+    result = graph_module.app.invoke(_initial_state())  # must not raise
+
+    assert result["generation"] == "FINAL ANSWER"
+    assert web_calls == []  # degraded to the local corpus, not to a third party
+    assert result["stop_reason"] == ""  # the entry edge cannot record one
 
 
 def test_app_survives_retriever_failure_and_falls_back_to_web(monkeypatch):
