@@ -2,9 +2,10 @@
 formatting.py
 
 Deterministic presentation of a final graph state: stop-reason caveats and
-the "Sources:" provenance section. Shared by the CLI (main.py), the eval
-harness (evals/run_eval.py), and the engine API (graph/engine.py), so none
-of them duplicate formatting logic and evals never import CLI-only code.
+the "Sources:" provenance section. Shared by the CLI (main.py), the web API
+(server/app.py), the eval harness (evals/run_eval.py), and the engine API
+(graph/engine.py), so none of them duplicate formatting logic and evals
+never import CLI-only code.
 
 Pure module: no clients, no env reads, no LLM — only string building from
 state and Document metadata.

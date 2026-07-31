@@ -591,7 +591,7 @@ the execution timeline renders post-hoc.
 | Suite | What it covers | External calls |
 |---|---|---|
 | `tests/node/` | Each node's state in/out behavior, the web-result relevance gate, defensive Tavily parsing, and graceful degradation when each node's external dependency raises | None — every dependency mocked at its lazy `get_*()` factory seam |
-| `tests/graph/` | The three routing functions (every branch incl. defaults), privacy toggle, stop reasons, budget limits and counters, caveat formatting, external-failure degradation (incl. failed-generation-is-never-graded), and compiled-graph end-to-end runs that drive real retry loops to exhaustion and assert negative guarantees (no router / web / rewriter calls in privacy mode; no spend past a budget) | None — fully mocked |
+| `tests/graph/` | Graph routing and compiled runs, privacy and fallback behavior, stop reasons and budgets, failure degradation and caveat formatting, engine/CLI behavior, ingestion/provenance pure helpers, and import side-effect purity | None — fully mocked |
 | `tests/chains/` | The six LCEL chains against the real `gpt-5-mini` (prompt + structured-output behavior) | **Real OpenAI API** — gated by the `requires_openai` marker; do not run without explicit approval |
 | `tests/evals/` | The eval harness's pure helpers: dataset loading/validation (incl. the shipped dataset), per-row checks, metrics, report rendering | None — pure functions |
 | `tests/server/` | The FastAPI layer (§14): ask shape and citation building, cancellation, status/index compatibility and sanitization, documents listing, run store bounds and 404s, and the full error map | None — `graph.engine.answer_question` is monkeypatched; no keys, no network |
@@ -609,9 +609,9 @@ state seeding is never duplicated; privacy-mode rows pass
 `web_fallback_policy`. The full run needs real API keys and is deliberately
 excluded from CI; `--validate-only` checks the dataset with no API calls.
 
-Run the mocked suites with
-`uv run pytest tests/node/ tests/graph/ tests/evals/ tests/server/ -v`
-(no API keys required). The frontend's critical-state suite runs separately
+Run all keys-free Python tests with
+`uv run pytest tests/ --ignore=tests/chains/ -q`
+(provider-backed chain tests excluded). The frontend's critical-state suite runs separately
 with `cd frontend; npx vitest run`.
 
 ## 16. Known limitations & future improvements

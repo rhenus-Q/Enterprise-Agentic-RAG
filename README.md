@@ -169,7 +169,7 @@ See [`.env.example`](.env.example) for the full template:
 | `LOCAL_CHAT_MODEL`                                                                  | Optional (default `qwen3:4b-instruct-2507-q4_K_M`) | Chat model used when `LLM_PROVIDER=ollama`; must be installed on the endpoint                                                                                      |
 | `LOCAL_EMBEDDING_MODEL`                                                             | Optional (default `qwen3-embedding:0.6b`) | Embedding model used when `LLM_PROVIDER=ollama`; changing it requires re-running ingestion                                                                             |
 | `OLLAMA_BASE_URL`                                                                   | Optional (default `http://localhost:11434`) | Ollama-compatible endpoint serving both local models                                                                                                                |
-| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT` | Optional                              | LangSmith tracing for LangChain/LangGraph runs. Set `LANGSMITH_TRACING=true`, provide a LangSmith API key, and choose a project name such as `enterprise-ai-automation-agent`. Ignored when `WEB_SEARCH_ENABLED=false` (privacy mode suppresses trace export). |
+| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT` | Optional                              | LangSmith tracing for LangChain/LangGraph runs. Set `LANGSMITH_TRACING=true`, provide a LangSmith API key, and choose a project name such as `agentic-rag-assistant`. Ignored when `WEB_SEARCH_ENABLED=false` (privacy mode suppresses trace export). |
 
 `.env` is gitignored; only `.env.example` is committed.
 
@@ -423,7 +423,7 @@ tracing can be enabled through environment variables:
 LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=your_langsmith_api_key
 LANGSMITH_ENDPOINT=https://api.smith.langchain.com
-LANGSMITH_PROJECT=enterprise-ai-automation-agent
+LANGSMITH_PROJECT=agentic-rag-assistant
 ```
 
 > **Privacy mode overrides this.** When `WEB_SEARCH_ENABLED=false`, no trace is
@@ -654,6 +654,9 @@ Things worth knowing before pointing anything real at it:
 ## Run the tests
 
 ```powershell
+# All keys-free Python tests — excludes provider-backed chain tests
+uv run pytest tests/ --ignore=tests/chains/ -q
+
 # Unit tests — fully mocked, NO API keys required
 uv run pytest tests/node/ -v
 

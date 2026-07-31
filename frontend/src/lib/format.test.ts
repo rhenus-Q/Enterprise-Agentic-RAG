@@ -4,8 +4,8 @@ import { formatCategoryName, formatProviderName } from "./format";
 
 describe("formatCategoryName", () => {
   it.each([
-    ["it_security", "IT_security"],
-    ["IT_SECURITY", "IT_security"],
+    ["it_security", "IT Security"],
+    ["IT_SECURITY", "IT Security"],
     ["finance", "Finance"],
     ["operations", "Operations"],
     ["compliance", "Compliance"],

@@ -4,7 +4,7 @@ engine.py
 Canonical programmatic entry point for the Agentic RAG system.
 
 `answer_question()` is the one function every caller — the CLI (main.py),
-the eval harness (evals/run_eval.py), tests, and future workflow automation —
+the web API (server/app.py), the eval harness (evals/run_eval.py), and tests —
 uses to run a question through the compiled graph. It owns the two pieces of
 logic that used to be duplicated per caller:
 

@@ -51,7 +51,7 @@ export function formatProviderName(provider: string): string {
 }
 
 const CATEGORY_DISPLAY_NAMES: Record<string, string> = {
-  it_security: "IT_security",
+  it_security: "IT Security",
   finance: "Finance",
   operations: "Operations",
   compliance: "Compliance",
