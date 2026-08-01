@@ -2,7 +2,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { apiClient, demoScenarioController } from "./api/client";
 import type { MockScenario } from "./api/mock";
-import { normalizeApiError, type ApiError, type RuntimeStatus } from "./api/types";
+import {
+  normalizeApiError,
+  type ApiClient,
+  type ApiError,
+  type RuntimeStatus,
+} from "./api/types";
 import { ErrorState } from "./components/ErrorState";
 import { RuntimeBadge } from "./components/RuntimeBadge";
 import { AskPage } from "./pages/AskPage";
@@ -17,12 +22,17 @@ const pages: Array<{ id: Page; label: string }> = [
   { id: "runs", label: "Runs" },
 ];
 
-export default function App() {
+interface AppProps {
+  api?: ApiClient;
+}
+
+export default function App({ api = apiClient }: AppProps) {
   const [page, setPage] = useState<Page>("ask");
   const previousPage = useRef<Page>(page);
   const [status, setStatus] = useState<RuntimeStatus | null>(null);
   const [statusError, setStatusError] = useState<ApiError | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
+  const [statusRequestVersion, setStatusRequestVersion] = useState(0);
   const [scenarioVersion, setScenarioVersion] = useState(0);
   const [scenario, setScenario] = useState<MockScenario | null>(
     demoScenarioController?.getScenario() ?? null,
@@ -45,7 +55,7 @@ export default function App() {
     setStatusLoading(true);
     setStatusError(null);
 
-    apiClient
+    api
       .getStatus()
       .then((nextStatus) => {
         if (active) {
@@ -67,7 +77,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [scenarioVersion]);
+  }, [api, scenarioVersion, statusRequestVersion]);
 
   useLayoutEffect(() => {
     if (previousPage.current === page) {
@@ -84,6 +94,12 @@ export default function App() {
       setPage(option.page);
     }
     demoScenarioController?.setScenario(nextScenario);
+  }
+
+  function retryStatus() {
+    if (!statusLoading) {
+      setStatusRequestVersion((version) => version + 1);
+    }
   }
 
   return (
@@ -151,7 +167,13 @@ export default function App() {
 
       {statusError && (
         <div className="global-notice">
-          <ErrorState error={statusError} compact />
+          <ErrorState
+            error={statusError}
+            compact
+            actionLabel="Retry"
+            onAction={retryStatus}
+            actionDisabled={statusLoading}
+          />
         </div>
       )}
 
@@ -161,7 +183,7 @@ export default function App() {
             and drop its answer when the user looks at another tab. Documents
             and Runs stay conditional, so they keep refetching on tab entry. */}
         <AskPage
-          api={apiClient}
+          api={api}
           status={status}
           statusLoading={statusLoading}
           hidden={page !== "ask"}
@@ -170,9 +192,9 @@ export default function App() {
         />
 
         {page === "documents" && (
-          <DocumentsPage api={apiClient} key={`documents-${scenarioVersion}`} />
+          <DocumentsPage api={api} key={`documents-${scenarioVersion}`} />
         )}
-        {page === "runs" && <RunsPage api={apiClient} key={`runs-${scenarioVersion}`} />}
+        {page === "runs" && <RunsPage api={api} key={`runs-${scenarioVersion}`} />}
       </main>
     </div>
   );

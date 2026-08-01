@@ -47,6 +47,17 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     payload = await response.json();
   } catch {
+    if (init?.signal?.aborted) {
+      throw requestCancelledError();
+    }
+
+    if (response.ok) {
+      throw new ApiError("The backend returned an invalid response.", {
+        status: response.status,
+        code: "invalid_response",
+      });
+    }
+
     payload = null;
   }
 

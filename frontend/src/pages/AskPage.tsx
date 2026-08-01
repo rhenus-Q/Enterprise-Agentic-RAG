@@ -3,11 +3,12 @@ import { type FormEvent, useEffect, useRef, useState } from "react";
 import { apiClient } from "../api/client";
 import {
   BACKEND_UNREACHABLE_CODE,
+  ApiError,
   isRequestCancelled,
   isRetryableError,
   normalizeApiError,
+  RUN_STILL_STOPPING_CODE,
   type ApiClient,
-  type ApiError,
   type AskResponse,
   type RuntimeStatus,
   type WebFallbackPolicy,
@@ -37,6 +38,16 @@ function asFallbackPolicy(value: string | null): WebFallbackPolicy | null {
   return value === "conservative" || value === "aggressive" || value === "disabled"
     ? value
     : null;
+}
+
+function runStillStoppingError(): ApiError {
+  return new ApiError("The previous run is still stopping.", {
+    code: RUN_STILL_STOPPING_CODE,
+    payload: {
+      error: RUN_STILL_STOPPING_CODE,
+      message: "The previous run is still stopping. Please try again shortly.",
+    },
+  });
 }
 
 // Drawn from the shipped AcmeCorp corpus so a first-time visitor can reach a
@@ -74,6 +85,7 @@ export function AskPage({
   const [error, setError] = useState<ApiError | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [waitingForIdle, setWaitingForIdle] = useState(false);
   const [suggestionsExpanded, setSuggestionsExpanded] = useState(true);
   // Identifies the run that owns the UI. A stopped or superseded run clears
   // it, which is how a late-arriving response knows not to claim the composer.
@@ -177,16 +189,58 @@ export function AskPage({
     // answers. Aborting locally is not enough: the graph keeps running, keeps
     // holding the single-flight slot, and the next question would collide
     // with it.
+    let releaseComposer = true;
     setStopping(true);
     try {
-      await api.cancelRun();
+      const result = await api.cancelRun();
+      if (!result.idle) {
+        releaseComposer = false;
+        setWaitingForIdle(true);
+        setError(runStillStoppingError());
+      } else {
+        setWaitingForIdle(false);
+        setError(null);
+      }
     } catch {
       // Best effort — a failed cancel must still release the composer rather
       // than strand the user in a state with no way out.
+      setWaitingForIdle(false);
+      setError(null);
     } finally {
       run.abort();
       setStopping(false);
-      setSubmitting(false);
+      if (releaseComposer) {
+        setSubmitting(false);
+      }
+    }
+  }
+
+  async function retryStopReadiness() {
+    if (!waitingForIdle || stopping) {
+      return;
+    }
+
+    let releaseComposer = true;
+    setStopping(true);
+    try {
+      const result = await api.cancelRun();
+      if (!result.idle) {
+        releaseComposer = false;
+        setError(runStillStoppingError());
+      } else {
+        setWaitingForIdle(false);
+        setError(null);
+      }
+    } catch {
+      // Preserve the best-effort escape hatch if readiness cannot be checked:
+      // the user must not be left with a permanently locked UI.
+      setWaitingForIdle(false);
+      setError(null);
+    } finally {
+      setStopping(false);
+      if (releaseComposer) {
+        setSubmitting(false);
+      }
     }
   }
 
@@ -293,12 +347,18 @@ export function AskPage({
                 <button
                   className="primary-button is-submitting"
                   type="button"
-                  onClick={() => void stopRun()}
+                  onClick={() => void (waitingForIdle ? retryStopReadiness() : stopRun())}
                   disabled={stopping}
                   aria-busy={true}
                 >
                   <span className="stop-glyph" aria-hidden="true" />
-                  {stopping ? "Stopping…" : "Stop"}
+                  {waitingForIdle
+                    ? stopping
+                      ? "Checking…"
+                      : "Check again"
+                    : stopping
+                      ? "Stopping…"
+                      : "Stop"}
                 </button>
               ) : (
                 <button

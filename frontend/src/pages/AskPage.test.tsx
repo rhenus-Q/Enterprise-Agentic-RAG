@@ -285,6 +285,43 @@ describe("AskPage", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("keeps submission locked when cancellation is accepted but the backend is not idle", async () => {
+    const ask = vi.fn(
+      (_request: AskRequest, options?: AskOptions) =>
+        new Promise<AskResponse>((_resolve, rejectRequest) => {
+          options?.signal?.addEventListener("abort", () => rejectRequest(requestCancelledError()));
+        }),
+    );
+    const api = clientWithAsk(ask);
+    api.cancelRun = vi
+      .fn()
+      .mockResolvedValueOnce({ cancelled: true, idle: false })
+      .mockResolvedValueOnce({ cancelled: false, idle: true });
+
+    render(<AskPage api={api} status={runtimeFixtures.openai} />);
+    enterQuestion();
+    fireEvent.click(askButton());
+    fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+
+    const checkAgain = await screen.findByRole("button", { name: "Check again" });
+    expect((screen.getByLabelText("Question") as HTMLTextAreaElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Ask" })).toBeNull();
+    expect(
+      within(screen.getByRole("alert")).getByText(
+        "The previous run is still stopping. Please try again shortly.",
+      ),
+    ).not.toBeNull();
+
+    fireEvent.click(checkAgain);
+
+    await waitFor(() => {
+      expect(api.cancelRun).toHaveBeenCalledTimes(2);
+      expect(askButton().disabled).toBe(false);
+      expect((screen.getByLabelText("Question") as HTMLTextAreaElement).disabled).toBe(false);
+    });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("counts both the local abort and the backend's 499 as cancellations", () => {
     expect(isRequestCancelled(requestCancelledError())).toBe(true);
     expect(isRequestCancelled(new ApiError("stopped", { code: "run_cancelled" }))).toBe(true);

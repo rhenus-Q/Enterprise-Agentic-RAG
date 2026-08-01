@@ -52,6 +52,31 @@ def test_cancel_with_no_run_in_flight_reports_an_idle_server(monkeypatch):
     assert response.json() == {"cancelled": False, "idle": True}
 
 
+def test_cancel_reports_when_the_run_has_not_finished_unwinding(monkeypatch):
+    _patch_successful_preflight(monkeypatch)
+    application = create_app()
+    cancel_event = threading.Event()
+    seen_timeouts = []
+
+    class BusyLock:
+        def acquire(self, timeout):
+            seen_timeouts.append(timeout)
+            return False
+
+        def release(self):
+            raise AssertionError("a lock that was not acquired must not be released")
+
+    with TestClient(application) as client:
+        application.state.ask_cancel = cancel_event
+        application.state.ask_lock = BusyLock()
+        response = client.post("/api/ask/cancel")
+
+    assert response.status_code == 200
+    assert response.json() == {"cancelled": True, "idle": False}
+    assert cancel_event.is_set()
+    assert len(seen_timeouts) == 1
+
+
 def test_cancel_stops_the_run_and_frees_the_slot_for_the_next_question(monkeypatch):
     """
     The whole point of the endpoint: after a cancel, the next question runs.

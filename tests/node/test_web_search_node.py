@@ -21,13 +21,17 @@ web_search_module = importlib.import_module("graph.nodes.web_search")
 
 
 def _patch_tool(monkeypatch, results):
-    """Patch get_web_search_tool to return a fake tool recording the payload."""
+    """Patch get_web_search_tool to return a fake client recording search options."""
 
     calls = {}
 
     class FakeTool:
-        def invoke(self, payload):
-            calls["payload"] = payload
+        def search(self, query, *, max_results, timeout):
+            calls.update(
+                query=query,
+                max_results=max_results,
+                timeout=timeout,
+            )
             return results
 
     monkeypatch.setattr(web_search_module, "get_web_search_tool", lambda: FakeTool())
@@ -72,7 +76,11 @@ def test_web_search_reads_question_from_state(monkeypatch):
 
     web_search({"question": "What is RAG?", "documents": []})
 
-    assert calls["payload"] == {"query": "What is RAG?"}
+    assert calls == {
+        "query": "What is RAG?",
+        "max_results": web_search_module.TAVILY_MAX_RESULTS,
+        "timeout": web_search_module.TAVILY_REQUEST_TIMEOUT_SECONDS,
+    }
 
 
 def test_web_search_appends_document_built_from_relevant_results(monkeypatch):
@@ -144,7 +152,7 @@ def test_web_search_uses_search_query_when_present(monkeypatch):
 
     web_search({"question": "Q", "search_query": "rewritten query", "documents": []})
 
-    assert calls["payload"] == {"query": "rewritten query"}
+    assert calls["query"] == "rewritten query"
     # Relevance is still graded against the ORIGINAL question (the intent).
     assert grader_calls[0]["question"] == "Q"
 
@@ -155,7 +163,7 @@ def test_web_search_falls_back_to_question_when_search_query_empty(monkeypatch):
 
     web_search({"question": "Q", "search_query": "", "documents": []})
 
-    assert calls["payload"] == {"query": "Q"}
+    assert calls["query"] == "Q"
 
 
 def test_web_search_replaces_previous_web_supplement(monkeypatch):
@@ -286,8 +294,8 @@ def test_web_search_results_without_urls_yield_empty_web_sources(monkeypatch):
 
 
 def test_web_search_parses_dict_shaped_tavily_response(monkeypatch):
-    # langchain-tavily's TavilySearch returns {"results": [...]} rather than a
-    # bare list; both shapes must work.
+    # tavily-python's client returns {"results": [...]} rather than a bare
+    # list; both shapes must work.
     _patch_tool(
         monkeypatch,
         {
@@ -344,7 +352,7 @@ def test_web_search_skipped_when_search_budget_exhausted(monkeypatch):
     old_web = Document(page_content="old web", metadata={"source": "web_search"})
     result = web_search({"question": "Q", "documents": [old_web], "web_search_count": 5})
 
-    assert "payload" not in calls  # Tavily never called
+    assert "query" not in calls  # Tavily never called
     assert grader_calls == []  # no grading either
     assert result["documents"] == [old_web]
 
@@ -419,7 +427,7 @@ def test_web_search_skips_malformed_entries_and_keeps_usable_ones(monkeypatch):
 
 def _patch_failing_tool(monkeypatch):
     class ExplodingTool:
-        def invoke(self, payload):
+        def search(self, query, *, max_results, timeout):
             raise TimeoutError("tavily timed out")
 
     monkeypatch.setattr(web_search_module, "get_web_search_tool", lambda: ExplodingTool())

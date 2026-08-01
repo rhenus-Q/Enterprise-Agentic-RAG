@@ -2276,6 +2276,30 @@ h3 {
   line-height: 1.45;
 }
 
+.error-copy {
+  flex: 1 1 auto;
+}
+
+.error-action {
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 6px 12px;
+  border: 1px solid currentcolor;
+  border-radius: var(--r-pill);
+  color: inherit;
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.error-action:hover:not(:disabled) {
+  background: rgb(255 255 255 / 45%);
+}
+
+.error-action:disabled {
+  opacity: 0.6;
+}
+
 .http-code {
   margin-left: auto;
   color: #9f4a43;

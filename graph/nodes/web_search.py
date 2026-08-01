@@ -1,7 +1,7 @@
 from functools import lru_cache
 
 from langchain_core.documents import Document
-from langchain_tavily import TavilySearch
+from tavily import TavilyClient
 
 from graph.chains.retrieval_grader import get_retrieval_grader
 from graph.config import max_web_results_to_grade, max_web_searches_per_run
@@ -12,24 +12,31 @@ from graph.consts import (
 )
 from graph.state import GraphState
 
+TAVILY_MAX_RESULTS = 3
+TAVILY_REQUEST_TIMEOUT_SECONDS = 30.0
+
 
 @lru_cache(maxsize=1)
 def get_web_search_tool():
     """
-    Lazily build and cache the Tavily search tool (langchain-tavily).
+    Lazily build and cache the first-party Tavily client.
+
+    tavily-python's search timeout is passed to the underlying HTTP request.
+    The installed langchain-tavily wrapper does not expose an effective
+    transport timeout, so using it here could leave the graph blocked.
     Deferring construction keeps module import free of Tavily API-key validation,
     which also makes the web_search node easy to mock in tests.
     """
 
-    return TavilySearch(max_results=3)
+    return TavilyClient()
 
 
 def _extract_results(search_results):
     """
     Defensively pull usable results out of a Tavily response.
 
-    langchain-tavily's TavilySearch returns a dict with a "results" list; the
-    legacy community tool returned the list directly, and error responses can
+    tavily-python's TavilyClient returns a dict with a "results" list; the
+    legacy LangChain community tool returned the list directly, and errors can
     be a plain string or an {"error": ...} dict. Accept both shapes, skip
     anything malformed, and keep only entries with non-empty text content.
     Each usable entry is reduced to {"content", "url", "title"} ("" when a
@@ -115,7 +122,11 @@ def web_search(state: GraphState):
     ]
 
     try:
-        search_results = get_web_search_tool().invoke({"query": search_query})
+        search_results = get_web_search_tool().search(
+            search_query,
+            max_results=TAVILY_MAX_RESULTS,
+            timeout=TAVILY_REQUEST_TIMEOUT_SECONDS,
+        )
     except Exception as exc:
         # Log only the exception type: messages may carry secrets.
         print(

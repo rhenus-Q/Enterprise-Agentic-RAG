@@ -316,4 +316,53 @@ describe("RunsPage", () => {
     ).not.toBeNull();
     expect(scrollTo).not.toHaveBeenCalled();
   });
+
+  it("ignores an older run-detail response that resolves after the latest selection", async () => {
+    const api = readOnlyClient();
+    let resolveRunA: ((detail: RunDetail) => void) | undefined;
+    let resolveRunB: ((detail: RunDetail) => void) | undefined;
+    api.getRun = vi.fn(
+      (runId: string) =>
+        new Promise<RunDetail>((resolve) => {
+          if (runId === "run_01HV7Q2R8W") {
+            resolveRunA = resolve;
+          } else if (runId === "run_01HV7QGZ1M") {
+            resolveRunB = resolve;
+          }
+        }),
+    );
+
+    render(<RunsPage api={api} />);
+    await waitFor(() => expect(api.getRun).toHaveBeenCalledWith("run_01HV7Q2R8W"));
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Summarize the current incident escalation process\./,
+      }),
+    );
+
+    await act(async () => {
+      resolveRunB?.(runDetailFixtures.run_01HV7QGZ1M);
+    });
+    expect(
+      screen.getByRole("heading", {
+        name: "Summarize the current incident escalation process.",
+      }),
+    ).not.toBeNull();
+
+    await act(async () => {
+      resolveRunA?.(runDetailFixtures.run_01HV7Q2R8W);
+    });
+
+    expect(
+      screen.getByRole("heading", {
+        name: "Summarize the current incident escalation process.",
+      }),
+    ).not.toBeNull();
+    expect(
+      screen.queryByRole("heading", {
+        name: "What changed recently in remote-access security guidance?",
+      }),
+    ).toBeNull();
+  });
 });

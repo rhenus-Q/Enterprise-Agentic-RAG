@@ -3,6 +3,9 @@ import type { ApiError } from "../api/types";
 interface ErrorStateProps {
   error: ApiError;
   compact?: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
+  actionDisabled?: boolean;
   /**
    * Visual weight only — the copy is unchanged. "warning" is for conditions
    * that clear on their own (a busy server); "danger" is for a system that
@@ -25,10 +28,21 @@ function copyForError(error: ApiError): ErrorCopy {
   }
 
   switch (error.code) {
+    case "invalid_response":
+      return {
+        title: "Unexpected backend response",
+        detail: "The API returned a response the app could not read. Please try again.",
+      };
     case "run_in_progress":
       return {
         title: "Question already in progress",
         detail: error.payload?.message ?? "Another question is currently being processed.",
+      };
+    case "run_still_stopping":
+      return {
+        title: "Previous run still stopping",
+        detail:
+          error.payload?.message ?? "The previous run is still stopping. Please try again shortly.",
       };
     case "preflight_failed":
       return {
@@ -60,7 +74,14 @@ function copyForError(error: ApiError): ErrorCopy {
   }
 }
 
-export function ErrorState({ error, compact = false, tone = "danger" }: ErrorStateProps) {
+export function ErrorState({
+  error,
+  compact = false,
+  actionLabel,
+  onAction,
+  actionDisabled = false,
+  tone = "danger",
+}: ErrorStateProps) {
   const copy = copyForError(error);
 
   return (
@@ -79,10 +100,20 @@ export function ErrorState({ error, compact = false, tone = "danger" }: ErrorSta
       <span className="error-mark" aria-hidden="true">
         !
       </span>
-      <div>
+      <div className="error-copy">
         <strong>{copy.title}</strong>
         <p>{copy.detail}</p>
       </div>
+      {actionLabel && onAction && (
+        <button
+          className="error-action"
+          type="button"
+          onClick={onAction}
+          disabled={actionDisabled}
+        >
+          {actionLabel}
+        </button>
+      )}
       {error.status && <span className="http-code">HTTP {error.status}</span>}
     </div>
   );

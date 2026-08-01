@@ -221,6 +221,7 @@ export function isRequestCancelled(error: unknown): boolean {
 }
 
 export const RUN_IN_PROGRESS_CODE = "run_in_progress";
+export const RUN_STILL_STOPPING_CODE = "run_still_stopping";
 export const BACKEND_UNREACHABLE_CODE = "backend_unreachable";
 
 /**
@@ -229,7 +230,10 @@ export const BACKEND_UNREACHABLE_CODE = "backend_unreachable";
  * Kept apart from the failure codes so a busy server can be answered in a
  * calmer register than an internal error: same copy, different tone.
  */
-const RETRYABLE_ERROR_CODES: ReadonlySet<string> = new Set([RUN_IN_PROGRESS_CODE]);
+const RETRYABLE_ERROR_CODES: ReadonlySet<string> = new Set([
+  RUN_IN_PROGRESS_CODE,
+  RUN_STILL_STOPPING_CODE,
+]);
 
 export function isRetryableError(error: ApiError): boolean {
   return RETRYABLE_ERROR_CODES.has(error.code);
@@ -238,8 +242,8 @@ export function isRetryableError(error: ApiError): boolean {
 export interface ApiClient {
   ask(request: AskRequest, options?: AskOptions): Promise<AskResponse>;
   /**
-   * Stops the in-flight run server-side. Resolves once the backend is free,
-   * so the caller can re-enable its composer without racing a 409.
+   * Stops the in-flight run server-side. The response's `idle` field reports
+   * whether the backend is free for a new question without racing a 409.
    */
   cancelRun(): Promise<CancelRunResponse>;
   getStatus(): Promise<RuntimeStatus>;

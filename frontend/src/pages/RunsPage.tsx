@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { apiClient } from "../api/client";
 import {
@@ -129,19 +129,28 @@ export function RunsPage({ api = apiClient }: RunsPageProps) {
   const [detailError, setDetailError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
+  const detailRequestVersion = useRef(0);
   const loadingPending = loading && !data && !error;
 
   async function selectRun(runId: string) {
+    const requestVersion = ++detailRequestVersion.current;
     setSelectedRunId(runId);
     setDetailError(null);
     setDetailLoading(true);
 
     try {
-      setDetail(await api.getRun(runId));
+      const nextDetail = await api.getRun(runId);
+      if (detailRequestVersion.current === requestVersion) {
+        setDetail(nextDetail);
+      }
     } catch (requestError) {
-      setDetailError(normalizeApiError(requestError));
+      if (detailRequestVersion.current === requestVersion) {
+        setDetailError(normalizeApiError(requestError));
+      }
     } finally {
-      setDetailLoading(false);
+      if (detailRequestVersion.current === requestVersion) {
+        setDetailLoading(false);
+      }
     }
   }
 
@@ -172,6 +181,7 @@ export function RunsPage({ api = apiClient }: RunsPageProps) {
 
     return () => {
       active = false;
+      detailRequestVersion.current += 1;
     };
   }, [api]);
 
