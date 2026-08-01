@@ -964,17 +964,25 @@ def main(argv=None):
     if local_banner:
         print(local_banner)
 
-    if args.limit is not None:
+    limited_run = args.limit is not None
+    if limited_run:
         rows = rows[: args.limit]
+
+    # Limited runs are focused/smoke evaluations, not comparable full-dataset
+    # baselines. Keep them out of automatic history and baseline discovery.
+    # An explicit baseline still opts into a one-off comparison, but the
+    # limited current run is never written to history.
+    history_dir = args.history_dir if not limited_run or args.baseline is not None else None
+    effective_no_history = args.no_history or limited_run
 
     try:
         run_eval(
             rows,
             args.output,
             args.dataset,
-            history_dir=args.history_dir,
+            history_dir=history_dir,
             baseline=args.baseline,
-            no_history=args.no_history,
+            no_history=effective_no_history,
         )
     except HistoryBaselineError as exc:
         print(f"ERROR: {exc}")

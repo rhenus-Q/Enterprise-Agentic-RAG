@@ -669,6 +669,11 @@ cd frontend; npm install; npm run dev
 cd frontend; npm run build
 ```
 
+FastAPI resolves the built UI from the repository's `frontend/dist` directory,
+independent of the process working directory. If no build is present, it logs
+`Frontend build not found; running in API-only mode.` and keeps all API routes
+available.
+
 | Endpoint | Purpose |
 | --- | --- |
 | `POST /api/ask` | Run one question; returns the answer, `stop_reason` + caveat, citations, node path/timings, counters, and the resolved runtime policy |
@@ -786,6 +791,8 @@ uv run python evals/run_eval.py --validate-only
 
 # Full eval — real OpenAI/Tavily calls, requires keys (not part of CI)
 uv run python evals/run_eval.py
+
+# Focused/smoke eval - no history write or automatic baseline comparison
 uv run python evals/run_eval.py --limit 3
 ```
 

@@ -45,6 +45,9 @@ RUN_IN_PROGRESS_MESSAGE = "Another question is currently being processed."
 # and reports a sanitized, stable description of what needs fixing.
 CONFIG_ERROR_MESSAGE = "Runtime configuration is invalid — see /api/status for details."
 LOCAL_SNIPPET_MAX_CHARS = 300
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+FRONTEND_DIST = PROJECT_ROOT / "frontend" / "dist"
+FRONTEND_BUILD_MISSING_MESSAGE = "Frontend build not found; running in API-only mode."
 
 # Citation URLs come from graded web results and end up in an href, so the
 # scheme is validated before they cross the HTTP boundary.
@@ -421,9 +424,10 @@ def create_app() -> FastAPI:
             return JSONResponse(status_code=404, content={"error": "run_not_found"})
         return RunDetail.model_validate(record)
 
-    frontend_dist = Path("frontend/dist")
-    if (frontend_dist / "index.html").is_file():
-        application.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
+    if (FRONTEND_DIST / "index.html").is_file():
+        application.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
+    else:
+        print(FRONTEND_BUILD_MISSING_MESSAGE)
 
     return application
 

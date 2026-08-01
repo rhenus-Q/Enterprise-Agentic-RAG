@@ -11,6 +11,18 @@ from graph import consts, engine, formatting
 from graph.consts import WEB_SEARCH_SOURCE
 from server.app import create_app
 
+EXPECTED_STOP_REASON_STATUS = {
+    consts.STOP_REASON_RETRIEVAL_ERROR: "error",
+    consts.STOP_REASON_WEB_SEARCH_ERROR: "error",
+    consts.STOP_REASON_GENERATION_ERROR: "error",
+    consts.STOP_REASON_TOOL_ERROR: "error",
+    consts.STOP_REASON_WEB_SEARCH_DISABLED: "caveat",
+    consts.STOP_REASON_WEB_FALLBACK_DISABLED: "caveat",
+    consts.STOP_REASON_MAX_RETRIES_NOT_GROUNDED: "caveat",
+    consts.STOP_REASON_MAX_RETRIES_NOT_USEFUL: "caveat",
+    consts.STOP_REASON_BUDGET_EXHAUSTED: "caveat",
+}
+
 
 def _answer_result(*, stop_reason: str = "") -> engine.AnswerResult:
     local_content = "L" * 350
@@ -208,11 +220,20 @@ def test_run_history_bookkeeping_failure_does_not_lose_the_answer(monkeypatch, c
     assert "RuntimeError" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize(
-    "stop_reason",
-    [value for name, value in vars(consts).items() if name.startswith("STOP_REASON_")],
-)
-def test_every_stop_reason_gets_a_status_and_a_pinned_caveat(monkeypatch, stop_reason):
+def test_expected_stop_reason_status_covers_the_canonical_vocabulary():
+    canonical_stop_reasons = {
+        value for name, value in vars(consts).items() if name.startswith("STOP_REASON_")
+    }
+
+    assert set(EXPECTED_STOP_REASON_STATUS) == canonical_stop_reasons
+    assert set(formatting.STOP_REASON_NOTES) == canonical_stop_reasons
+    assert "run_cancelled" not in canonical_stop_reasons
+
+
+@pytest.mark.parametrize(("stop_reason", "expected_status"), EXPECTED_STOP_REASON_STATUS.items())
+def test_every_stop_reason_gets_its_exact_status_and_pinned_caveat(
+    monkeypatch, stop_reason, expected_status
+):
     """graph/consts.py defines the full stop_reason vocabulary; server/app.py's
     stop_reason -> status classification and formatting.STOP_REASON_NOTES must
     both cover every value, or a future reason silently renders as a benign
@@ -227,8 +248,9 @@ def test_every_stop_reason_gets_a_status_and_a_pinned_caveat(monkeypatch, stop_r
     with TestClient(application) as client:
         response = client.post("/api/ask", json={"question": "Question"})
 
+    assert response.status_code == 200
     payload = response.json()
-    assert payload["status"] in {"caveat", "error"}
+    assert payload["status"] == expected_status
     assert payload["caveat"] == formatting.STOP_REASON_NOTES[stop_reason]
 
 

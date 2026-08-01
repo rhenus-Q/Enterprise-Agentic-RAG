@@ -523,7 +523,7 @@ module.
 
 | Module | Responsibility |
 |---|---|
-| `server/app.py` | `create_app()`, the endpoints, error mapping, the lifespan preflight, and an optional `frontend/dist` static mount |
+| `server/app.py` | `create_app()`, the endpoints, error mapping, the lifespan preflight, and an optional repository-relative `frontend/dist` static mount (API-only mode when absent) |
 | `server/schemas.py` | Pydantic request/response models — the API contract the frontend's `api/types.ts` mirrors |
 | `server/runs.py` | `RunStore`: `deque(maxlen=RUN_HISTORY_LIMIT = 50)` + `threading.Lock` + a `run_id` index |
 | `server/status.py` | Resolved runtime status and the index-compatibility ladder |

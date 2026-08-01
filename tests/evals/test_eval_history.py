@@ -13,6 +13,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+import evals.run_eval as eval_runner
+import main as application_main
 from evals.run_eval import (
     HistoryBaselineError,
     build_history_record,
@@ -789,6 +791,17 @@ def _minimal_rows():
     ]
 
 
+def _write_cli_dataset(path):
+    rows = _minimal_rows()
+    rows.append({**rows[0], "id": "r2", "question": "Second test question?"})
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+    return rows
+
+
+def _patch_cli_preflight(monkeypatch):
+    monkeypatch.setattr(application_main, "run_startup_preflight", lambda: None)
+
+
 def test_no_history_skips_write_but_renders_delta(tmp_path, monkeypatch):
     _mock_graph_modules(monkeypatch)
 
@@ -819,6 +832,7 @@ def test_no_history_skips_write_but_renders_delta(tmp_path, monkeypatch):
     # Report must still contain the delta section
     report = output_path.read_text(encoding="utf-8")
     assert "## Delta vs. previous run" in report
+    assert "Baseline: `baseline`" in report
 
 
 def test_no_history_no_baseline_renders_no_previous_run(tmp_path, monkeypatch):
@@ -883,6 +897,100 @@ def test_history_written_on_normal_run(tmp_path, monkeypatch):
     assert rec["schema_version"] == 1
     assert "answer" not in rec["rows"][0]
     assert "formatted_answer" not in rec["rows"][0]
+
+
+def test_limit_run_skips_automatic_history_then_full_run_uses_full_baseline(tmp_path, monkeypatch):
+    _mock_graph_modules(monkeypatch)
+    _patch_cli_preflight(monkeypatch)
+    dataset_path = tmp_path / "questions.jsonl"
+    rows = _write_cli_dataset(dataset_path)
+    history_dir = tmp_path / "history"
+    baseline_path = write_history_record(
+        _record(
+            run_id="full-baseline",
+            generated="2026-06-13T09:00:00Z",
+            rows=[_row_entry(row["id"]) for row in rows],
+        ),
+        history_dir,
+    )
+
+    limited_output = tmp_path / "limited.md"
+    assert (
+        eval_runner.main(
+            [
+                "--dataset",
+                str(dataset_path),
+                "--output",
+                str(limited_output),
+                "--history-dir",
+                str(history_dir),
+                "--limit",
+                "1",
+            ]
+        )
+        == 0
+    )
+
+    assert list(history_dir.glob("*.json")) == [baseline_path]
+    assert "## Delta vs. previous run" not in limited_output.read_text(encoding="utf-8")
+
+    full_output = tmp_path / "full.md"
+    assert (
+        eval_runner.main(
+            [
+                "--dataset",
+                str(dataset_path),
+                "--output",
+                str(full_output),
+                "--history-dir",
+                str(history_dir),
+            ]
+        )
+        == 0
+    )
+
+    assert len(list(history_dir.glob("*.json"))) == 2
+    assert "Baseline: `full-baseline`" in full_output.read_text(encoding="utf-8")
+
+
+def test_limit_run_allows_explicit_baseline_without_writing_history(tmp_path, monkeypatch):
+    _mock_graph_modules(monkeypatch)
+    _patch_cli_preflight(monkeypatch)
+    dataset_path = tmp_path / "questions.jsonl"
+    _write_cli_dataset(dataset_path)
+    history_dir = tmp_path / "history"
+    baseline_path = write_history_record(
+        _record(
+            run_id="explicit-baseline",
+            generated="2026-06-13T09:00:00Z",
+            rows=[_row_entry("r1")],
+            passed=1,
+            total=1,
+        ),
+        history_dir,
+    )
+    output_path = tmp_path / "limited-explicit.md"
+
+    assert (
+        eval_runner.main(
+            [
+                "--dataset",
+                str(dataset_path),
+                "--output",
+                str(output_path),
+                "--history-dir",
+                str(history_dir),
+                "--limit",
+                "1",
+                "--baseline",
+                str(baseline_path),
+            ]
+        )
+        == 0
+    )
+
+    assert list(history_dir.glob("*.json")) == [baseline_path]
+    assert "Baseline: `explicit-baseline`" in output_path.read_text(encoding="utf-8")
 
 
 def test_explicit_baseline_missing_raises_history_baseline_error(tmp_path, monkeypatch):

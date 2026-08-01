@@ -107,8 +107,10 @@ uv run python evals/run_eval.py --validate-only
 # Full eval - REAL OpenAI (and Tavily) calls; requires keys in .env
 uv run python evals/run_eval.py
 
-# Variants
+# Focused/smoke eval (does not write history or auto-compare with the latest baseline)
 uv run python evals/run_eval.py --limit 3
+
+# Other variants
 uv run python evals/run_eval.py --output evals/results.md
 
 # Run without writing a history record (still renders the delta section)
@@ -128,6 +130,11 @@ Each full eval run persists a compact, machine-readable JSON record to
 most recent prior record as a baseline and renders a "Delta vs. previous run"
 section in the Markdown report. This makes run-over-run movement in pass counts
 and per-row status explicit without manual git archaeology.
+
+`--limit` runs are focused/smoke evaluations: they do not write history and do
+not automatically discover a baseline. Supplying `--baseline` explicitly still
+renders that one-off comparison, but the limited run is not persisted. Full runs
+continue to discover and write history normally.
 
 ### History directory
 
@@ -181,6 +188,7 @@ On the first-ever run (no prior record) the section renders a single line:
 
 | Flag | Description |
 |---|---|
+| `--limit N` | Evaluate only the first N rows. Skips automatic baseline discovery and history writing; an explicit `--baseline` may still be used for a one-off comparison. |
 | `--no-history` | Render the delta section against any existing baseline but **do not write** the current record. Status: `skipped_by_no_history`. |
 | `--baseline PATH` | Compare against a specific record instead of auto-discovering the latest. A missing, invalid-JSON, or schema-incompatible file **fails fast** with a clear error. |
 | `--history-dir PATH` | Directory for history records (default: `evals/history/`). |
