@@ -156,6 +156,11 @@ export interface CancelRunResponse {
   idle: boolean;
 }
 
+export interface CancelRunOptions {
+  /** Resolved backend LLM timeout used to bound its cancellation wait. */
+  llmRequestTimeoutSeconds?: number | null;
+}
+
 export interface ApiErrorPayload {
   error?: string;
   message?: string;
@@ -187,6 +192,7 @@ export class ApiError extends Error {
 }
 
 export const REQUEST_CANCELLED_CODE = "request_cancelled";
+export const REQUEST_TIMEOUT_CODE = "request_timeout";
 
 /**
  * The backend's code for a run it stopped on request (HTTP 499).
@@ -245,7 +251,7 @@ export interface ApiClient {
    * Stops the in-flight run server-side. The response's `idle` field reports
    * whether the backend is free for a new question without racing a 409.
    */
-  cancelRun(): Promise<CancelRunResponse>;
+  cancelRun(options?: CancelRunOptions): Promise<CancelRunResponse>;
   getStatus(): Promise<RuntimeStatus>;
   getDocuments(): Promise<DocumentsResponse>;
   getRuns(): Promise<RunsResponse>;

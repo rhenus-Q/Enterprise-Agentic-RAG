@@ -105,6 +105,38 @@ def test_engine_runtime_error_returns_type_only_and_is_not_recorded(monkeypatch)
     assert runs_response.json()["count"] == 0
 
 
+def test_global_exception_handler_sanitizes_unexpected_status_failure(monkeypatch):
+    """A non-Ask exception reaches the application-wide JSON fallback."""
+
+    planted_message = (
+        r"C:\private\internal\index failed on private-host.internal; "
+        "DO-NOT-LEAK-SENTINEL raw internal message"
+    )
+    monkeypatch.setattr(main, "run_startup_preflight", lambda: None)
+
+    def fail_status(_preflight):
+        raise LookupError(planted_message)
+
+    monkeypatch.setattr("server.app.build_runtime_status", fail_status)
+    application = create_app()
+
+    with TestClient(application, raise_server_exceptions=False) as client:
+        response = client.get("/api/status")
+
+    assert response.status_code == 500
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json() == {
+        "error": "internal_error",
+        "exception_type": "LookupError",
+    }
+    assert planted_message not in response.text
+    assert r"C:\private\internal\index" not in response.text
+    assert "private-host.internal" not in response.text
+    assert "DO-NOT-LEAK-SENTINEL" not in response.text
+    assert "raw internal message" not in response.text
+    assert "Traceback" not in response.text
+
+
 def test_request_time_config_error_returns_503_and_is_not_recorded(monkeypatch):
     monkeypatch.setattr(main, "run_startup_preflight", lambda: None)
     monkeypatch.setattr(engine, "answer_question", lambda _question, _options: _answer_result())

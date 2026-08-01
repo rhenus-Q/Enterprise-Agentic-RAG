@@ -7,6 +7,7 @@ import {
   isRequestCancelled,
   isRetryableError,
   normalizeApiError,
+  REQUEST_TIMEOUT_CODE,
   RUN_STILL_STOPPING_CODE,
   type ApiClient,
   type AskResponse,
@@ -126,10 +127,52 @@ export function AskPage({
     setFallbackPolicy(asFallbackPolicy(status.web_fallback_policy_default));
   }, [status]);
 
+  function requestRunCancellation() {
+    return api.cancelRun({
+      llmRequestTimeoutSeconds: status?.llm_request_timeout_seconds,
+    });
+  }
+
+  async function recoverAfterTimeout(run: AbortController, timeoutError: ApiError) {
+    // A browser timeout abandons only the HTTP wait; the synchronous graph may
+    // still hold the server's single-flight slot. Disown the request before
+    // asking the existing cancel endpoint whether the backend is idle.
+    activeRun.current = null;
+    setError(timeoutError);
+
+    let releaseComposer = true;
+    setStopping(true);
+    try {
+      const result = await requestRunCancellation();
+      if (!result.idle) {
+        releaseComposer = false;
+        setWaitingForIdle(true);
+      } else {
+        setWaitingForIdle(false);
+      }
+    } catch {
+      // The timeout remains visible, but a failed best-effort readiness check
+      // must not leave the composer permanently locked.
+      setWaitingForIdle(false);
+    } finally {
+      run.abort();
+      setStopping(false);
+      if (releaseComposer) {
+        setSubmitting(false);
+      }
+    }
+  }
+
   async function submitQuestion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const cleanedQuestion = question.trim();
-    if (!cleanedQuestion || submitting) {
+    if (
+      !cleanedQuestion ||
+      submitting ||
+      statusLoading ||
+      !status ||
+      Boolean(status.config_error)
+    ) {
       return;
     }
 
@@ -164,7 +207,13 @@ export function AskPage({
         return;
       }
 
-      setError(normalizeApiError(requestError));
+      const normalizedError = normalizeApiError(requestError);
+      if (normalizedError.code === REQUEST_TIMEOUT_CODE) {
+        await recoverAfterTimeout(run, normalizedError);
+        return;
+      }
+
+      setError(normalizedError);
     } finally {
       if (activeRun.current === run) {
         activeRun.current = null;
@@ -192,7 +241,7 @@ export function AskPage({
     let releaseComposer = true;
     setStopping(true);
     try {
-      const result = await api.cancelRun();
+      const result = await requestRunCancellation();
       if (!result.idle) {
         releaseComposer = false;
         setWaitingForIdle(true);
@@ -220,22 +269,29 @@ export function AskPage({
       return;
     }
 
+    const preserveTimeout = error?.code === REQUEST_TIMEOUT_CODE;
     let releaseComposer = true;
     setStopping(true);
     try {
-      const result = await api.cancelRun();
+      const result = await requestRunCancellation();
       if (!result.idle) {
         releaseComposer = false;
-        setError(runStillStoppingError());
+        if (!preserveTimeout) {
+          setError(runStillStoppingError());
+        }
       } else {
         setWaitingForIdle(false);
-        setError(null);
+        if (!preserveTimeout) {
+          setError(null);
+        }
       }
     } catch {
       // Preserve the best-effort escape hatch if readiness cannot be checked:
       // the user must not be left with a permanently locked UI.
       setWaitingForIdle(false);
-      setError(null);
+      if (!preserveTimeout) {
+        setError(null);
+      }
     } finally {
       setStopping(false);
       if (releaseComposer) {
@@ -364,7 +420,7 @@ export function AskPage({
                 <button
                   className="primary-button"
                   type="submit"
-                  disabled={question.trim().length === 0}
+                  disabled={controlsUnavailable || question.trim().length === 0}
                   aria-busy={false}
                 >
                   Ask

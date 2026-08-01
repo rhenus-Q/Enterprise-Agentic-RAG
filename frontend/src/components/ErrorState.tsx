@@ -33,6 +33,11 @@ function copyForError(error: ApiError): ErrorCopy {
         title: "Unexpected backend response",
         detail: "The API returned a response the app could not read. Please try again.",
       };
+    case "request_timeout":
+      return {
+        title: "Request timed out",
+        detail: "The request took longer than expected. Please try again.",
+      };
     case "run_in_progress":
       return {
         title: "Question already in progress",

@@ -5,6 +5,7 @@ import {
   ApiError,
   isRequestCancelled,
   requestCancelledError,
+  REQUEST_TIMEOUT_CODE,
   type ApiClient,
   type AskOptions,
   type AskRequest,
@@ -20,7 +21,12 @@ import {
 } from "../mocks/fixtures";
 import { AskPage } from "./AskPage";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.clearAllTimers();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 function clientWithAsk(
   ask: (request: AskRequest, options?: AskOptions) => Promise<AskResponse>,
@@ -54,6 +60,35 @@ function suggestionGrid(): HTMLDivElement {
 }
 
 describe("AskPage", () => {
+  it.each([
+    { status: null, statusLoading: false, label: "unknown" },
+    { status: null, statusLoading: true, label: "loading" },
+  ] as const)("disables runtime controls while status is $label", ({ status, statusLoading }) => {
+    render(<AskPage api={clientWithAsk(vi.fn())} status={status} statusLoading={statusLoading} />);
+
+    expect(
+      (screen.getByRole("checkbox", { name: "Web search" }) as HTMLInputElement).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("combobox", { name: "Web fallback policy" }) as HTMLSelectElement).disabled,
+    ).toBe(true);
+    enterQuestion();
+    expect(askButton().disabled).toBe(true);
+  });
+
+  it("shows the existing configuration notice and disables runtime controls", () => {
+    render(<AskPage api={clientWithAsk(vi.fn())} status={runtimeFixtures.configError} />);
+
+    const alert = screen.getByRole("alert");
+    expect(screen.getByText("Runtime configuration needs attention")).not.toBeNull();
+    expect(alert.textContent).toContain("LLM_PROVIDER");
+    expect((screen.getByRole("checkbox", { name: "Web search" }) as HTMLInputElement).disabled).toBe(
+      true,
+    );
+    enterQuestion();
+    expect(askButton().disabled).toBe(true);
+  });
+
   it("locks web options and submits no fallback override when runtime policy locks them", async () => {
     const ask = vi.fn().mockResolvedValue(askFixtures.localSuccess);
 
@@ -270,6 +305,9 @@ describe("AskPage", () => {
     const stoppingButton = await screen.findByRole("button", { name: "Stopping…" });
     expect((stoppingButton as HTMLButtonElement).disabled).toBe(true);
     expect(api.cancelRun).toHaveBeenCalledTimes(1);
+    expect(api.cancelRun).toHaveBeenCalledWith({
+      llmRequestTimeoutSeconds: runtimeFixtures.openai.llm_request_timeout_seconds,
+    });
 
     await act(async () => {
       confirmCancel?.();
@@ -491,5 +529,109 @@ describe("AskPage", () => {
       target: { value: "a different question" },
     });
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("keeps a timeout visible, cancels best-effort, and reopens when the backend is idle", async () => {
+    vi.useFakeTimers();
+    let lateResolve: ((response: AskResponse) => void) | undefined;
+    const api = clientWithAsk(
+      () =>
+        new Promise<AskResponse>((resolve, reject) => {
+          lateResolve = resolve;
+          window.setTimeout(
+            () =>
+              reject(
+                new ApiError("raw timeout detail", {
+                  code: REQUEST_TIMEOUT_CODE,
+                }),
+              ),
+            100,
+          );
+        }),
+    );
+
+    render(<AskPage api={api} status={runtimeFixtures.openai} />);
+    enterQuestion();
+    fireEvent.click(askButton());
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    expect(api.cancelRun).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Request timed out")).not.toBeNull();
+    expect(screen.getByText("The request took longer than expected. Please try again.")).not.toBeNull();
+    expect(askButton().disabled).toBe(false);
+
+    await act(async () => {
+      lateResolve?.(askFixtures.localSuccess);
+      await Promise.resolve();
+    });
+    expect(screen.queryByRole("heading", { name: "Execution timeline" })).toBeNull();
+    expect(screen.getByText("Request timed out")).not.toBeNull();
+  });
+
+  it("preserves the timeout and manual readiness action while idle is false", async () => {
+    vi.useFakeTimers();
+    const api = clientWithAsk(
+      () =>
+        new Promise<AskResponse>((_resolve, reject) => {
+          window.setTimeout(
+            () => reject(new ApiError("timed out", { code: REQUEST_TIMEOUT_CODE })),
+            100,
+          );
+        }),
+    );
+    api.cancelRun = vi
+      .fn()
+      .mockResolvedValueOnce({ cancelled: true, idle: false })
+      .mockResolvedValueOnce({ cancelled: false, idle: true });
+
+    render(<AskPage api={api} status={runtimeFixtures.openai} />);
+    enterQuestion();
+    fireEvent.click(askButton());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    expect(screen.getByText("Request timed out")).not.toBeNull();
+    expect(screen.queryByText("Previous run still stopping")).toBeNull();
+    expect(screen.getByRole("button", { name: "Check again" })).not.toBeNull();
+    expect((screen.getByLabelText("Question") as HTMLTextAreaElement).disabled).toBe(true);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+      await Promise.resolve();
+    });
+
+    expect(api.cancelRun).toHaveBeenCalledTimes(2);
+    expect(askButton().disabled).toBe(false);
+    expect(screen.getByText("Request timed out")).not.toBeNull();
+  });
+
+  it("keeps the timeout truthful but avoids a permanent lock when cancellation fails", async () => {
+    vi.useFakeTimers();
+    const api = clientWithAsk(
+      () =>
+        new Promise<AskResponse>((_resolve, reject) => {
+          window.setTimeout(
+            () => reject(new ApiError("timed out", { code: REQUEST_TIMEOUT_CODE })),
+            100,
+          );
+        }),
+    );
+    api.cancelRun = vi.fn().mockRejectedValue(new Error("cancel transport failed"));
+
+    render(<AskPage api={api} status={runtimeFixtures.openai} />);
+    enterQuestion();
+    fireEvent.click(askButton());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+
+    expect(api.cancelRun).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Request timed out")).not.toBeNull();
+    expect(askButton().disabled).toBe(false);
+    expect(screen.queryByRole("button", { name: "Check again" })).toBeNull();
   });
 });

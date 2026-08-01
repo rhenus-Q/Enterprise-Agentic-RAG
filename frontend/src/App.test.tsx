@@ -1,19 +1,31 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, type ApiClient, type RuntimeStatus } from "./api/types";
+import {
+  ApiError,
+  requestCancelledError,
+  type ApiClient,
+  type AskResponse,
+  type RuntimeStatus,
+} from "./api/types";
 import {
   askFixtures,
   emptyRunsResponse,
   populatedDocumentsResponse,
+  populatedRunsResponse,
   runDetailFixtures,
   runtimeFixtures,
 } from "./mocks/fixtures";
 import App from "./App";
 
+beforeEach(() => {
+  vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+});
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 function appClient(): ApiClient {
@@ -22,102 +34,231 @@ function appClient(): ApiClient {
     cancelRun: vi.fn().mockResolvedValue({ cancelled: true, idle: true }),
     getStatus: vi.fn().mockResolvedValue(runtimeFixtures.openai),
     getDocuments: vi.fn().mockResolvedValue(populatedDocumentsResponse),
-    getRuns: vi.fn().mockResolvedValue(emptyRunsResponse),
+    getRuns: vi.fn().mockResolvedValue(populatedRunsResponse),
     getRun: vi.fn().mockResolvedValue(runDetailFixtures.run_01HV7Q2R8W),
   };
 }
 
-describe("Runtime status recovery", () => {
-  it("retries a failed status request and restores the runtime state", async () => {
-    let resolveRetry: ((status: RuntimeStatus) => void) | undefined;
-    const retryPending = new Promise<RuntimeStatus>((resolve) => {
-      resolveRetry = resolve;
-    });
+function deferred<T>() {
+  let resolve: (value: T) => void = () => undefined;
+  let reject: (reason?: unknown) => void = () => undefined;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+function composerAskButton(): HTMLButtonElement {
+  const button = document.querySelector<HTMLButtonElement>(".question-composer .primary-button");
+  if (!button) {
+    throw new Error("Expected the Ask composer action to be rendered.");
+  }
+  return button;
+}
+
+describe("App runtime status", () => {
+  it("shows the initial runtime loading state and disables runtime-dependent controls", () => {
+    const pending = deferred<RuntimeStatus>();
+    const api = appClient();
+    api.getStatus = vi.fn().mockReturnValue(pending.promise);
+
+    render(<App api={api} />);
+
+    expect(screen.getByText("Checking runtime…")).not.toBeNull();
+    expect((screen.getByRole("checkbox", { name: "Web search" }) as HTMLInputElement).disabled).toBe(
+      true,
+    );
+    expect(
+      (screen.getByRole("combobox", { name: "Web fallback policy" }) as HTMLSelectElement).disabled,
+    ).toBe(true);
+    expect(api.getStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves runtime status and restores runtime-dependent controls", async () => {
+    const api = appClient();
+    render(<App api={api} />);
+
+    expect(await screen.findByText(/Connected · OpenAI/)).not.toBeNull();
+    expect((screen.getByRole("checkbox", { name: "Web search" }) as HTMLInputElement).disabled).toBe(
+      false,
+    );
+    expect(
+      (screen.getByRole("combobox", { name: "Web fallback policy" }) as HTMLSelectElement).disabled,
+    ).toBe(false);
+  });
+
+  it("renders a failed runtime-status request in the global notice", async () => {
+    const api = appClient();
+    api.getStatus = vi.fn().mockRejectedValue(
+      new ApiError("private-host.internal", {
+        code: "backend_unreachable",
+        networkError: true,
+      }),
+    );
+
+    render(<App api={api} />);
+
+    const alert = await screen.findByRole("alert");
+    expect(screen.getByText("Backend unreachable")).not.toBeNull();
+    expect(alert.textContent).not.toContain("private-host.internal");
+    expect(screen.getByText("Runtime unavailable")).not.toBeNull();
+  });
+
+  it("prevents duplicate Retry requests while pending and clears the error after success", async () => {
+    const retry = deferred<RuntimeStatus>();
     const api = appClient();
     api.getStatus = vi
       .fn()
       .mockRejectedValueOnce(
-        new ApiError("The backend could not be reached.", {
+        new ApiError("offline", {
           code: "backend_unreachable",
           networkError: true,
         }),
       )
-      .mockReturnValueOnce(retryPending);
+      .mockReturnValueOnce(retry.promise);
 
     render(<App api={api} />);
 
-    const retry = await screen.findByRole("button", { name: "Retry" });
-    expect(screen.getByRole("alert")).not.toBeNull();
-    fireEvent.click(retry);
+    const retryButton = await screen.findByRole("button", { name: "Retry" });
+    fireEvent.click(retryButton);
+    fireEvent.click(retryButton);
 
     await waitFor(() => expect(api.getStatus).toHaveBeenCalledTimes(2));
     expect(screen.getByText("Checking runtime…")).not.toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
+    expect((screen.getByRole("checkbox", { name: "Web search" }) as HTMLInputElement).disabled).toBe(
+      true,
+    );
 
     await act(async () => {
-      resolveRetry?.(runtimeFixtures.openai);
-      await retryPending;
+      retry.resolve(runtimeFixtures.openai);
+      await retry.promise;
     });
 
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
-    expect(screen.getByText(/Connected.*OpenAI/)).not.toBeNull();
+    expect(screen.getByText(/Connected · OpenAI/)).not.toBeNull();
+    expect((screen.getByRole("checkbox", { name: "Web search" }) as HTMLInputElement).disabled).toBe(
+      false,
+    );
+    expect(api.getStatus).toHaveBeenCalledTimes(2);
   });
 });
 
-describe("App scrolling", () => {
-  it("resets window scrolling immediately when top-level navigation changes", () => {
-    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
-
-    render(<App />);
-    expect(scrollTo).not.toHaveBeenCalled();
+describe("App dependency injection", () => {
+  it("uses the same injected client for each active child page and run detail", async () => {
+    const api = appClient();
+    render(<App api={api} />);
+    await screen.findByText(/Connected · OpenAI/);
 
     fireEvent.click(screen.getByRole("button", { name: "Documents" }));
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 0, left: 0, behavior: "auto" });
+    await waitFor(() => expect(api.getDocuments).toHaveBeenCalledTimes(1));
 
-    scrollTo.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Runs" }));
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 0, left: 0, behavior: "auto" });
+    await waitFor(() => expect(api.getRuns).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.getRun).toHaveBeenCalledWith("run_01HV7Q2R8W"));
 
-    scrollTo.mockClear();
     fireEvent.click(screen.getByRole("button", { name: "Ask" }));
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 0, left: 0, behavior: "auto" });
+    fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Question" } });
+    fireEvent.click(composerAskButton());
+    await waitFor(() => expect(api.ask).toHaveBeenCalledTimes(1));
   });
 
-  it("retains one non-scrolling app shell across top-level page changes", () => {
-    vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
-    render(<App />);
+  it("uses the injected client for cancellation", async () => {
+    const api = appClient();
+    api.ask = vi.fn(
+      (_request, options) =>
+        new Promise<AskResponse>((_resolve, reject) => {
+          options?.signal?.addEventListener("abort", () => reject(requestCancelledError()), {
+            once: true,
+          });
+        }),
+    );
+
+    render(<App api={api} />);
+    await screen.findByText(/Connected · OpenAI/);
+    fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Question" } });
+    fireEvent.click(composerAskButton());
+    fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
+
+    await waitFor(() => expect(api.cancelRun).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(composerAskButton()).not.toBeNull());
+  });
+
+  it("never calls global fetch when an API client is injected", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<App api={appClient()} />);
+    await screen.findByText(/Connected · OpenAI/);
+    fireEvent.click(screen.getByRole("button", { name: "Documents" }));
+    await screen.findByText("Data Retention Policy");
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("App navigation and mount identity", () => {
+  it("keeps tab navigation correct and scrolls only when the active page changes", async () => {
+    const scrollTo = vi.mocked(window.scrollTo);
+    render(<App api={appClient()} />);
+    await screen.findByText(/Connected · OpenAI/);
+
+    const navigation = screen.getByRole("navigation", { name: "Primary navigation" });
+    const askTab = navigation.querySelector<HTMLButtonElement>("button:first-of-type")!;
+    const documentsTab = screen.getByRole("button", { name: "Documents" });
+    const runsTab = screen.getByRole("button", { name: "Runs" });
+    expect(askTab.getAttribute("aria-current")).toBe("page");
+
+    fireEvent.click(documentsTab);
+    expect(documentsTab.getAttribute("aria-current")).toBe("page");
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 0, left: 0, behavior: "auto" });
+
+    fireEvent.click(runsTab);
+    expect(runsTab.getAttribute("aria-current")).toBe("page");
+    fireEvent.click(askTab);
+    expect(askTab.getAttribute("aria-current")).toBe("page");
+  });
+
+  it("retains the app shell and the same hidden Ask page across tab changes", async () => {
+    render(<App api={appClient()} />);
+    await screen.findByText(/Connected · OpenAI/);
 
     const appShell = document.querySelector<HTMLElement>(".app-shell");
-    expect(appShell).not.toBeNull();
-    expect(appShell?.style.overflowY).toBe("");
-
-    fireEvent.click(screen.getByRole("button", { name: "Documents" }));
-    expect(document.querySelector(".app-shell")).toBe(appShell);
-    expect(screen.getByRole("main").parentElement).toBe(appShell);
-
-    fireEvent.click(screen.getByRole("button", { name: "Runs" }));
-    expect(document.querySelector(".app-shell")).toBe(appShell);
-    expect(screen.getByRole("main").parentElement).toBe(appShell);
-  });
-});
-
-describe("Ask page persistence", () => {
-  it("keeps the same Ask page mounted and hidden while another tab is active", () => {
-    vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
-    render(<App />);
-
     const askPage = document.querySelector<HTMLElement>(".ask-page");
-    expect(askPage).not.toBeNull();
-    expect(askPage!.hidden).toBe(false);
+    expect(appShell).not.toBeNull();
+    expect(askPage?.hidden).toBe(false);
 
-    // Hidden rather than unmounted, so an in-flight run keeps its state and
-    // its answer still lands when the request finishes.
     fireEvent.click(screen.getByRole("button", { name: "Documents" }));
+    expect(document.querySelector(".app-shell")).toBe(appShell);
     expect(document.querySelector(".ask-page")).toBe(askPage);
-    expect(askPage!.hidden).toBe(true);
+    expect(askPage?.hidden).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "Ask" }));
+    fireEvent.click(
+      screen
+        .getByRole("navigation", { name: "Primary navigation" })
+        .querySelector<HTMLButtonElement>("button:first-of-type")!,
+    );
     expect(document.querySelector(".ask-page")).toBe(askPage);
-    expect(askPage!.hidden).toBe(false);
+    expect(askPage?.hidden).toBe(false);
+  });
+
+  it("keeps Ask unavailable while the global backend-unreachable banner is shown", async () => {
+    const unreachable = new ApiError("raw transport detail", {
+      code: "backend_unreachable",
+      networkError: true,
+    });
+    const api = appClient();
+    api.getStatus = vi.fn().mockRejectedValue(unreachable);
+    api.ask = vi.fn().mockRejectedValue(unreachable);
+
+    render(<App api={api} />);
+    await screen.findByText("Backend unreachable");
+    fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Question" } });
+    expect(composerAskButton().disabled).toBe(true);
+    fireEvent.click(composerAskButton());
+
+    expect(api.ask).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
   });
 });

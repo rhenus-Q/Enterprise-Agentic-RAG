@@ -80,6 +80,16 @@ classified as cancellations and never rendered as errors: a stop is a choice
 the user made, not a failure to report. Any result arriving after the click is
 discarded.
 
+The HTTP client also bounds lightweight requests at 30 seconds and Ask at five
+minutes. Cancel uses 90 seconds for the default runtime, then scales with the
+resolved LLM request timeout so it remains 15 seconds beyond the server's own
+LLM-timeout-plus-15-second wait. Ask remains unavailable until runtime status is
+known, ensuring every run carries the resolved timeout into this contract. An
+Ask timeout abandons the browser request but does not pretend the graph stopped:
+the page preserves the timeout message and uses this same cancel/readiness flow
+on a best-effort basis. `idle: true` reopens the composer; `idle: false` keeps it
+locked behind the existing manual readiness action.
+
 ## Consequences
 
 * Stop frees the single-flight slot within one node instead of one full run, so

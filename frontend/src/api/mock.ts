@@ -105,16 +105,31 @@ function onAbort(signal: AbortSignal | undefined, timer: number, cancel: () => v
 }
 
 function delay<T>(value: T, milliseconds = 180, signal?: AbortSignal): Promise<T> {
+  const isolatedValue = structuredClone(value);
   return new Promise((resolve, rejectPromise) => {
-    const timer = window.setTimeout(() => resolve(value), milliseconds);
-    onAbort(signal, timer, () => rejectPromise(requestCancelledError()));
+    let removeAbortListener: () => void = () => undefined;
+    const timer = window.setTimeout(() => {
+      removeAbortListener();
+      resolve(isolatedValue);
+    }, milliseconds);
+    removeAbortListener = onAbort(signal, timer, () => {
+      removeAbortListener();
+      rejectPromise(requestCancelledError());
+    });
   });
 }
 
 function reject(error: ApiError, milliseconds = 180, signal?: AbortSignal): Promise<never> {
   return new Promise((_, rejectPromise) => {
-    const timer = window.setTimeout(() => rejectPromise(error), milliseconds);
-    onAbort(signal, timer, () => rejectPromise(requestCancelledError()));
+    let removeAbortListener: () => void = () => undefined;
+    const timer = window.setTimeout(() => {
+      removeAbortListener();
+      rejectPromise(error);
+    }, milliseconds);
+    removeAbortListener = onAbort(signal, timer, () => {
+      removeAbortListener();
+      rejectPromise(requestCancelledError());
+    });
   });
 }
 

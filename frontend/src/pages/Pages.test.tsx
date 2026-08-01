@@ -1,10 +1,12 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { ApiClient, DocumentsResponse, RunDetail, RunsResponse } from "../api/types";
+import { ApiError, type ApiClient, type DocumentsResponse, type RunDetail, type RunsResponse } from "../api/types";
 import {
   askFixtures,
+  documentsResponseFor,
   emptyRunsResponse,
+  indexFixtures,
   populatedDocumentsResponse,
   populatedRunsResponse,
   runDetailFixtures,
@@ -32,6 +34,16 @@ function readOnlyClient(): ApiClient {
   };
 }
 
+function deferred<T>() {
+  let resolve: (value: T) => void = () => undefined;
+  let reject: (reason?: unknown) => void = () => undefined;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("DocumentsPage", () => {
   it("renders one card per document with a single metadata line", async () => {
     render(<DocumentsPage api={readOnlyClient()} />);
@@ -50,6 +62,97 @@ describe("DocumentsPage", () => {
     expect(await screen.findByText("Employee Onboarding Guide")).not.toBeNull();
     expect(screen.getByText("HR")).not.toBeNull();
   });
+
+  it("renders the existing empty-corpus state", async () => {
+    const api = readOnlyClient();
+    api.getDocuments = vi.fn().mockResolvedValue({
+      documents: [],
+      document_count: 0,
+      index: indexFixtures.compatible,
+      config_error: null,
+    });
+
+    render(<DocumentsPage api={api} />);
+
+    expect(await screen.findByText("No corpus documents found")).not.toBeNull();
+    expect(screen.getByText(/Add Markdown source files/)).not.toBeNull();
+    expect(screen.getByText("0 files")).not.toBeNull();
+  });
+
+  it("renders a documents request failure without leaving the skeleton", async () => {
+    const api = readOnlyClient();
+    api.getDocuments = vi.fn().mockRejectedValue(
+      new ApiError("raw transport detail", {
+        code: "backend_unreachable",
+        networkError: true,
+      }),
+    );
+
+    render(<DocumentsPage api={api} />);
+
+    expect(await screen.findByText("Backend unreachable")).not.toBeNull();
+    expect(screen.queryByTestId("documents-loading-skeleton")).toBeNull();
+    expect(screen.queryByText("raw transport detail")).toBeNull();
+  });
+
+  it("shows a configuration notice while still rendering corpus data", async () => {
+    const api = readOnlyClient();
+    api.getDocuments = vi.fn().mockResolvedValue({
+      ...populatedDocumentsResponse,
+      index: null,
+      config_error: "LLM_PROVIDER must be configured.",
+    });
+
+    render(<DocumentsPage api={api} />);
+
+    const alert = await screen.findByRole("alert");
+    expect(screen.getByText("Index status is unavailable")).not.toBeNull();
+    expect(alert.textContent).toContain("LLM_PROVIDER must be configured.");
+    expect(screen.queryByRole("heading", { name: "Embedding compatibility" })).toBeNull();
+    expect(screen.getByText("Data Retention Policy")).not.toBeNull();
+  });
+
+  it("treats index null as unavailable without crashing the document list", async () => {
+    const api = readOnlyClient();
+    api.getDocuments = vi.fn().mockResolvedValue({
+      ...populatedDocumentsResponse,
+      index: null,
+    });
+
+    render(<DocumentsPage api={api} />);
+
+    expect(await screen.findByText("Data Retention Policy")).not.toBeNull();
+    expect(screen.queryByRole("heading", { name: "Embedding compatibility" })).toBeNull();
+  });
+
+  it.each([
+    ["compatible", "Compatible", false],
+    ["legacy_no_fingerprint", "Legacy fingerprint", false],
+    ["provider_mismatch", "Provider mismatch", true],
+    ["model_mismatch", "Model mismatch", true],
+    ["missing_index", "Index missing", true],
+    ["index_unreadable", "Index unreadable", false],
+  ] as const)(
+    "renders the %s compatibility branch as %s",
+    async (compatibility, label, reindexRequired) => {
+      const api = readOnlyClient();
+      api.getDocuments = vi
+        .fn()
+        .mockResolvedValue(documentsResponseFor(indexFixtures[compatibility]));
+
+      render(<DocumentsPage api={api} />);
+
+      expect(await screen.findByText(label)).not.toBeNull();
+      expect(Boolean(screen.queryByText("Reindex required"))).toBe(reindexRequired);
+
+      if (compatibility === "index_unreadable") {
+        expect(indexFixtures.index_unreadable.exists).toBeNull();
+        expect(screen.getByText("Index could not be inspected")).not.toBeNull();
+        expect(screen.getByText(/compatibility is unknown/)).not.toBeNull();
+        expect(screen.queryByText(/uv run python ingestion.py/)).toBeNull();
+      }
+    },
+  );
 });
 
 describe("DocumentsPage loading", () => {
@@ -274,6 +377,147 @@ describe("RunsPage", () => {
     render(<RunsPage api={api} />);
 
     expect(await screen.findByText("No recorded runs yet")).not.toBeNull();
+  });
+
+  it("renders a run-list request failure", async () => {
+    const api = readOnlyClient();
+    api.getRuns = vi.fn().mockRejectedValue(
+      new ApiError("private detail", { status: 500, code: "internal_error" }),
+    );
+
+    render(<RunsPage api={api} />);
+
+    expect(await screen.findByText("The run could not be completed")).not.toBeNull();
+    expect(screen.queryByTestId("runs-loading-skeleton")).toBeNull();
+    expect(screen.queryByText("private detail")).toBeNull();
+  });
+
+  it("shows the initial run-detail loading state", async () => {
+    const api = readOnlyClient();
+    api.getRun = vi.fn(() => new Promise<RunDetail>(() => undefined));
+
+    render(<RunsPage api={api} />);
+
+    expect(await screen.findByText("Run history")).not.toBeNull();
+    expect(screen.getByText("Loading run detail…")).not.toBeNull();
+    expect(screen.getByTestId("run-detail-loading-skeleton")).not.toBeNull();
+    expect(document.querySelector(".run-detail-column")?.getAttribute("aria-busy")).toBe("true");
+  });
+
+  it.each([
+    [new ApiError("failed", { status: 500, code: "internal_error" }), "The run could not be completed"],
+    [
+      new ApiError("missing", {
+        status: 404,
+        code: "run_not_found",
+        payload: { error: "run_not_found" },
+      }),
+      "Run not found",
+    ],
+  ])("renders a focused run-detail error", async (detailError, heading) => {
+    const api = readOnlyClient();
+    api.getRun = vi.fn().mockRejectedValue(detailError);
+
+    render(<RunsPage api={api} />);
+
+    expect(await screen.findByText(heading)).not.toBeNull();
+    const alert = screen.getByRole("alert");
+    expect(alert.classList.contains("error-state--compact")).toBe(true);
+    expect(alert.textContent).toContain(`HTTP ${detailError.status}`);
+  });
+
+  it("keeps the selected row and resolved detail aligned", async () => {
+    const api = readOnlyClient();
+    api.getRun = vi.fn((runId: string) => Promise.resolve(runDetailFixtures[runId]!));
+    render(<RunsPage api={api} />);
+
+    const firstButton = await screen.findByRole("button", {
+      name: /What changed recently in remote-access security guidance\?/,
+    });
+    expect(firstButton.closest("tr")?.classList.contains("is-selected")).toBe(true);
+    expect(
+      screen.getByRole("heading", {
+        name: "What changed recently in remote-access security guidance?",
+      }),
+    ).not.toBeNull();
+
+    const secondButton = screen.getByRole("button", {
+      name: /Summarize the current incident escalation process\./,
+    });
+    fireEvent.click(secondButton);
+
+    await screen.findByRole("heading", {
+      name: "Summarize the current incident escalation process.",
+    });
+    expect(secondButton.closest("tr")?.classList.contains("is-selected")).toBe(true);
+    expect(firstButton.closest("tr")?.classList.contains("is-selected")).toBe(false);
+  });
+
+  it("ignores a stale detail error and stale loading completion", async () => {
+    const first = deferred<RunDetail>();
+    const second = deferred<RunDetail>();
+    const api = readOnlyClient();
+    api.getRun = vi.fn((runId: string) =>
+      runId === "run_01HV7Q2R8W" ? first.promise : second.promise,
+    );
+
+    render(<RunsPage api={api} />);
+    await waitFor(() => expect(api.getRun).toHaveBeenCalledWith("run_01HV7Q2R8W"));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Summarize the current incident escalation process\./,
+      }),
+    );
+
+    await act(async () => {
+      second.resolve(runDetailFixtures.run_01HV7QGZ1M);
+      await second.promise;
+    });
+    expect(document.querySelector(".run-detail-column")?.getAttribute("aria-busy")).toBe("false");
+
+    await act(async () => {
+      first.reject(new ApiError("stale", { status: 500, code: "internal_error" }));
+      await first.promise.catch(() => undefined);
+    });
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(document.querySelector(".run-detail-column")?.getAttribute("aria-busy")).toBe("false");
+    expect(
+      screen.getByRole("heading", {
+        name: "Summarize the current incident escalation process.",
+      }),
+    ).not.toBeNull();
+  });
+
+  it("does not start detail work when a pending run list completes after unmount", async () => {
+    const runs = deferred<RunsResponse>();
+    const api = readOnlyClient();
+    api.getRuns = vi.fn().mockReturnValue(runs.promise);
+    const { unmount } = render(<RunsPage api={api} />);
+
+    unmount();
+    await act(async () => {
+      runs.resolve(populatedRunsResponse);
+      await runs.promise;
+    });
+
+    expect(api.getRun).not.toHaveBeenCalled();
+  });
+
+  it("ignores pending detail settlement after unmount", async () => {
+    const detail = deferred<RunDetail>();
+    const api = readOnlyClient();
+    api.getRun = vi.fn().mockReturnValue(detail.promise);
+    const { unmount } = render(<RunsPage api={api} />);
+    await waitFor(() => expect(api.getRun).toHaveBeenCalledTimes(1));
+
+    unmount();
+    await act(async () => {
+      detail.resolve(runDetailFixtures.run_01HV7Q2R8W);
+      await detail.promise;
+    });
+
+    expect(document.querySelector(".runs-page")).toBeNull();
   });
 
   it("keeps the current detail mounted and does not scroll when selecting another run", async () => {
