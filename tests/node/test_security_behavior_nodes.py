@@ -22,7 +22,7 @@ from types import SimpleNamespace
 
 from langchain_core.documents import Document
 
-from graph.consts import STOP_REASON_TOOL_ERROR
+from graph.consts import STOP_REASON_TOOL_ERROR, STOP_REASON_WEB_SEARCH_ERROR
 from graph.nodes.grade_documents import grade_documents
 from graph.nodes.web_search import web_search
 from main import format_sources
@@ -36,11 +36,15 @@ EVIL_URL = "http://evil.example"
 
 
 def _patch_web_tool(monkeypatch, results):
-    monkeypatch.setattr(
-        web_search_module,
-        "get_web_search_tool",
-        lambda: SimpleNamespace(invoke=lambda payload: results),
-    )
+    calls = []
+
+    class FakeWebTool:
+        def search(self, query, *, max_results, timeout):
+            calls.append({"query": query, "max_results": max_results, "timeout": timeout})
+            return results
+
+    monkeypatch.setattr(web_search_module, "get_web_search_tool", lambda: FakeWebTool())
+    return calls
 
 
 def _patch_web_grader(monkeypatch, relevant):
@@ -60,12 +64,16 @@ def test_web_search_drops_irrelevant_payload_result(monkeypatch):
     """A payload-bearing web result graded NOT relevant is dropped ungraded-into-
     context: nothing is appended, so the payload never reaches generation."""
 
-    _patch_web_tool(monkeypatch, [{"content": WEB_PAYLOAD, "url": EVIL_URL, "title": "Evil"}])
+    calls = _patch_web_tool(
+        monkeypatch, [{"content": WEB_PAYLOAD, "url": EVIL_URL, "title": "Evil"}]
+    )
     _patch_web_grader(monkeypatch, relevant=False)
 
     existing = Document(page_content="local chunk")
     result = web_search({"question": "Q", "documents": [existing]})
 
+    assert calls == [{"query": "Q", "max_results": 3, "timeout": 30.0}]
+    assert result.get("stop_reason") != STOP_REASON_WEB_SEARCH_ERROR
     assert result["documents"] == [existing]  # nothing appended
     assert all(WEB_PAYLOAD not in d.page_content for d in result["documents"])
 
@@ -75,7 +83,7 @@ def test_web_search_relevant_payload_not_surfaced_in_provenance(monkeypatch):
     rendering exposes only the benign title/url metadata, never the payload body or
     the evil URL embedded in the content."""
 
-    _patch_web_tool(
+    calls = _patch_web_tool(
         monkeypatch,
         [{"content": WEB_PAYLOAD, "url": "https://news.example/s", "title": "Story"}],
     )
@@ -84,6 +92,8 @@ def test_web_search_relevant_payload_not_surfaced_in_provenance(monkeypatch):
     result = web_search({"question": "Q", "documents": []})
     sources = format_sources(result["documents"])
 
+    assert calls == [{"query": "Q", "max_results": 3, "timeout": 30.0}]
+    assert result.get("stop_reason") != STOP_REASON_WEB_SEARCH_ERROR
     assert len(result["documents"]) == 1  # appended
     assert WEB_PAYLOAD not in sources
     assert EVIL_URL not in sources

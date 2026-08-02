@@ -173,8 +173,10 @@ def _patch_all_node_seams(
     web_calls = []
 
     class FakeWebTool:
-        def invoke(self, payload):
-            web_calls.append(payload)
+        def search(self, query, *, max_results, timeout):
+            web_calls.append(
+                {"query": query, "max_results": max_results, "timeout": timeout}
+            )
             if web_tool_raises:
                 raise TimeoutError("tavily timed out")
             return [{"content": "web result"}]
@@ -328,7 +330,8 @@ def test_app_survives_retriever_failure_and_falls_back_to_web(monkeypatch):
     result = graph_module.app.invoke(_initial_state())  # must not raise
 
     assert result["stop_reason"] == STOP_REASON_RETRIEVAL_ERROR
-    assert len(web_calls) == 1  # degraded to web search
+    assert web_calls == [{"query": "Q", "max_results": 3, "timeout": 30.0}]
+    assert result["stop_reason"] != STOP_REASON_WEB_SEARCH_ERROR
     assert result["generation"] == "FINAL ANSWER"  # web context still produced an answer
 
 
@@ -353,7 +356,7 @@ def test_app_survives_tavily_failure_and_answers_from_local_documents(monkeypatc
     result = graph_module.app.invoke(_initial_state())  # must not raise
 
     assert result["stop_reason"] == STOP_REASON_WEB_SEARCH_ERROR
-    assert len(web_calls) == 1
+    assert web_calls == [{"query": "Q", "max_results": 3, "timeout": 30.0}]
     assert all(d.metadata.get("source") != "web_search" for d in result["documents"])
     assert result["web_search_count"] == 1  # the failed attempt is budgeted
 
@@ -416,11 +419,16 @@ def test_app_successful_web_answer_clears_transient_grading_tool_error(monkeypat
     _patch_all_node_seams(monkeypatch)
 
     web_module = importlib.import_module("graph.nodes.web_search")
-    monkeypatch.setattr(
-        web_module,
-        "get_web_search_tool",
-        lambda: SimpleNamespace(invoke=lambda p: [{"content": "boom"}, {"content": "good"}]),
-    )
+    web_calls = []
+
+    class FakeWebTool:
+        def search(self, query, *, max_results, timeout):
+            web_calls.append(
+                {"query": query, "max_results": max_results, "timeout": timeout}
+            )
+            return [{"content": "boom"}, {"content": "good"}]
+
+    monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())
 
     class FlakyGrader:
         def invoke(self, payload):
@@ -434,6 +442,7 @@ def test_app_successful_web_answer_clears_transient_grading_tool_error(monkeypat
 
     assert result["generation"] == "FINAL ANSWER"
     assert result["stop_reason"] == ""  # stale transient warning cleared
+    assert web_calls == [{"query": "Q", "max_results": 3, "timeout": 30.0}]
     assert any(
         d.metadata.get("source") == "web_search" for d in result["documents"]
     )  # the vetted result was used

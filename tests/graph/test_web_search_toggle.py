@@ -267,8 +267,10 @@ def _patch_all_node_seams(monkeypatch, *, docs_relevant, web_relevant=True):
     web_calls = []
 
     class FakeWebTool:
-        def invoke(self, payload):
-            web_calls.append(payload)
+        def search(self, query, *, max_results, timeout):
+            web_calls.append(
+                {"query": query, "max_results": max_results, "timeout": timeout}
+            )
             return [{"content": "web result"}]
 
     monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())
@@ -308,7 +310,7 @@ def test_app_enabled_uses_web_search_when_routed_there(monkeypatch):
 
     result = graph_module.app.invoke(_initial_state(enabled=True))
 
-    assert web_calls == [{"query": "Q"}]
+    assert web_calls == [{"query": "Q", "max_results": 3, "timeout": 30.0}]
     assert result["generation"] == "FINAL ANSWER"
     assert result["stop_reason"] == ""  # normal finish, no caveat for the caller
 
@@ -341,7 +343,7 @@ def test_app_enabled_continues_safely_when_web_results_irrelevant(monkeypatch):
 
     result = graph_module.app.invoke(_initial_state(enabled=True))
 
-    assert len(web_calls) == 1
+    assert web_calls == [{"query": "Q", "max_results": 3, "timeout": 30.0}]
     assert result["documents"] == []  # irrelevant web content was dropped
     assert result["generation"] == "FINAL ANSWER"
     assert result["stop_reason"] == ""

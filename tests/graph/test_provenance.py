@@ -242,7 +242,7 @@ def test_format_answer_caveat_and_sources_coexist_caveat_first():
 # ---------------------------------------------------------------------------
 
 
-def _patch_seams(monkeypatch, retrieved_docs):
+def _patch_seams(monkeypatch, retrieved_docs, web_results=None):
     """Mock every external seam for an end-to-end provenance run."""
 
     retrieve_module = importlib.import_module("graph.nodes.retrieve")
@@ -265,11 +265,16 @@ def _patch_seams(monkeypatch, retrieved_docs):
         "get_retrieval_grader",
         lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(is_relevant=True)),
     )
-    monkeypatch.setattr(
-        web_module,
-        "get_web_search_tool",
-        lambda: SimpleNamespace(invoke=lambda p: [{"content": "web result"}]),
-    )
+    web_calls = []
+
+    class FakeWebTool:
+        def search(self, query, *, max_results, timeout):
+            web_calls.append(
+                {"query": query, "max_results": max_results, "timeout": timeout}
+            )
+            return web_results if web_results is not None else [{"content": "web result"}]
+
+    monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())
     monkeypatch.setattr(
         generate_module,
         "generate_answer",
@@ -285,6 +290,7 @@ def _patch_seams(monkeypatch, retrieved_docs):
         "get_answer_grader",
         lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(answers_question=True)),
     )
+    return web_calls
 
 
 def _initial_state(question="Q"):
@@ -334,7 +340,7 @@ def test_app_web_routed_answer_cites_the_search(monkeypatch):
         "get_question_router",
         lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(datasource=WEBSEARCH)),
     )
-    _patch_seams(monkeypatch, retrieved_docs=[])
+    web_calls = _patch_seams(monkeypatch, retrieved_docs=[])
 
     result = graph_module.app.invoke(_initial_state(question="current events"))
     formatted = format_answer(result)
@@ -342,33 +348,32 @@ def test_app_web_routed_answer_cites_the_search(monkeypatch):
     assert formatted.startswith("FINAL ANSWER")
     assert '- Web search: "current events"' in formatted
     assert "Local corpus" not in formatted
+    assert web_calls == [
+        {"query": "current events", "max_results": 3, "timeout": 30.0}
+    ]
+    assert result["stop_reason"] == ""
 
 
 def test_app_web_routed_answer_cites_actual_pages_when_urls_present(monkeypatch):
-    # With URL-bearing Tavily results (langchain-tavily dict shape), the
+    # With URL-bearing Tavily results (tavily-python dict shape), the
     # Sources section cites the actual pages instead of the query.
     monkeypatch.setattr(
         graph_module,
         "get_question_router",
         lambda: SimpleNamespace(invoke=lambda p: SimpleNamespace(datasource=WEBSEARCH)),
     )
-    _patch_seams(monkeypatch, retrieved_docs=[])
-
-    web_module = importlib.import_module("graph.nodes.web_search")
-    monkeypatch.setattr(
-        web_module,
-        "get_web_search_tool",
-        lambda: SimpleNamespace(
-            invoke=lambda p: {
-                "results": [
-                    {
-                        "content": "web result",
-                        "url": "https://news.example/story",
-                        "title": "Big Story",
-                    }
-                ]
-            }
-        ),
+    web_calls = _patch_seams(
+        monkeypatch,
+        retrieved_docs=[],
+        web_results={
+            "results": [
+                {
+                    "content": "web result",
+                    "url": "https://news.example/story",
+                    "title": "Big Story",
+                }
+            ]
+        },
     )
 
     result = graph_module.app.invoke(_initial_state(question="current events"))
@@ -378,6 +383,10 @@ def test_app_web_routed_answer_cites_actual_pages_when_urls_present(monkeypatch)
     assert "- Web search: Big Story — https://news.example/story" in formatted
     assert '"current events"' not in formatted  # page-level beats query-level
     assert "Local corpus" not in formatted
+    assert web_calls == [
+        {"query": "current events", "max_results": 3, "timeout": 30.0}
+    ]
+    assert result["stop_reason"] == ""
 
 
 # ---------------------------------------------------------------------------

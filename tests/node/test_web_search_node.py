@@ -78,8 +78,8 @@ def test_web_search_reads_question_from_state(monkeypatch):
 
     assert calls == {
         "query": "What is RAG?",
-        "max_results": web_search_module.TAVILY_MAX_RESULTS,
-        "timeout": web_search_module.TAVILY_REQUEST_TIMEOUT_SECONDS,
+        "max_results": 3,
+        "timeout": 30.0,
     }
 
 
@@ -152,7 +152,7 @@ def test_web_search_uses_search_query_when_present(monkeypatch):
 
     web_search({"question": "Q", "search_query": "rewritten query", "documents": []})
 
-    assert calls["query"] == "rewritten query"
+    assert calls == {"query": "rewritten query", "max_results": 3, "timeout": 30.0}
     # Relevance is still graded against the ORIGINAL question (the intent).
     assert grader_calls[0]["question"] == "Q"
 
@@ -163,7 +163,7 @@ def test_web_search_falls_back_to_question_when_search_query_empty(monkeypatch):
 
     web_search({"question": "Q", "search_query": "", "documents": []})
 
-    assert calls["query"] == "Q"
+    assert calls == {"query": "Q", "max_results": 3, "timeout": 30.0}
 
 
 def test_web_search_replaces_previous_web_supplement(monkeypatch):

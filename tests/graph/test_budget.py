@@ -143,7 +143,7 @@ def _generation_state(**overrides):
 
 
 def _patch_all_node_seams(monkeypatch, *, docs_relevant=True):
-    """Mock every external seam; returns the recorded web-search payloads."""
+    """Mock every external seam; returns the recorded web-search calls."""
 
     retrieve_module = importlib.import_module("graph.nodes.retrieve")
     grade_module = importlib.import_module("graph.nodes.grade_documents")
@@ -180,8 +180,10 @@ def _patch_all_node_seams(monkeypatch, *, docs_relevant=True):
     web_calls = []
 
     class FakeWebTool:
-        def invoke(self, payload):
-            web_calls.append(payload)
+        def search(self, query, *, max_results, timeout):
+            web_calls.append(
+                {"query": query, "max_results": max_results, "timeout": timeout}
+            )
             return [{"content": "web result"}]
 
     monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())
@@ -307,7 +309,7 @@ def test_app_stops_with_budget_exhausted_when_web_budget_spent(monkeypatch):
 
     assert result["stop_reason"] == STOP_REASON_BUDGET_EXHAUSTED
     assert result["web_search_count"] == 1
-    assert len(web_calls) == 1  # exactly one search ever ran
+    assert web_calls == [{"query": "rewritten query", "max_results": 3, "timeout": 30.0}]
 
 
 def test_app_normal_success_tracks_counters_without_warnings(monkeypatch):

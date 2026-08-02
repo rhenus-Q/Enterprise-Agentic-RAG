@@ -303,8 +303,10 @@ def _patch_node_seams(monkeypatch, *, relevance_by_content, retrieved=("rel-1", 
     web_calls = []
 
     class FakeWebTool:
-        def invoke(self, payload):
-            web_calls.append(payload)
+        def search(self, query, *, max_results, timeout):
+            web_calls.append(
+                {"query": query, "max_results": max_results, "timeout": timeout}
+            )
             return [{"content": "web result"}]
 
     monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())
@@ -365,9 +367,10 @@ def test_app_conservative_all_irrelevant_falls_back_to_web(monkeypatch):
 
     result = graph_module.app.invoke(_initial_state())
 
-    assert len(web_calls) == 1
+    assert web_calls == [{"query": "Q", "max_results": 3, "timeout": 30.0}]
     assert result["generation"] == "FINAL ANSWER"
     assert result["web_search_count"] == 1
+    assert result["stop_reason"] == ""
 
 
 def test_app_aggressive_mixed_relevance_uses_web(monkeypatch):
@@ -379,8 +382,9 @@ def test_app_aggressive_mixed_relevance_uses_web(monkeypatch):
 
     result = graph_module.app.invoke(_initial_state())
 
-    assert len(web_calls) == 1
+    assert web_calls == [{"query": "Q", "max_results": 3, "timeout": 30.0}]
     assert result["generation"] == "FINAL ANSWER"
+    assert result["stop_reason"] == ""
 
 
 def test_app_disabled_all_irrelevant_declines_without_web(monkeypatch):

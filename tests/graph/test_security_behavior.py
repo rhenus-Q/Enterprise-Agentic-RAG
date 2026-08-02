@@ -103,8 +103,8 @@ def _patch_web_tool(monkeypatch, results):
     calls = []
 
     class FakeWebTool:
-        def invoke(self, payload):
-            calls.append(payload)
+        def search(self, query, *, max_results, timeout):
+            calls.append({"query": query, "max_results": max_results, "timeout": timeout})
             return results
 
     monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())
@@ -209,7 +209,10 @@ def test_malicious_web_result_dropped_when_graded_irrelevant(monkeypatch):
     result = answer_question("current events", _LOCAL_OPTIONS)
 
     joined_sources = "\n".join(result.sources)
-    assert len(web_calls) == 1  # the tool was called
+    assert web_calls == [
+        {"query": "current events", "max_results": 3, "timeout": 30.0}
+    ]
+    assert result.stop_reason == ""
     assert result.sources == []  # nothing appended -> no sources
     assert WEB_PAYLOAD not in joined_sources
     assert EVIL_URL not in joined_sources
@@ -222,7 +225,7 @@ def test_malicious_web_result_relevant_but_payload_not_in_sources(monkeypatch):
 
     _patch_router(monkeypatch, WEBSEARCH)
     _patch_retriever(monkeypatch, [])
-    _patch_web_tool(
+    web_calls = _patch_web_tool(
         monkeypatch,
         [{"content": WEB_PAYLOAD, "url": "https://news.example/story", "title": "Big Story"}],
     )
@@ -234,6 +237,10 @@ def test_malicious_web_result_relevant_but_payload_not_in_sources(monkeypatch):
 
     joined_sources = "\n".join(result.sources)
     assert result.answer == BENIGN_ANSWER
+    assert result.stop_reason == ""
+    assert web_calls == [
+        {"query": "current events", "max_results": 3, "timeout": 30.0}
+    ]
     assert "https://news.example/story" in joined_sources  # benign provenance shown
     assert WEB_PAYLOAD not in joined_sources
     assert EVIL_URL not in joined_sources  # evil URL embedded in body never surfaced
@@ -277,10 +284,11 @@ def test_only_rewriter_output_reaches_the_web_tool(monkeypatch):
 
     assert web_calls, "the not-useful retry should have reached the web tool"
     for payload in web_calls:
-        # The single outbound surface: exactly one key, the rewritten query.
-        assert set(payload.keys()) == {"query"}
+        assert set(payload) == {"query", "max_results", "timeout"}
         # The rewriter output is passed through verbatim (no graph sanitization).
         assert payload["query"] == rewriter_output
+        assert payload["max_results"] == 3
+        assert payload["timeout"] == 30.0
         # Nothing beyond the rewriter output leaks outward.
         assert "SECRET-PREV-ANSWER" not in payload["query"]
         assert "CONFIRMED-INJECTED" not in payload["query"]

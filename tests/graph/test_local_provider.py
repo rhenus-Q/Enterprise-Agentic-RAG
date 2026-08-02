@@ -726,8 +726,10 @@ def _patch_node_seams(monkeypatch, *, docs_relevant):
     web_calls = []
 
     class FakeWebTool:
-        def invoke(self, payload):
-            web_calls.append(payload)
+        def search(self, query, *, max_results, timeout):
+            web_calls.append(
+                {"query": query, "max_results": max_results, "timeout": timeout}
+            )
             return [{"content": "web result"}]
 
     monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())
@@ -853,4 +855,5 @@ def test_openai_mode_still_honors_a_per_run_web_search_option(monkeypatch):
     result = answer_question("Q", AnswerOptions(web_search_enabled=True))
 
     assert result.web_search_enabled is True
-    assert web_calls == [{"query": "Q"}]
+    assert web_calls == [{"query": "Q", "max_results": 3, "timeout": 30.0}]
+    assert result.stop_reason == ""

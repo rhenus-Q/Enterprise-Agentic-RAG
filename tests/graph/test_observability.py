@@ -403,8 +403,10 @@ def test_web_search_query_is_redacted_without_changing_policy(monkeypatch):
     web_calls = []
 
     class FakeWebTool:
-        def invoke(self, payload):
-            web_calls.append(payload)
+        def search(self, query, *, max_results, timeout):
+            web_calls.append(
+                {"query": query, "max_results": max_results, "timeout": timeout}
+            )
             return [{"content": "web result"}]
 
     monkeypatch.setattr(
@@ -444,9 +446,12 @@ def test_web_search_query_is_redacted_without_changing_policy(monkeypatch):
     for payload in web_calls:
         assert "sk-WEBSECRET-123" not in payload["query"]
         assert "[REDACTED]" in payload["query"]
+        assert payload["max_results"] == 3
+        assert payload["timeout"] == 30.0
     # Policy/privacy unchanged by redaction.
     assert result.web_search_enabled is True
     assert result.web_fallback_policy == "conservative"
+    assert result.stop_reason == ""
 
 
 # ---------------------------------------------------------------------------
@@ -482,8 +487,10 @@ def _patch_node_seams(monkeypatch):
     web_calls = []
 
     class FakeWebTool:
-        def invoke(self, payload):
-            web_calls.append(payload)
+        def search(self, query, *, max_results, timeout):
+            web_calls.append(
+                {"query": query, "max_results": max_results, "timeout": timeout}
+            )
             return [{"content": "web result"}]
 
     monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())

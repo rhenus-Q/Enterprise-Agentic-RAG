@@ -59,7 +59,7 @@ def _patch_all_node_seams(
 ):
     """
     Mock every external seam. Returns recorders:
-    - web_calls: payloads sent to the web search tool
+    - web_calls: arguments sent to the web search client
     - rewrite_calls: payloads sent to the query rewriter chain
     - feedbacks: retry_feedback received by each generate_answer call
     """
@@ -97,8 +97,10 @@ def _patch_all_node_seams(
     web_calls = []
 
     class FakeWebTool:
-        def invoke(self, payload):
-            web_calls.append(payload)
+        def search(self, query, *, max_results, timeout):
+            web_calls.append(
+                {"query": query, "max_results": max_results, "timeout": timeout}
+            )
             return [{"content": f"web result {len(web_calls)}"}]
 
     monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())
@@ -236,7 +238,9 @@ def test_app_not_useful_retry_searches_with_rewritten_query(monkeypatch):
     result = graph_module.app.invoke(_initial_state())
 
     assert rewrite_calls == [{"question": "Q", "previous_answer": "ANSWER 1"}]
-    assert web_calls == [{"query": "more specific query"}]  # not the original question
+    assert web_calls == [
+        {"query": "more specific query", "max_results": 3, "timeout": 30.0}
+    ]  # not the original question
     assert result["search_query"] == "more specific query"
     assert result["generation"] == "ANSWER 2"
     assert result["stop_reason"] == ""
@@ -250,7 +254,7 @@ def test_app_first_pass_web_search_still_uses_original_question(monkeypatch):
 
     result = graph_module.app.invoke(_initial_state())
 
-    assert web_calls == [{"query": "Q"}]
+    assert web_calls == [{"query": "Q", "max_results": 3, "timeout": 30.0}]
     assert rewrite_calls == []
     assert result["stop_reason"] == ""
 

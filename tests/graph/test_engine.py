@@ -358,8 +358,10 @@ def _patch_node_seams(monkeypatch, *, relevance_by_content, retrieved=("rel-1", 
     web_calls = []
 
     class FakeWebTool:
-        def invoke(self, payload):
-            web_calls.append(payload)
+        def search(self, query, *, max_results, timeout):
+            web_calls.append(
+                {"query": query, "max_results": max_results, "timeout": timeout}
+            )
             return [{"content": "web result"}]
 
     monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())
@@ -384,8 +386,9 @@ def test_answer_question_per_run_aggressive_uses_web_without_env(monkeypatch):
 
     result = answer_question("Q", AnswerOptions(web_fallback_policy="aggressive"))
 
-    assert len(web_calls) == 1
+    assert web_calls == [{"query": "Q", "max_results": 3, "timeout": 30.0}]
     assert result.answer == "FINAL ANSWER"
+    assert result.stop_reason == ""
     assert result.web_fallback_policy == WEB_FALLBACK_AGGRESSIVE
     assert result.web_search_count == 1
 
