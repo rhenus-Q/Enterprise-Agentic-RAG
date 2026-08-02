@@ -279,7 +279,6 @@ Do not run API-key-requiring tests.
 First use `Glob` to discover relevant tooling files under:
 
 * `.github/workflows/*`
-* `.claude/commands/*`
 * `*.toml`
 * `*.md`
 * `.gitignore`
@@ -298,7 +297,6 @@ Prioritize tooling files that define or document:
 * API-key-requiring test isolation
 * generated artifact hygiene
 * ignored runtime outputs
-* command workflow expectations
 * safe versus unsafe test workflows
 
 Do not inspect `.env`.
@@ -634,16 +632,13 @@ Assess:
 * docs/CI/test command alignment
 * generated artifact hygiene
 
-## 14. Documentation and workflow review
+## 14. Documentation review
 
-Assess:
+Assess only whether test coverage expectations and the safe-versus-gated test
+workflow are documented clearly.
 
-* README
-* structure.md
-* CLAUDE.md
-* eval docs
-* Claude commands
-* whether test coverage expectations are documented clearly
+General documentation accuracy belongs to `/docs-drift-review`; Claude command
+safety belongs to `/review-command`.
 
 ## 15. Recommended next actions
 

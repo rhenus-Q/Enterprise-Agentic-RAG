@@ -224,7 +224,6 @@ Do not run `tests/chains/`.
 * `.gitignore`
 * `frontend/package.json`
 * `frontend/vite.config.ts`
-* `.claude/commands/`
 * `ingestion.py`
 
 Do not run `ingestion.py`.
@@ -317,27 +316,23 @@ Evaluate the following areas.
 * Are API clients lazy-loaded to avoid import-time secret requirements?
 * Are error messages careful not to print secret values?
 
-### Tool-call and command boundaries
+### Tool-call boundaries
 
-* Do Claude commands use narrow tool permissions?
-* Do review commands avoid modifying code unless explicitly intended?
-* Are dangerous commands, full eval, ingestion, and API-key workflows blocked by default?
-* Are there overly broad Bash grants?
-* Are generated reports written only to intended report paths?
-* Is command behavior safe if the working tree is dirty?
+* Are dangerous operations — full eval, ingestion, and API-key workflows —
+  blocked by default in the runtime and eval paths?
+* Are generated reports and artifacts written only to intended paths?
+
+Claude command files under `.claude/commands/` are out of scope here: their
+frontmatter, tool-permission breadth, and write scoping belong to
+`/review-command`.
 
 ### Security test coverage
 
-* Are user-input redaction behaviors tested?
-* Is privacy mode tested?
-* Is web-search-disabled behavior tested?
-* Are prompt-injection guardrails tested at least through mocked unit tests or eval rows?
-* Are trace-safety guarantees tested?
-* Are failure paths tested without real API keys?
-* Are tests separated so safe tests can run in CI?
-* Are API-layer security behaviors — error sanitization, citation URL validation, run-history contents — covered by `tests/server/`?
-* Are frontend rendering guarantees covered by the colocated vitest suite?
-* Are there missing regression tests around recent security changes?
+Check only whether each security guarantee this report relies on is locked by
+*some* test at all — redaction, privacy mode, web-search-disabled, trace
+metadata-only, and API error sanitization.
+
+Do not produce a coverage-gap inventory — `/test-coverage-review` owns that.
 
 ## Step 4. Look for risks and improvement opportunities
 
@@ -355,7 +350,6 @@ Flag:
 * API responses or run-history records carrying answer text, document content, or raw state
 * citation URLs reaching the frontend without scheme validation
 * an API layer that imports graph nodes/chains or constructs its own external client
-* overly broad Claude command permissions
 * missing security tests
 * stale docs that overstate security guarantees
 * areas where the project looks secure by accident rather than by design
@@ -507,29 +501,17 @@ Assess:
 
 ## 12. Security test coverage review
 
-Assess:
+State, per security guarantee claimed in this report, whether a test locks it —
+yes or no. Keep this to a list of guarantees, not a coverage audit.
 
-* mocked security tests
-* privacy mode tests
-* redaction tests
-* web-search-disabled tests
-* prompt-injection tests
-* trace-safety tests
-* API-layer tests (`tests/server/`)
-* frontend critical-state tests
-* missing tests
-* risky tests
+Refer gap analysis to `/test-coverage-review`.
 
-## 13. Documentation and workflow review
+## 13. Documentation review
 
-Assess:
+Assess only whether security behavior is documented clearly and not overstated.
 
-* README
-* structure.md
-* CLAUDE.md
-* eval docs
-* Claude commands
-* whether security behavior is documented clearly and not overstated
+General documentation accuracy belongs to `/docs-drift-review`; Claude command
+safety belongs to `/review-command`.
 
 ## 14. Recommended next actions
 

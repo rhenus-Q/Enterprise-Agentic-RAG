@@ -225,7 +225,6 @@ Do not run `tests/chains/`.
 * `.github/workflows/ci.yml`
 * `.gitignore`
 * `frontend/package.json`
-* `.claude/commands/`
 
 Do not inspect `.env`.
 
@@ -340,19 +339,11 @@ Evaluate the following areas.
 
 ### Failure-related test coverage
 
-* Are mocked node tests covering failure paths?
-* Are graph tests covering terminal notice paths?
-* Are eval tests covering stop_reason and fallback behavior?
-* Are budget-exhausted paths tested?
-* Are privacy-mode failure paths tested?
-* Are web search failure paths tested?
-* Are generation failure paths tested?
-* Are retriever failure paths tested?
-* Are grader failure paths tested?
-* Are trace-write failure paths tested?
-* Are API error mapping, cancellation, and run-history bounds tested in `tests/server/`?
-* Are frontend error and cancellation states tested?
-* Are there missing regression tests for recent failure-handling changes?
+Check only whether each failure path this report relies on is locked by *some*
+test at all — degraded `stop_reason` paths, budget-exhausted paths, and API error
+mapping.
+
+Do not produce a coverage-gap inventory — `/test-coverage-review` owns that.
 
 ## Step 4. Look for risks and improvement opportunities
 
@@ -536,33 +527,18 @@ Assess:
 
 ## 13. Failure-related test coverage review
 
-Assess:
+State, per failure path claimed in this report, whether a test locks it — yes or
+no. Keep this to a list of failure paths, not a coverage audit.
 
-* node failure tests
-* graph terminal-path tests
-* eval stop_reason tests
-* budget tests
-* privacy-mode tests
-* web-search-failure tests
-* generation-failure tests
-* retriever-failure tests
-* grader-failure tests
-* trace-write-failure tests
-* API error-mapping and cancellation tests
-* frontend error-state tests
-* missing tests
-* risky tests
+Refer gap analysis to `/test-coverage-review`.
 
-## 14. Documentation and workflow review
+## 14. Documentation review
 
-Assess:
+Assess only whether failure behavior, budgets, and degraded modes are documented
+clearly and not overstated.
 
-* README
-* structure.md
-* CLAUDE.md
-* eval docs
-* Claude commands
-* whether failure behavior, budgets, and degraded modes are documented clearly
+General documentation accuracy belongs to `/docs-drift-review`; Claude command
+safety belongs to `/review-command`.
 
 ## 15. Recommended next actions
 

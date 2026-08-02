@@ -220,6 +220,10 @@ Do not inspect `tests/chains/` unless the user explicitly asks.
 
 * `.claude/commands/`
 
+Inspect only whether the command suite covers the project's workflow. Individual
+command correctness, frontmatter, and tool-permission breadth belong to
+`/review-command` — do not audit them here.
+
 Inspect roadmap artifacts only when needed for workflow review.
 
 Do not inspect `.env`.
@@ -295,15 +299,13 @@ Evaluate the following areas.
 * Are generated trace/debug artifacts safe to persist or share?
 * Does the observability design help diagnose graph failures without making the graph harder to reason about?
 
-### Testability
+### Test architecture
 
-* Are important behaviors covered by mocked tests?
-* Are graph/node/server/frontend/eval tests separated correctly?
-* Are API-key-requiring tests avoided by default?
-* Are there brittle tests or under-tested seams?
-* Are recent features covered by unit tests?
-* Are privacy mode, fallback policies, budget limits, stop reasons, and failure paths covered?
-* Are monkeypatch seams clean and intentional?
+Assess only the *architecture* of the test suite: whether suites are separated by
+layer (node / graph / server / frontend / eval), whether the monkeypatch seams are
+clean and intentional, and whether keys-free defaults are structurally enforced.
+
+Do not enumerate coverage gaps here — `/test-coverage-review` owns that.
 
 ### Production readiness
 
@@ -318,14 +320,14 @@ Evaluate the following areas.
 * Are production-like risks documented clearly enough without overengineering the system?
 * Is cleanup needed before adding more features?
 
-### Documentation quality
+### Documentation structure
 
-* Do README and structure docs match the code?
-* Are command workflows documented enough?
-* Are eval docs accurate?
-* Are roadmap artifacts useful rather than noisy?
-* Do docs explain how to run safe tests versus API-key-requiring workflows?
-* Do docs clearly describe the architecture without overstating production readiness?
+Assess only whether the documentation *structure* fits the architecture: whether
+the ADRs, README, and `structure.md` cover the right layers, and whether roadmap
+artifacts are useful rather than noisy.
+
+Do not verify whether documentation matches the code — `/docs-drift-review` owns
+that.
 
 ### Engineering quality
 
@@ -345,9 +347,7 @@ Flag:
 * API contract and frontend types drifting apart
 * unclear ownership of logic
 * duplicate logic
-* overly broad tool permissions
 * generated files that should be ignored
-* stale docs
 * fragile eval assumptions
 * excessive command/template complexity
 * missing tests around important behavior
@@ -493,26 +493,19 @@ Assess:
 
 ## 11. Test architecture review
 
-Assess:
+Assess suite separation, mocking seams, and keys-free defaults as architecture.
 
-* mocked tests
-* graph tests
-* node tests
-* API tests (`tests/server/`)
-* frontend tests (colocated vitest suite)
-* eval tests
-* missing tests
-* risky tests
+State explicitly that coverage-gap analysis is out of scope and belongs to
+`/test-coverage-review`.
 
 ## 12. Documentation and workflow review
 
-Assess:
+Assess whether the documentation and command-workflow *structure* fits the
+architecture.
 
-* README
-* structure.md
-* CLAUDE.md
-* Claude commands
-* roadmap artifacts
+State explicitly that documentation accuracy is out of scope
+(`/docs-drift-review`) and that per-command correctness is out of scope
+(`/review-command`).
 
 ## 13. Recommended next actions
 

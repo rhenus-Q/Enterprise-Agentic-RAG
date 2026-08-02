@@ -130,8 +130,7 @@ Prefer reading only these peer commands if they exist:
 * `.claude/commands/imple-spec.md`
 * `.claude/commands/arch-review.md`
 * `.claude/commands/update-claude-md.md`
-* `.claude/commands/new-spec.md`
-* `.claude/commands/plan-spec.md`
+* `.claude/commands/new-function-spec.md`
 
 Do not read unrelated project files unless needed to avoid an incorrect review.
 
@@ -282,8 +281,7 @@ Assess whether the command fits this Agentic RAG project.
 
 Check consistency with:
 
-* `/new-spec`
-* `/plan-spec`
+* `/new-function-spec`
 * `/imple-spec`
 * `/review-diff`
 * `/arch-review`

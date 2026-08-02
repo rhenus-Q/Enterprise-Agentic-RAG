@@ -47,7 +47,12 @@ findings** into distinct steps:
   been made.
 - The **specialized review commands** (`/arch-review`, `/security-review`,
   `/failure-modes-review`, `/test-coverage-review`, `/docs-drift-review`) perform
-  broad subsystem audits and write report files; they do not modify code.
+  broad subsystem audits and write report files; they do not modify code. Each
+  owns one axis and defers the others rather than duplicating them: test-coverage
+  gaps belong to `/test-coverage-review`, documentation accuracy to
+  `/docs-drift-review`, and command-file correctness and tool-permission breadth
+  to `/review-command`. The other reviews note whether a risk is covered and point
+  to the owning command instead of running that audit themselves.
 - The **apply commands** turn review findings into changes, and are **not**
   interchangeable:
   - `/apply-review-report` — for **project-level** review reports
