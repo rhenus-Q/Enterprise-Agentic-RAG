@@ -31,9 +31,12 @@ corresponding documentation being updated:
 non-Markdown source and configuration files, including:
 
 - Python module / class / function docstrings;
+- TypeScript / TSX documentation comments and explanatory blocks;
 - long explanatory comments (comment blocks that describe behavior, architecture,
   or rationale, not one-line implementation notes);
 - user-facing constants and unsupported-intent / help messages;
+- API descriptions, UI copy, and frontend help text that describe supported behavior;
+- HTML metadata or other embedded user-facing descriptions;
 - CLI help text;
 - prompt / template prose;
 - long string blocks that describe current architecture, capabilities, commands,
@@ -58,10 +61,8 @@ Optional scope supplied by the user:
     the user's skill input
 
 When `the user's skill input` is empty, review the full repository. When it names a file,
-directory, module, or drift category, treat that scope as a hard review boundary.
-Inspect only the documentation target and the minimum code, configuration, test,
-command, or CI evidence needed to validate claims within it. Do not review unrelated
-implementation areas or draw conclusions about their correctness.
+directory, module, or drift category, narrow the review to that scope while still
+inspecting enough repository evidence to validate the claims within it.
 
 ---
 
@@ -81,12 +82,13 @@ repeated elsewhere.
   code, configuration code, and documented variable names as evidence.
 - Do not run real-model tests, gated integration tests, full evals, or
   provider-backed ingestion.
+- Do not install frontend dependencies, run a frontend build, or start the API
+  server. Frontend and server claims are verified statically from source,
+  `frontend/package.json`, and CI.
 - Do not make external network or provider calls (OpenAI, Tavily, Chroma,
   LangSmith, or any other). Do not access external URLs.
-- Do not scan `.agents/skills/**` by default. Inspect it only when the user explicitly
-  requests documentation-drift review of Skill files. Never scan local
-  `docs/roadmap/**` artifacts (see "Scope and exclusions"). The three tracked
-  `docs/roadmap/` workflow files
+- Never scan `.agents/skills/**` or local `docs/roadmap/**` artifacts (see
+  "Scope and exclusions"). The three tracked `docs/roadmap/` workflow files
   (`docs/roadmap/README.md`, `docs/roadmap/spec/spec-template.md`, and
   `docs/roadmap/implementation/implementation-template.md`) are the sole
   exception: they are version-controlled active documentation and **are**
@@ -104,8 +106,8 @@ source/config files**. The current working tree is the documentation reality bei
 checked — including intentional uncommitted changes. Do not treat an uncommitted
 path as stale merely because it differs from `HEAD`.
 
-Build **two** inventories from files tracked by Git, excluding `.agents/skills/**` by
-default and always excluding local `docs/roadmap/**` artifacts (specs, plans,
+Build **two** inventories from files tracked by Git, both excluding
+`.agents/skills/**` and all local `docs/roadmap/**` artifacts (specs, plans,
 implementation reports, and review artifacts) — **except** the three tracked
 `docs/roadmap/` workflow files, which are active documentation and are audited.
 
@@ -122,21 +124,25 @@ tracked workflow files, and returns each only while it is tracked):
       "docs/roadmap/spec/spec-template.md" \
       "docs/roadmap/implementation/implementation-template.md"
 
-If the user explicitly requests Skill documentation review, build a separate tracked
-inventory limited to the named `.agents/skills/<skill>/` scope instead of removing the
-default exclusion globally. Keep unrelated Skills excluded.
-
 Embedded-prose source/config inventory:
 
     git ls-files \
-      ":(glob)graph/**/*.py" \
-      ":(glob)server/**/*.py" \
+      "graph/*.py" \
+      "graph/**/*.py" \
+      "server/*.py" \
+      "server/**/*.py" \
       "main.py" \
       "ingestion.py" \
-      ":(glob)evals/**/*.py" \
-      ":(glob)tests/**/*.py" \
-      ":(glob)frontend/src/**/*.ts" \
-      ":(glob)frontend/src/**/*.tsx" \
+      "evals/*.py" \
+      "evals/**/*.py" \
+      "tests/*.py" \
+      "tests/**/*.py" \
+      "tests/server/*.py" \
+      "tests/server/**/*.py" \
+      "frontend/src/*.ts" \
+      "frontend/src/*.tsx" \
+      "frontend/src/**/*.ts" \
+      "frontend/src/**/*.tsx" \
       "frontend/package.json" \
       "frontend/vite.config.ts" \
       "frontend/tsconfig.json" \
@@ -149,9 +155,9 @@ Embedded-prose source/config inventory:
 
 The source/config files in the second inventory are **not** audited for all code
 correctness — inspect only their embedded documentation prose (docstrings, long
-explanatory comments, TypeScript/TSX prose, user-facing constants / messages, CLI
-help text, prompt / template prose, HTML metadata, and long descriptive string blocks)
-for drift.
+explanatory comments, TypeScript/TSX documentation comments, user-facing
+constants/messages, API descriptions, UI/help copy, HTML metadata, CLI help text,
+prompt/template prose, and long descriptive string blocks) for drift.
 
 **Always read in full (do not rely only on search matches) the package-level
 `__init__.py` of every audited source package** (for this repository:
@@ -161,11 +167,11 @@ prose-drift surfaces — they often summarize the
 package's capabilities, version status, and architecture, and drift silently when the
 code around them evolves.
 
-**Default excluded audit input:**
+**Excluded audit input (never scanned):**
 
 | Path | Why excluded |
 |---|---|
-| `.agents/skills/**` | Command definitions, including this file — excluded unless the user explicitly requests Skill documentation review. |
+| `.agents/skills/**` | Command definitions, including this file — not project documentation. |
 | `docs/roadmap/**` local artifacts | Temporary plans, local review artifacts, and process documents — not active documentation. Includes this Skill's own report directory. **Excludes the three tracked workflow files below, which are audited.** |
 
 **Audited despite living under `docs/roadmap/` (tracked active documentation):**
@@ -200,13 +206,16 @@ memory or naming alone. Inspect the relevant current sources of truth as
 applicable:
 
 - top-level tree, tracked files, source package layout;
-- `graph/`, `server/`, `frontend/`, `evals/`, `tests/`, and the top-level entry
-  points;
-- `.github/workflows/`, `pyproject.toml`, `.env.example`, `frontend/package.json`,
-  `frontend/package-lock.json`, `frontend/vite.config.ts`, and
-  `frontend/tsconfig.json`;
-- entry points, the graph router and engine, state schema, nodes, chains, FastAPI
-  routes/schemas, the frontend API client/types, and static-serving/proxy boundaries;
+- `graph/`, `server/`, `frontend/`, `evals/`, `tests/`, and top-level entry points;
+- `.github/workflows/`, `pyproject.toml`, `.env.example`,
+  `frontend/package.json`, Vite and TypeScript configuration;
+- graph routing, engine/state, nodes/chains, and retrieval/web-search boundaries;
+- the server import boundary, FastAPI status/run/document endpoints, request/response
+  schemas, cancellation, HTTP error mapping, URL/config/status sanitization, and API
+  contracts;
+- frontend pages/components, API clients, mirrored TypeScript types and field parity,
+  URL safety, error/status display, cancellation UI, colocated tests, static serving,
+  proxy configuration, and typecheck/Vitest/Vite build descriptions;
 - feature flags, model factory / configuration code, test markers, CI
   exclusions, active scripts;
 - `README` files, the ADR index, ADR status and supersession metadata.
@@ -233,7 +242,7 @@ workflow files are the exception: audit them as Category A active documentation.
 | **B. Historical decision records** | `docs/adr/**` | Preserve what was true when decided. Flag only: broken link; history presented as current; stale current-status/implementation-note section; wrong supersession reference; missing/incorrect supersession metadata; an objective typo or impossible path already wrong at the time. |
 | **C. Release notes / version snapshots** | Dated validation reports and other explicitly versioned snapshots | Old versions/paths/totals may be correct history. Flag only: claims to describe the *current* version; broken current navigation link; a command presented as currently runnable that no longer works; contradictory version relationship; stale current-status section; a pointer to an active doc via an obsolete path. |
 | **D. Generated results / eval reports** | tracked eval or benchmark output Markdown | Treat measured values as point-in-time unless they claim to be current. Check links, headings, scope descriptions, runner/dataset paths, and obvious contradictions. Do not rewrite measured values by inference. |
-| **E. Embedded documentation prose** | Python/TypeScript/TSX module or API prose, docstrings, long explanatory comments, user-facing constants/messages, CLI help text, prompt/template strings, and HTML metadata | Treat as current documentation when it describes current behavior, capabilities, architecture, commands, config, tests, model/LLM usage, feature flags, paths, API contracts, or user-facing output. Do not modernize short local implementation comments or clearly historical rationale unless they materially mislead maintainers. |
+| **E. Embedded documentation prose** | Python docstrings, TypeScript/TSX documentation comments, long explanatory comments, user-facing constants, API descriptions, UI/help copy, HTML metadata, CLI help text, prompt/template strings | Treat as current documentation when it describes current behavior, capabilities, architecture, commands, config, tests, model/LLM usage, feature flags, paths, API contracts, or user-facing output. Do not modernize short local implementation comments or clearly historical rationale unless they materially mislead maintainers. |
 
 For categories B-D, do not modernize historical bodies (Decision/Context/Rationale/
 Consequences, dated benchmarks, archived facts, or clearly historical rationale
@@ -257,36 +266,42 @@ distinguishing active claims from valid historical records.
    external URLs; report an external link only when its visible label or local
    context is internally contradictory.
 3. **Commands and workflows** — documented `pytest` / eval-runner / script /
-   `ruff` / `mypy` / `uv` / `npm` / TypeScript / Vitest / Vite / CI / entry-point /
-   setup commands that reference
+   `ruff` / `mypy` / `uv` / npm / TypeScript / Vitest / Vite / CI / server-start /
+   entry-point / setup commands that reference
    missing paths, invoke renamed files, unintentionally include gated real-model
    tests, omit required exclusions, contradict current CI, use obsolete flags,
    claim to be keys-free while reaching a provider, describe a gated full eval as
    safe/free, or use an old test/eval path or dataset/runner filename. Establish
    correctness statically from paths, config, markers, imports, and CI — do not
    execute the commands.
-4. **Architecture and module boundaries** — active claims about modules, graph
-   structure, engine and router behavior, nodes, chains, eval/test ownership,
-   server/API and frontend ownership, frontend/backend contracts, static serving,
+4. **Architecture and module boundaries** — active claims about graph routing,
+   grading, engines, state, nodes/chains, retrieval and web-search boundaries,
+   the server import boundary, FastAPI status/run/document endpoints and schemas,
+   HTTP error mapping and sanitization, frontend/backend layering, frontend pages,
+   API clients and mirrored TypeScript types, URL safety, error/status display,
+   cancellation UI, static serving, proxy configuration, eval/test ownership,
    dependencies, entry points, import direction, and fallback behavior. Verify
    against implementation; do not infer drift from naming.
-5. **Capabilities and features** — current claims about local retrieval, web-search
-   fallback, document grading, query rewriting, answer grounding and usefulness,
-   retry and budget limits, privacy behavior, and terminal `stop_reason` values.
-   Verify against the current graph, engine, state, config, nodes, and chains.
-   Preserve historical ADR descriptions.
+5. **Capabilities and features** — current claims about LangGraph routing and
+   grading, the effective `web_search_enabled` value, retrieval, web search,
+   generation, graders, query rewriting, retry/budget limits, `GraphState` and
+   terminal `stop_reason` values, privacy/local-provider locks, fully local mode,
+   ingestion/index versioning and embedding fingerprints, FastAPI endpoints and
+   sanitization, frontend pages and API type mirrors, cancellation, and fallback
+   behavior. Verify against current graph, config, engine, state, nodes, chains,
+   ingestion, server, and frontend implementation. Preserve historical ADRs.
 6. **Models, config, environment** — model names, temperature, provider
    dependencies, env-variable names, defaults, feature flags, retry/budget
    config, optional vs. mandatory keys, keys-free commands, gated-test / real-model
    eval requirements. Verify against source, `.env.example`, and config code; do
    not print secrets.
-7. **Tests, evals, CI** — test/eval directory locations, mocked vs. real-model
-   suites, gated markers, CI scope, runner/dataset/report locations, module
-   ownership, `tests/server/`, co-located frontend tests, TypeScript type checking,
-   Vitest, Vite builds, the `evals/` vs. `tests/evals/` distinction, and whether
-   real-model suites are excluded by directory vs. only by missing keys. Verify
-   against the current `tests/` and `evals/` trees, CI workflows, pytest markers,
-   and `tests/conftest.py`.
+7. **Tests, evals, CI** — test/eval directory locations, root-level and recursive
+   Python tests (including `tests/server/`), colocated frontend tests, mocked vs.
+   real-model suites, gated markers, CI scope, typecheck/Vitest/Vite commands,
+   runner/dataset/report locations, module ownership, eval/ADR historical status,
+   and whether real-model suites are excluded by directory vs. only by missing
+   keys. Verify against the current `tests/`, `frontend/`, and `evals/` trees, CI
+   workflows, pytest markers, and `tests/conftest.py`.
 8. **Versions and release status** — current release/version/milestone claims and
    version labels in active README headings. Report conflicting current-version
    claims, active docs pinned to an obsolete release without reason, "latest"
@@ -297,23 +312,24 @@ distinguishing active claims from valid historical records.
    dates. Decide whether each is a dated/versioned historical snapshot, an active
    current-status claim, or an undated number likely to drift. Do not invent
    replacement totals; prefer removing, dating, or qualifying fragile ones.
-10. **Cross-document contradictions** — active-vs-active conflicts (e.g. one
-    document says web search is disabled while another says it is always used;
-    one says traces are metadata-only while another describes raw content; a
-    command includes chain integration tests that CI excludes). Do not treat a correctly historical/superseded ADR as
-    contradicting a current README.
+10. **Cross-document contradictions** — active-vs-active conflicts (e.g. a default
+    is documented as an absolute privacy lock; backend schemas and frontend type
+    mirrors disagree; a command includes chain integration tests CI excludes). Do
+    not treat a correctly historical/superseded ADR as contradicting a current
+    README.
 11. **Terminology / semantic drift** — wording that materially misleads a
     maintainer: "case" vs. "check" when semantics differ, "unit test" for a gated
     integration test, "eval" for a test of an eval harness, "deterministic"
     applied to an LLM-backed path, "current" for a historical snapshot,
-    "complete/fully supported" contradicted by implementation, or "keys-free" for
-    a command that can reach a provider.
-12. **Embedded documentation prose drift** — module docstrings, class/function
-    docstrings, TypeScript/TSX explanatory prose, long comments, user-facing
-    constants/messages, HTML metadata, CLI help text, and
-    prompt/template prose that describe current behavior, capabilities, paths,
-    tests, feature flags, LLM usage, model names, version status, or user-facing
-    output. Verify against current implementation. Do not flag short local comments
+    "complete/fully supported" contradicted by implementation, a cancellation path
+    described with the wrong `stop_reason`, or "keys-free" for a command that can
+    reach a provider.
+12. **Embedded documentation prose drift** — Python docstrings, TypeScript/TSX
+    documentation comments, long comments, user-facing constants, API descriptions,
+    UI/help copy, HTML metadata, CLI help text, and prompt/template prose that
+    describe current behavior, capabilities, paths, tests, feature flags, LLM
+    usage, model names, version status, API contracts, or user-facing output. Verify
+    against current implementation. Do not flag short local comments
     unless they materially mislead maintainers, and do not modernize clearly
     historical rationale merely because the architecture later evolved.
 
@@ -411,9 +427,9 @@ Write the detailed report using this structure:
 
     ## Report metadata
     Timestamp; requested scope; report path; repository root; Markdown and
-    embedded-prose discovery rules; exclusions (`.agents/skills/**` unless explicitly
-    requested, and local `docs/roadmap/**` artifacts, noting the three tracked roadmap
-    workflow files are audited as active documentation); Markdown files discovered; Markdown
+    embedded-prose discovery rules; exclusions (`.agents/skills/**` and local
+    `docs/roadmap/**` artifacts, noting the three tracked roadmap workflow files
+    are audited as active documentation); Markdown files discovered; Markdown
     files reviewed;
     embedded-prose source/config files discovered; embedded-prose source/config
     files reviewed, split into **read in depth** vs. **search-triaged** (located but
@@ -471,9 +487,8 @@ Write the detailed report using this structure:
     ## Final verdict
     Overall drift risk; any blocking item; whether a repair pass is recommended;
     whether active documentation is trustworthy for onboarding/maintenance; and
-    confirmations that this was review-only, that `.agents/skills/**` was excluded
-    unless explicitly requested and local `docs/roadmap/**` artifacts were excluded
-    (the three tracked roadmap workflow
+    confirmations that this was review-only, that `.agents/skills/**` and local
+    `docs/roadmap/**` artifacts were excluded (the three tracked roadmap workflow
     files audited as active documentation), that no existing file was modified,
     that no repair was applied, and that no external calls, real-model tests, or
     full evals ran.
@@ -482,13 +497,30 @@ Cite evidence for every confirmed finding; do not quote long passages.
 
 ### Chat summary
 
-Keep the chat response concise. State the scope, reviewed Markdown and embedded-prose
-counts, confirmed and possible drift counts, blocking status, detailed report path, up
-to five highest-priority findings, and the overall documentation-trust verdict. If no
-material drift was confirmed, say so directly. Confirm that no repair or existing-file
-modification occurred, only the report was created, exclusions were honored, and no
-external calls, real-model tests, or full evals ran. Do not paste the full report or
-long evidence excerpts unless the user asks.
+Keep the chat response concise — do not paste the full report or long evidence
+excerpts unless the user asks. Use this structure:
+
+    # Documentation Drift Review — Summary
+
+    - **Scope:** ...
+    - **Markdown files scanned:** N
+    - **Embedded-prose source/config files scanned:** N
+    - **Confirmed drift:** N
+    - **Possible drift:** N
+    - **Broken links / stale commands:** N
+    - **Blocking findings:** yes / no
+    - **Detailed report:** `docs/roadmap/docs-drift-review/<YYYY-MM-DD>-<focus-slug>-docs-drift-review.md`
+
+    ## Highest-priority findings
+    Up to five, as `[SEVERITY] path/to/file.md — short explanation`. If none:
+    "No material documentation drift was confirmed."
+
+    ## Verdict
+    Active documentation is broadly healthy / moderately drifted / significantly
+    drifted. Confirm in one paragraph: no repair applied; no existing file
+    modified; only the new report created; `.agents/skills/**` and local
+    `docs/roadmap/**` artifacts excluded (three tracked roadmap workflow files
+    audited); no external calls, real-model tests, or full evals run.
 
 ---
 
@@ -497,16 +529,14 @@ long evidence excerpts unless the user asks.
 1. Read `AGENTS.md`. Run `git status --short` and record the initial working-tree
    state.
 2. Build both inventories — the tracked-Markdown inventory and the tracked
-   source/config embedded-prose inventory — excluding `.agents/skills/**` unless it
-   is the explicit scope and always excluding local `docs/roadmap/**` artifacts, but
-   additively including the three tracked
+   source/config embedded-prose inventory — excluding `.agents/skills/**` and
+   local `docs/roadmap/**` artifacts, but additively including the three tracked
    roadmap workflow files in the Markdown inventory as active documentation. Apply
    `the user's skill input` scope when provided.
 3. Classify reviewed documents and prose (active / historical ADR / release /
    generated / embedded documentation prose).
-4. Within the hard scope boundary, inspect only enough current repository structure,
-   config, CI, tests, evals, entry points, implementation, and server/frontend contract
-   evidence to verify the documentation claims under review.
+4. Inspect current repository structure, config, CI, tests, evals, entry points,
+   and relevant implementation.
 5. Search Markdown and embedded documentation prose for high-risk claims: paths,
    shell commands, capability counts, model names, feature flags, env variables,
    version labels, test totals, and words like "current", "latest", "complete",

@@ -97,13 +97,6 @@ Approved spec
 - Use **`/update-claude-md`** to record durable rules/conventions after a change
   lands.
 
-## Archived commands
-
-`.claude/commands/old_command/` contains **inactive / superseded** command files
-(`commit-staged`, `new-command`, `new-spec`, `plan-spec`). They are not part of the
-active suite above and are not recommended for use unless the repository explicitly
-says otherwise.
-
 ## Maintenance
 
 - Update this README whenever an active command is **added, removed, renamed, or

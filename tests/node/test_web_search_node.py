@@ -321,7 +321,7 @@ def test_web_search_parses_dict_shaped_tavily_response(monkeypatch):
 
 
 def test_web_search_handles_error_dict_response_without_crashing(monkeypatch):
-    # langchain-tavily returns {"error": ...} on wrapped failures.
+    # Preserve defensive compatibility with Tavily error dictionaries.
     _patch_tool(monkeypatch, {"error": "rate limited"})
     grader_calls = _patch_grader(monkeypatch)
 

@@ -31,8 +31,9 @@ LangGraph workflow:
 
 ## 2. High-level architecture
 
-Three layers, all external clients behind lazy `@lru_cache` factories so every
-module imports side-effect-free (no API keys, no network at import time):
+Three layers, with all external clients behind lazy factories (cached only
+where lifetime reuse is intentional) so every module imports side-effect-free
+(no API keys, no network at import time):
 
 | Layer | Location | Contents |
 |---|---|---|
@@ -51,7 +52,12 @@ duration, and an optional metadata-only trace JSON via
 `AnswerOptions.trace_path`; collected centrally by streaming the compiled
 graph's node updates (`stream_mode="updates"`), merged onto the seeded state
 — GraphState has only last-value channels, so this reproduces `invoke()`
-exactly and tracing can never change behavior), `graph/formatting.py` (shared
+exactly and tracing can never change behavior). The same streamed node boundary
+is the cooperative-cancellation seam: `AnswerOptions.cancel_event` is checked
+after each completed node; cancellation raises `RunCancelled`, returns
+no `AnswerResult`, trace, history record, or new `stop_reason`, and never
+interrupts a provider call already in flight (ADR 017 and §14).
+`graph/formatting.py` (shared
 presentation: stop-reason caveats + Sources section), `ingestion.py`
 (offline, idempotent Chroma build of the local Markdown corpus: collection
 reset + deterministic chunk ids, provenance metadata per document),
@@ -76,11 +82,11 @@ behave like today's defaults.
 
 | Field | Type | Purpose |
 |---|---|---|
-| `question` | `str` | The original user question. Never rewritten; all grading judges against it. |
+| `question` | `str` | The redacted runtime question. The original input is used only to compute `AnswerResult.question_sha256` and determine `input_redacted`; it is not propagated in state. Routing, retrieval, generation, grading, and web search all see the same redacted value. |
 | `documents` | `List[Document]` | Working context: filtered Chroma chunks + at most one web supplement. |
 | `generation` | `str` | The latest generated answer. |
 | `web_search` | `bool` | Set by `grade_documents` when any retrieved chunk was irrelevant → fall back to web search. |
-| `web_search_enabled` | `bool` | Privacy toggle, seeded from `WEB_SEARCH_ENABLED` (or a per-run engine option). `False` = never call external search. |
+| `web_search_enabled` | `bool` | Effective per-run web-search gate. Resolution order is absolute deployment lock, explicit engine option, then `WEB_SEARCH_ENABLED` default. `False` = no external search or LangSmith export for that run. |
 | `web_fallback_policy` | `str` | Resolved per-run fallback policy (`conservative` / `aggressive` / `disabled`), seeded once by the engine from `WEB_FALLBACK_POLICY` or a per-run option; graph decisions read it from state, never from `os.environ` mid-run. |
 | `retries` | `int` | Number of generations so far; caps the quality-check loops. |
 | `stop_reason` | `str` | Why the run ended early (`""` = normal finish); drives user-facing caveats. |
@@ -97,7 +103,7 @@ behave like today's defaults.
 |---|---|---|
 | `retrieve` | `RETRIEVE` | Top-3 similarity search against the persisted Chroma collection. |
 | `grade_documents` | `GRADE_DOCUMENTS` | Grade each chunk (`retrieval_grader`); keep relevant ones, set `web_search=True` if any failed. |
-| `websearch` | `WEBSEARCH` | Tavily search (`langchain-tavily`) + relevance gate on results (see §7); appends/replaces the web supplement, recording each contributing page's title/URL in `web_sources` metadata. |
+| `websearch` | `WEBSEARCH` | Tavily search (`tavily.TavilyClient` from `tavily-python`) + relevance gate on results (see §7); appends/replaces the web supplement, recording each contributing page's title/URL in `web_sources` metadata. |
 | `generate` | `GENERATE` | Generate the answer from question + documents (+ `retry_feedback`); increments `retries`. Empty context → deterministic insufficient-context answer, no LLM call, `insufficient_context=True` (skips the graders downstream). |
 | `add_grounding_feedback` | `ADD_GROUNDING_FEEDBACK` | Pass-through: writes the corrective instruction into `retry_feedback`. |
 | `rewrite_query` | `REWRITE_QUERY` | Pass-through: rewrites the question into a more specific search query (`query_rewriter` chain) using the previous not-useful answer; writes `search_query`. |
@@ -114,14 +120,17 @@ behave like today's defaults.
 Three pure decision functions in `graph/graph.py`:
 
 **`route_question`** (conditional entry point)
-- Privacy mode off → an LLM router picks `retrieve` (knowledge-base topics) or
-  `websearch` (current/external information).
-- Privacy mode on → always `retrieve`, **without calling the router LLM** (the
-  question is not sent to any third party for routing, and the call is saved).
+- When the effective `web_search_enabled` value is `true`, an LLM router picks
+  `retrieve` (knowledge-base topics) or `websearch` (current/external information).
+- When the effective value is `false`, routing skips the LLM and goes directly to
+  `retrieve`; all web-search entry and fallback paths are unreachable.
+- `PRIVACY_MODE=true` is an absolute lock: a per-run option cannot re-enable web
+  search. `PRIVACY_MODE=false` only means that lock is absent; the environment
+  default or a per-run option can still make the effective value `false`.
 
 **`decide_to_generate`** (after document grading)
 - All chunks relevant → `generate`.
-- Any chunk irrelevant (or retrieval failed) → privacy mode wins first:
+- Any chunk irrelevant (or retrieval failed) → the effective web-search gate wins first:
   with `web_search_enabled=False`, `generate` proceeds with whatever relevant
   chunks remain (possibly none → the deterministic insufficient-context
   answer). Otherwise the per-run policy in `state["web_fallback_policy"]`
@@ -138,11 +147,11 @@ mapped one-to-one to an edge)
 
 | Outcome | Condition | Next |
 |---|---|---|
-| `insufficient_context` | the generation is the deterministic insufficient-context answer (no usable documents) — nothing to verify, nothing to improve; the graders are skipped | `END` (privacy mode with no earlier `stop_reason`: `web_search_disabled` notice → `END`, so the caveat explains the limitation) |
+| `insufficient_context` | the generation is the deterministic insufficient-context answer (no usable documents) — nothing to verify, nothing to improve; the graders are skipped | `END` (web search off with no earlier `stop_reason`: `web_search_disabled` notice → `END`, so the caveat explains the limitation) |
 | `useful` | grounded + answers the question | `clear_transient_tool_error` → `END` (clears a stale transient `tool_error`; see §10) |
 | `not_grounded` | failed grounding, retries remain | `add_grounding_feedback` → `generate` |
 | `not_useful` | grounded but off-target, web search enabled, retries remain | `rewrite_query` → `websearch` → `generate` |
-| `web_search_disabled` | grounded but off-target, privacy mode | notice node → `END` |
+| `web_search_disabled` | grounded but off-target, effective web-search gate off | notice node → `END` |
 | `web_fallback_disabled` | grounded but off-target on a local-only run (`web_search_count == 0`) with `WEB_FALLBACK_POLICY=disabled` | notice node → `END` |
 | `max_retries_not_grounded` | failed grounding at the retry limit | notice node → `END` |
 | `max_retries_not_useful` | grounded but off-target at the retry limit | notice node → `END` |
@@ -177,12 +186,12 @@ flowchart TD
     Q([User question]) --> ROUTE{route_question}
 
     ROUTE -- "websearch" --> WS[websearch<br/>Tavily + relevance gate]
-    ROUTE -- "retrieve<br/>(always, in privacy mode)" --> RET[retrieve<br/>Chroma, k=3]
+    ROUTE -- "retrieve<br/>(always, when web search is off)" --> RET[retrieve<br/>Chroma, k=3]
 
     RET --> GD[grade_documents<br/>per-chunk relevance gate]
     GD -- "all relevant" --> GEN[generate<br/>retries += 1]
     GD -- "fallback per policy<br/>(conservative: zero relevant left;<br/>aggressive: any irrelevant)" --> WS
-    GD -. "privacy mode or<br/>policy disabled:<br/>generate from what remains" .-> GEN
+    GD -. "web search off or<br/>policy disabled:<br/>generate from what remains" .-> GEN
     WS --> GEN
 
     GEN --> HG{grounding gate}
@@ -195,14 +204,14 @@ flowchart TD
     CL --> E([END])
     AG -- "not useful" --> RW[rewrite_query]
     RW --> WS
-    AG -- "not useful,<br/>privacy mode" --> N3[web_search_disabled_notice]
+    AG -- "not useful,<br/>web search off" --> N3[web_search_disabled_notice]
     AG -- "not useful, local-only run,<br/>fallback policy disabled" --> N6[web_fallback_disabled_notice]
     AG -- "not useful,<br/>retries exhausted" --> N2[max_retries_not_useful_notice]
     GEN -. "cost budget spent<br/>(checked before grading)" .-> N4[budget_exhausted_notice]
     AG -. "not useful,<br/>web budget spent" .-> N4
     GEN -. "generation LLM failed<br/>(never graded)" .-> E
     GEN -. "insufficient context<br/>(deterministic decline, never graded)" .-> E
-    GEN -. "insufficient context,<br/>privacy mode" .-> N3
+    GEN -. "insufficient context,<br/>web search off" .-> N3
     HG -. "grader call failed" .-> N5[tool_error_notice]
     AG -. "grader call failed" .-> N5
 
@@ -216,7 +225,7 @@ flowchart TD
 
 Step by step:
 
-1. **`route_question`** — vector store vs. web search (or forced retrieval in privacy mode).
+1. **`route_question`** — vector store vs. web search (or forced retrieval when web search is off).
 2. **`retrieve`** — top-3 Chroma chunks.
 3. **`grade_documents`** — per-chunk relevance grading; irrelevant chunks dropped; any failure flags a web-search fallback.
 4. **`websearch`** — searches with `search_query` if a retry rewrote it, otherwise the original question. Results are defensively parsed (string error responses, malformed entries, and empty contents are skipped), then **each result is graded for relevance against the original question** — the same gate internal chunks face. Relevant contents merge into one `Document(metadata={"source": "web_search"})` whose `web_sources` metadata lists each contributing page's title/URL (page-level provenance), and which **replaces** any previous web supplement rather than stacking duplicates. Nothing usable → documents pass through unchanged.
@@ -267,13 +276,15 @@ cycles — no new decision points, so no new uncontrolled loops. Note that
 `retry_feedback` persists for the remainder of the run once set: every later
 generation in that run keeps the stricter instruction.
 
-## 9. Privacy mode (`WEB_SEARCH_ENABLED=false`)
+## 9. Web-search-off runs (`web_search_enabled=false`)
 
-For deployments where user questions must never reach an external search
-service. Parsed by `graph/config.py` (`false`/`0`/`no`/`off`, case-insensitive,
-disable; anything else — including unset — preserves full behavior) and seeded
-into state by `graph/engine.py` (`seed_state()`; a per-run `AnswerOptions`
-value wins over the environment). When disabled:
+For runs where user questions must not reach an external search service. The
+engine resolves the state value from an explicit per-run `AnswerOptions` value
+or the `WEB_SEARCH_ENABLED` environment default (`false`/`0`/`no`/`off`,
+case-insensitive, disables; anything else — including unset — preserves full
+behavior). `PRIVACY_MODE=true` and local-provider mode then enforce an absolute
+false value that no per-run option can reopen. When the effective value is
+disabled:
 
 - `route_question` always returns `retrieve` and skips the router LLM.
 - `decide_to_generate` never falls back to web search; generation proceeds
@@ -295,7 +306,7 @@ value wins over the environment). When disabled:
   `enabled=True` on a normal run would override an operator's deliberate
   `LANGSMITH_TRACING=false`.
 
-Scope limit: privacy mode stops external web search and trace export, not the
+Scope limit: this state stops external web search and trace export, not the
 OpenAI calls themselves — the question and retrieved chunks still reach the
 model provider for all four LLM steps that run in this mode:
 retrieval/document grading, generation, grounding (hallucination) grading, and
@@ -304,7 +315,7 @@ skipped entirely (see above), and it only ever receives the question, never
 retrieved chunks. Closing the model path too requires swapping the provider,
 which is what the local provider mode below does.
 
-All grounding and usefulness gates remain active in privacy mode, with one
+All grounding and usefulness gates remain active when web search is off, with one
 principled exception in both modes: the deterministic insufficient-context
 answer skips the graders — it contains no claims to verify, and regenerating
 from the same empty context cannot improve it (see §5).
@@ -343,9 +354,11 @@ rather than replacing it.
 
 * **Seams.** One `graph/chains/_llm.py::get_chat_model()` serves every chain
   (replacing six identical inline `ChatOpenAI(...)` constructions);
-  `ingestion.py::get_embeddings()` serves both embedding sites. Both stay lazy
-  and `@lru_cache`'d, and the local provider package is imported only when
-  local mode is selected, so imports remain side-effect-free.
+  `ingestion.py::get_embeddings()` serves both embedding sites. Both stay lazy;
+  the shared chat-model factory is cached, while embeddings are constructed on
+  demand and the active provider's retriever is process-cached. The local
+  provider package is imported only when local mode is selected, so imports
+  remain side-effect-free.
 * **The one runtime-policy change.** `seed_state()` resolves
   `web_search_enabled` to `False` whenever local mode is active, and a per-run
   `AnswerOptions(web_search_enabled=True)` cannot override it. Tavily becomes
@@ -500,16 +513,16 @@ Per dependency:
 
 | Failure | Reaction | Continues? |
 |---|---|---|
-| Retriever / Chroma (`retrieve`) | Empty documents + `web_search=True` → degrade to web fallback (privacy mode: deterministic insufficient-context answer); `grade_documents` preserves the incoming flag | yes |
+| Retriever / Chroma (`retrieve`) | Empty documents + `web_search=True` → degrade to web fallback (web search off: deterministic insufficient-context answer); `grade_documents` preserves the incoming flag | yes |
 | Tavily (`websearch`) | Local documents only (stale web supplement already dropped); attempt budgeted | yes |
 | Generation LLM (`generate`) | Safe placeholder answer + `generation_error`; `grade_generation` routes straight to `END` — never graded | no |
 | Query rewriter (`rewrite_query`) | `search_query=""` → next search uses the original question; loop stays fully gated | yes |
 | Retrieval grader (`grade_documents` / `websearch`) | Ungraded chunk/result dropped; remaining items still graded; web fallback requested for dropped local chunks | yes |
 | Hallucination / answer grader (`grade_generation`) | `tool_error` → notice node → `END`; answer delivered explicitly unverified | no |
-| Question router (`route_question`) | Route to `RETRIEVE` (the destination privacy mode returns) — no `stop_reason`: the entry point is a pure edge with no node ahead of it to record one | yes |
+| Question router (`route_question`) | Route to `RETRIEVE` (the destination used when web search is off) — no `stop_reason`: the entry point is a pure edge with no node ahead of it to record one | yes |
 
-All privacy-mode guarantees hold on every failure path (a retrieval failure
-in privacy mode still never calls the router, Tavily, or the rewriter).
+The effective web-search gate holds on every failure path (a retrieval failure
+with web search off still never calls the router, Tavily, or the rewriter).
 
 ## 14. Web application layer (`server/` + `frontend/`)
 
@@ -593,11 +606,12 @@ the execution timeline renders post-hoc.
 
 | Suite | What it covers | External calls |
 |---|---|---|
-| `tests/node/` | Each node's state in/out behavior, the web-result relevance gate, defensive Tavily parsing, and graceful degradation when each node's external dependency raises | None — every dependency mocked at its lazy `get_*()` factory seam |
+| `tests/node/` | Each node's state in/out behavior, generation context formatting and no-document short-circuit behavior, the web-result relevance gate, defensive Tavily parsing, and graceful degradation when each node's external dependency raises | None — every dependency mocked at its lazy factory seam |
 | `tests/graph/` | Graph routing and compiled runs, privacy and fallback behavior, stop reasons and budgets, failure degradation and caveat formatting, engine/CLI behavior, ingestion/provenance pure helpers, and import side-effect purity | None — fully mocked |
-| `tests/chains/` | The six LCEL chains against the real `gpt-5-mini` (prompt + structured-output behavior) | **Real OpenAI API** — gated by the `requires_openai` marker; do not run without explicit approval |
+| `tests/chains/` | Five live-model modules covering generation, retrieval grading, question routing, hallucination grading, and answer grading. Query rewriting currently has no live integration module. | **Real OpenAI API** — every test is gated by the `requires_openai` marker; do not run without explicit approval |
 | `tests/evals/` | The eval harness's pure helpers: dataset loading/validation (incl. the shipped dataset), per-row checks, metrics, report rendering | None — pure functions |
 | `tests/server/` | The FastAPI layer (§14): ask shape and citation building, cancellation, status/index compatibility and sanitization, documents listing, run store bounds and 404s, and the full error map | None — `graph.engine.answer_question` is monkeypatched; no keys, no network |
+| `tests/test_env_isolation.py` | Root-level regression that deployment/provider variables from a developer environment cannot decide mocked-test assertions | None |
 
 Separate from the test suites, `evals/` holds a **behavioral eval harness**:
 a 24-question JSONL dataset (local-corpus / web-fallback /
@@ -634,6 +648,6 @@ Future improvements (rough priority): structured logging and metrics-friendly ob
 
 GitHub Actions CI (`.github/workflows/ci.yml`) runs three parallel jobs on every push and pull request — all keys-free:
 
-* **`mocked-tests`**: the fully mocked suites (`tests/node/` + `tests/graph/` + `tests/evals/` + `tests/server/`); the key-gated `tests/chains/` suite and the full eval run are excluded.
+* **`mocked-tests`**: aggregate collection of `tests/` except `tests/chains/`, including node, graph, eval-helper, server, and root-level tests; the key-gated chain suite and the full eval run are excluded.
 * **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the engine-API surface — `graph/engine.py`, `graph/config.py`, `graph/formatting.py`, `graph/state.py`, `graph/consts.py` — plus the five `server/*.py` modules).
 * **`frontend`**: `tsc --noEmit`, `vitest run`, and `vite build`.

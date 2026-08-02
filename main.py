@@ -5,9 +5,9 @@ import urllib.request
 from dotenv import load_dotenv
 
 # Load .env up front.
-# Imports are intentionally side-effect-free: every external client
-# (ChatOpenAI / OpenAIEmbeddings / Chroma retriever / Tavily) lives behind a
-# lazy @lru_cache factory, so importing the engine needs no API keys and no
+# Imports are intentionally side-effect-free: external clients and model objects
+# are constructed lazily, with process-level caching only where lifetime reuse is
+# intentional, so importing the engine needs no API keys and no
 # network — that is what lets the mocked test suites and CI run without
 # secrets. The clients still read env vars (OPENAI_API_KEY, etc.) when first
 # constructed at runtime, so .env must be loaded before the graph runs.

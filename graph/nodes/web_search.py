@@ -22,8 +22,8 @@ def get_web_search_tool():
     Lazily build and cache the first-party Tavily client.
 
     tavily-python's search timeout is passed to the underlying HTTP request.
-    The installed langchain-tavily wrapper does not expose an effective
-    transport timeout, so using it here could leave the graph blocked.
+    The previously used LangChain Tavily wrapper did not expose an effective
+    transport timeout, so this node uses the first-party client instead.
     Deferring construction keeps module import free of Tavily API-key validation,
     which also makes the web_search node easy to mock in tests.
     """

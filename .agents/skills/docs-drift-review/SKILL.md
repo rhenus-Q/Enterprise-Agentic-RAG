@@ -1,6 +1,6 @@
 ---
 name: docs-drift-review
-description: Audit active Markdown and embedded documentation prose for factual consistency with current repository structure, code, configuration, tests, commands, and CI. Use for broad or focused documentation-drift reviews; report findings without reviewing implementation correctness or repairing documentation.
+description: Audit active Markdown and embedded documentation prose against current repository structure, code, configuration, CI, and behavior. Use when the user requests a documentation-drift assessment or a focused docs accuracy review; report findings without repairing documentation.
 ---
 
 # Documentation Drift Review
@@ -10,8 +10,6 @@ description: Audit active Markdown and embedded documentation prose for factual 
 - Treat the user's request that triggered or explicitly invoked this Skill as the input.
 - Resolve an omitted focus or path from unambiguous repository context only.
 - Ask one concise question when a required input cannot be inferred safely.
-- Treat a user-provided documentation scope as a hard boundary and inspect only the
-  minimum repository evidence needed to verify claims within it.
 
 ## Required procedure
 

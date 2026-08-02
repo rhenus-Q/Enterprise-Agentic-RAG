@@ -9,6 +9,8 @@ allowed-tools:
   - Bash(git status --short:*)
   - Bash(git ls-files:*)
   - Bash(git grep:*)
+  - Bash(mkdir -p:*)
+  - Bash(date:*)
   - Bash(powershell.exe -NoProfile -Command "Get-Date:*)
 ---
 
@@ -25,11 +27,13 @@ corresponding documentation being updated:
 **Embedded documentation prose** means the documentation-like text carried inside
 non-Markdown source and configuration files, including:
 
-- Python module / class / function docstrings, and the equivalent TypeScript/TSX
-  module or exported-symbol doc comments;
+- Python module / class / function docstrings;
+- TypeScript / TSX documentation comments and explanatory blocks;
 - long explanatory comments (comment blocks that describe behavior, architecture,
   or rationale, not one-line implementation notes);
 - user-facing constants and unsupported-intent / help messages;
+- API descriptions, UI copy, and frontend help text that describe supported behavior;
+- HTML metadata or other embedded user-facing descriptions;
 - CLI help text;
 - prompt / template prose;
 - long string blocks that describe current architecture, capabilities, commands,
@@ -120,17 +124,28 @@ tracked workflow files, and returns each only while it is tracked):
 Embedded-prose source/config inventory:
 
     git ls-files \
+      "graph/*.py" \
       "graph/**/*.py" \
+      "server/*.py" \
       "server/**/*.py" \
       "ingestion.py" \
       "main.py" \
+      "evals/*.py" \
       "evals/**/*.py" \
+      "scripts/*.py" \
       "scripts/**/*.py" \
+      "tests/*.py" \
       "tests/**/*.py" \
+      "tests/server/*.py" \
+      "tests/server/**/*.py" \
+      "frontend/src/*.ts" \
+      "frontend/src/*.tsx" \
       "frontend/src/**/*.ts" \
       "frontend/src/**/*.tsx" \
       "frontend/package.json" \
       "frontend/vite.config.ts" \
+      "frontend/tsconfig.json" \
+      "frontend/index.html" \
       "pyproject.toml" \
       ".github/workflows/*.yml" \
       ".github/workflows/*.yaml" \
@@ -139,12 +154,13 @@ Embedded-prose source/config inventory:
 
 The source/config files in the second inventory are **not** audited for all code
 correctness — inspect only their embedded documentation prose (docstrings, long
-explanatory comments, user-facing constants / messages, CLI help text, prompt /
-template prose, and long descriptive string blocks) for drift.
+explanatory comments, TypeScript/TSX documentation comments, user-facing
+constants/messages, API descriptions, UI/help copy, HTML metadata, CLI help text,
+prompt/template prose, and long descriptive string blocks) for drift.
 
 **Always `Read` (in full, not merely Grep) the package-level `__init__.py` of every
-audited source package** (e.g. `graph/__init__.py`,
-`graph/nodes/__init__.py`, `graph/chains/__init__.py`, `server/__init__.py`). Their
+audited source package** (e.g. `graph/__init__.py`, `graph/nodes/__init__.py`,
+`graph/chains/__init__.py`, `server/__init__.py`). Their
 module/package docstrings are prime prose-drift surfaces — they often summarize the
 package's capabilities, version status, and architecture, and drift silently when the
 code around them evolves.
@@ -189,9 +205,16 @@ memory or naming alone. Inspect the relevant current sources of truth as
 applicable:
 
 - top-level tree, tracked files, source package layout;
-- `graph/`, `server/`, `frontend/src/`, `evals/`, `tests/`;
-- `.github/workflows/`, `pyproject.toml`, `.env.example`, `frontend/package.json`;
-- entry points, routers, engines, schemas, tools, LLM-assist modules;
+- `graph/`, `server/`, `frontend/`, `evals/`, `tests/`;
+- `.github/workflows/`, `pyproject.toml`, `.env.example`,
+  `frontend/package.json`, Vite and TypeScript configuration;
+- graph routing, engine/state, nodes/chains, and retrieval/web-search boundaries;
+- the server import boundary, FastAPI status/run/document endpoints, request/response
+  schemas, cancellation, HTTP error mapping, URL/config/status sanitization, and API
+  contracts;
+- frontend pages/components, API clients, mirrored TypeScript types and field parity,
+  URL safety, error/status display, cancellation UI, colocated tests, static serving,
+  proxy configuration, and typecheck/Vitest/Vite build descriptions;
 - feature flags, model factory / configuration code, test markers, CI
   exclusions, active scripts;
 - `README` files, the ADR index, ADR status and supersession metadata.
@@ -218,7 +241,7 @@ workflow files are the exception: audit them as Category A active documentation.
 | **B. Historical decision records** | `docs/adr/**` | Preserve what was true when decided. Flag only: broken link; history presented as current; stale current-status/implementation-note section; wrong supersession reference; missing/incorrect supersession metadata; an objective typo or impossible path already wrong at the time. |
 | **C. Release notes / version snapshots** | `docs/releases/**`, dated validation reports | Old versions/paths/totals may be correct history. Flag only: claims to describe the *current* version; broken current navigation link; a command presented as currently runnable that no longer works; contradictory version relationship; stale current-status section; a pointer to an active doc via an obsolete path. |
 | **D. Generated results / eval reports** | tracked eval or benchmark output Markdown | Treat measured values as point-in-time unless they claim to be current. Check links, headings, scope descriptions, runner/dataset paths, and obvious contradictions. Do not rewrite measured values by inference. |
-| **E. Embedded documentation prose** | Python module/class/function docstrings, TypeScript/TSX doc comments, long explanatory comments, user-facing constants and API/UI messages, CLI help text, prompt/template strings | Treat as current documentation when it describes current behavior, capabilities, architecture, commands, config, tests, model/LLM usage, feature flags, paths, or user-facing output. Do not modernize short local implementation comments or clearly historical rationale unless they materially mislead maintainers. |
+| **E. Embedded documentation prose** | Python docstrings, TypeScript/TSX documentation comments, long explanatory comments, user-facing constants, API descriptions, UI/help copy, HTML metadata, CLI help text, prompt/template strings | Treat as current documentation when it describes current behavior, capabilities, architecture, commands, config, tests, model/LLM usage, feature flags, paths, API contracts, or user-facing output. Do not modernize short local implementation comments or clearly historical rationale unless they materially mislead maintainers. |
 
 For B–E, do not modernize historical bodies (Decision/Context/Rationale/
 Consequences, dated benchmarks, archived facts, or clearly historical rationale
@@ -242,7 +265,7 @@ distinguishing active claims from valid historical records.
    external URLs; report an external link only when its visible label or local
    context is internally contradictory.
 3. **Commands and workflows** — documented `pytest` / eval-runner / script /
-   `ruff` / `mypy` / `uv` / `npm` / `vitest` / Vite-build / server-start / CI /
+   `ruff` / `mypy` / `uv` / npm / TypeScript / Vitest / Vite / CI / server-start /
    entry-point / setup commands that reference
    missing paths, invoke renamed files, unintentionally include gated real-model
    tests, omit required exclusions, contradict current CI, use obsolete flags,
@@ -250,34 +273,34 @@ distinguishing active claims from valid historical records.
    safe/free, or use an old test/eval path or dataset/runner filename. Establish
    correctness statically from paths, config, markers, imports, and CI — do not
    execute the commands.
-4. **Architecture and module boundaries** — active claims about modules, graph
-   structure, engines, routers, deterministic vs. LLM-assisted behavior,
-   adapters, tools, eval/test ownership, dependencies, entry points, import
-   direction, and fallback behavior. This includes the API/UI layering: which
-   modules `server/` may import, which endpoints exist, and whether the frontend
-   is described as mirroring the API contract rather than owning it. Verify
+4. **Architecture and module boundaries** — active claims about graph routing,
+   grading, engines, state, nodes/chains, retrieval and web-search boundaries,
+   the server import boundary, FastAPI status/run/document endpoints and schemas,
+   HTTP error mapping and sanitization, frontend/backend layering, frontend pages,
+   API clients and mirrored TypeScript types, URL safety, error/status display,
+   cancellation UI, static serving, proxy configuration, eval/test ownership,
+   dependencies, entry points, import direction, and fallback behavior. Verify
    against implementation; do not infer drift from naming.
-5. **Capabilities and features** — current claims about graph behavior and
-   routing, the quality gates, `stop_reason` values and the caveats they produce,
-   retry caps and run budgets, web-search privacy mode, web fallback policy
-   semantics, local-provider / fully-local mode guarantees, cancellation
-   behavior, corpus contents, server API endpoints and their error mappings, and
-   frontend pages and capabilities. Verify against the current graph, nodes,
-   chains, config readers, engine, `server/` routes and schemas, and
-   `frontend/src/`. Preserve historical ADR counts.
+5. **Capabilities and features** — current claims about LangGraph routing and
+   grading, the effective `web_search_enabled` value, retrieval, web search,
+   generation, graders, query rewriting, retry/budget limits, `GraphState` and
+   terminal `stop_reason` values, privacy/local-provider locks, fully local mode,
+   ingestion/index versioning and embedding fingerprints, FastAPI endpoints and
+   sanitization, frontend pages and API type mirrors, cancellation, and fallback
+   behavior. Verify against current graph, config, engine, state, nodes, chains,
+   ingestion, server, and frontend implementation. Preserve historical ADRs.
 6. **Models, config, environment** — model names, temperature, provider
    dependencies, env-variable names, defaults, feature flags, retry/budget
    config, optional vs. mandatory keys, keys-free commands, gated-test / real-model
    eval requirements. Verify against source, `.env.example`, and config code; do
    not print secrets.
-7. **Tests, evals, CI** — test/eval directory locations, mocked vs. real-model
-   suites, gated markers, CI scope, runner/dataset/report locations, module
-   ownership, the `evals/` vs. `tests/<module>/evals/` distinction, and whether
-   real-model suites are excluded by directory vs. only by missing keys. This
-   includes the API suite (`tests/server/`), the colocated frontend vitest suite,
-   and the separate frontend CI job (type-check / test / build). Verify against
-   the current `tests/`, `evals/`, and `frontend/src/` trees, CI workflows,
-   pytest markers, `frontend/package.json` scripts, and `tests/conftest.py`.
+7. **Tests, evals, CI** — test/eval directory locations, root-level and recursive
+   Python tests (including `tests/server/`), colocated frontend tests, mocked vs.
+   real-model suites, gated markers, CI scope, typecheck/Vitest/Vite commands,
+   runner/dataset/report locations, module ownership, eval/ADR historical status,
+   and whether real-model suites are excluded by directory vs. only by missing
+   keys. Verify against the current `tests/`, `frontend/`, and `evals/` trees, CI
+   workflows, pytest markers, and `tests/conftest.py`.
 8. **Versions and release status** — current release/version/milestone claims and
    version labels in active README headings. Report conflicting current-version
    claims, active docs pinned to an obsolete release without reason, "latest"
@@ -288,24 +311,23 @@ distinguishing active claims from valid historical records.
    dates. Decide whether each is a dated/versioned historical snapshot, an active
    current-status claim, or an undated number likely to drift. Do not invent
    replacement totals; prefer removing, dating, or qualifying fragile ones.
-10. **Cross-document contradictions** — active-vs-active conflicts (e.g. one doc
-    says web search is disabled by default while the config reader defaults it
-    on; one doc lists a `stop_reason` the code no longer sets; a documented
-    command includes suites CI excludes; the API contract is described
-    differently on the `server/` and `frontend/` sides). Do not treat a correctly
-    historical/superseded ADR as contradicting a current README.
+10. **Cross-document contradictions** — active-vs-active conflicts (e.g. a default
+    is documented as an absolute privacy lock; backend schemas and frontend type
+    mirrors disagree; a command includes integration tests CI excludes). Do not
+    treat a correctly historical/superseded ADR as contradicting a current README.
 11. **Terminology / semantic drift** — wording that materially misleads a
     maintainer: "case" vs. "check" when semantics differ, "unit test" for a gated
     integration test, "eval" for a test of an eval harness, "deterministic"
     applied to an LLM-backed path, "current" for a historical snapshot,
-    "complete/fully supported" contradicted by implementation, "cancelled"
-    described as a `stop_reason` when cancellation deliberately produces none,
-    "keys-free" for a command that can reach a provider.
-12. **Embedded documentation prose drift** — module docstrings, class/function
-    docstrings, long comments, user-facing constants, CLI help text, and
-    prompt/template prose that describe current behavior, capabilities, paths,
-    tests, feature flags, LLM usage, model names, version status, or user-facing
-    output. Verify against current implementation. Do not flag short local comments
+    "complete/fully supported" contradicted by implementation, a cancellation path
+    described with the wrong `stop_reason`, or "keys-free" for a command that can
+    reach a provider.
+12. **Embedded documentation prose drift** — Python docstrings, TypeScript/TSX
+    documentation comments, long comments, user-facing constants, API descriptions,
+    UI/help copy, HTML metadata, CLI help text, and prompt/template prose that
+    describe current behavior, capabilities, paths, tests, feature flags, LLM
+    usage, model names, version status, API contracts, or user-facing output. Verify
+    against current implementation. Do not flag short local comments
     unless they materially mislead maintainers, and do not modernize clearly
     historical rationale merely because the architecture later evolved.
 
@@ -365,8 +387,8 @@ Git history, existing reports, or existing filenames, and never copy the date
 from an existing report. If the command fails, stop and report the failure; do
 not write a report with a guessed date.
 
-Write the complete report under `docs/roadmap/docs-drift-review/`. Name it using
-the project's review-command convention:
+Write the complete report under `docs/roadmap/docs-drift-review/`, creating the
+directory if needed. Name it using the project's review-command convention:
 
     docs/roadmap/docs-drift-review/<YYYY-MM-DD>-<focus-slug>-docs-drift-review.md
 
@@ -379,7 +401,7 @@ the project's review-command convention:
 Examples:
 
 - full repository → `docs/roadmap/docs-drift-review/2026-07-06-overall-docs-drift-review.md`
-- scoped → `docs/roadmap/docs-drift-review/2026-07-06-server-api-docs-drift-review.md`
+- scoped → `docs/roadmap/docs-drift-review/2026-07-06-web-layer-docs-drift-review.md`
 
 **Collision handling.** Before writing, select the path by checking candidates in
 order with `Glob` and using the first that does not already exist:

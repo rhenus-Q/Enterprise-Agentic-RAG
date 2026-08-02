@@ -18,6 +18,7 @@ The exported `generate_answer` function is a mockable seam for node tests.
 It accepts:
     question: str
     documents: list[Document]
+    retry_feedback: str = ""  # grounding-retry feedback for regeneration
 and returns a plain string answer.
 """
 

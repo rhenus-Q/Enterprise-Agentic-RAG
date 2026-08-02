@@ -63,14 +63,14 @@ and validates the stored embedding provider and model before retrieval.
   2. **Answer grounding (anti-hallucination)** — answers not supported by the documents are regenerated.
   3. **Answer usefulness** — grounded but off-target answers trigger a web-search supplement.
 * **Web search fallback** via Tavily when the local knowledge base isn't sufficient.
-* **Privacy mode** — a `WEB_SEARCH_ENABLED=false` toggle disables every web-search path (routing, fallback, and supplement), so user questions never leave the local environment.
+* **Web-search privacy controls** — `WEB_SEARCH_ENABLED=false` disables Tavily and LangSmith export by default but can be overridden per run; `PRIVACY_MODE=true` is the non-overridable web/tracing lock. OpenAI model calls remain in either case unless local-provider mode is selected.
 * **Bounded self-correction with honest failure reporting** — a `retries` counter in graph state caps the regenerate/web-search loop (`MAX_RETRIES = 5`), the final allowed generation is still fully graded before the protective stop, and if it still fails a gate the answer is delivered with an explicit warning instead of being presented as successful.
 * **Meaningful retries** — each retry changes the input instead of replaying it at `temperature=0`: a failed grounding check injects a corrective instruction into the next generation, and a failed usefulness check rewrites the web-search query (with the fresh web supplement *replacing* the stale one, not stacking duplicates).
 * **Per-run cost budget** — counted LLM calls, web searches, and web-result grades are tracked in state and capped by env-configurable budgets; an exhausted budget stops the run safely with an explicit caveat instead of spending indefinitely.
 * **Graceful degradation on external failures** — a failing dependency (Chroma retriever, Tavily, the generation LLM, the question router, any grader, the query rewriter) never crashes the graph: the run degrades (web fallback, local-only answer, original-question search) or stops safely, records a machine-readable `stop_reason`, and the CLI appends an honest caveat. Ungraded content is never trusted, and an answer whose verification failed is never presented as verified.
 * **Answer provenance** — every answer built from documents ends with a deterministic `Sources:` section distinguishing local corpus documents (by title or URL) from the web-search supplement. Web provenance is **page-level**: each relevant result's title and URL are preserved and cited (`Web search: <title> — <url>`), falling back to the query-level citation when Tavily returns no URLs. Formatting is metadata-only after the graph finishes — no LLM-generated citations, no prompt changes, no document content exposed.
-* **Side-effect-free imports** — every external client (`ChatOpenAI`, `OpenAIEmbeddings`, `Chroma`, Tavily) is built inside a lazy `@lru_cache` factory. Importing any module requires no API keys and no network, which makes the whole graph unit-testable with plain `monkeypatch`.
-* **Two-tier test suite** — fully mocked node tests that run with zero API keys, plus clearly separated integration tests against the real model.
+* **Side-effect-free imports** — external clients and model objects are constructed lazily, with process-level caching only where lifetime reuse is intentional. Importing any module requires no API keys and no network, which makes the graph testable with plain `monkeypatch`.
+* **Layered test suite** — keys-free Python and frontend tests run in CI, while the separately collected chain integration suite calls the real model only when explicitly requested.
 
 ## Architecture
 
@@ -106,11 +106,11 @@ flowchart TD
 5. **`generate`** — answers strictly from the provided context; with an empty context it returns a deterministic "not enough information" response without calling the LLM and flags it via `insufficient_context` in state. Each pass increments `retries`.
 6. **`grade_generation`** (conditional edge) — two-layer check with eleven explicit outcomes:
 
-   * `insufficient_context` → the generation is the deterministic insufficient-context answer (no usable documents); both graders are skipped — there is nothing to verify and regenerating from the same empty context cannot help — and the run ends honestly on the first pass (in privacy mode via the `web_search_disabled` notice, so the caveat explains why no information could be added),
+   * `insufficient_context` → the generation is the deterministic insufficient-context answer (no usable documents); both graders are skipped — there is nothing to verify and regenerating from the same empty context cannot help — and the run ends honestly on the first pass (when web search is off, via the `web_search_disabled` notice, so the caveat explains why no information could be added),
    * `not_grounded` → `add_grounding_feedback` injects a corrective instruction into the next generation, then regenerate,
    * `useful` → END,
    * `not_useful` → `rewrite_query` produces a more specific search query, then web search and regenerate,
-   * `web_search_disabled` → terminal notice node (privacy mode; see below),
+   * `web_search_disabled` → terminal notice node (effective web-search gate is off; see below),
    * `web_fallback_disabled` → terminal notice node (`WEB_FALLBACK_POLICY=disabled` blocked a local-only run's not-useful web retry; see below),
    * `max_retries_not_grounded` / `max_retries_not_useful` → terminal notice nodes recording which quality gate the final answer failed (the limit is checked *after* grading, so even the last generation gets a full quality check, and a failed answer is never presented as a normal one),
    * `budget_exhausted` → the per-run cost budget is spent; terminal notice node, the answer goes out with an explicit caveat,
@@ -124,10 +124,10 @@ State is a `TypedDict` defined in `graph/state.py` with fourteen fields: the wor
 | Layer              | Technology                                                                             |
 | ------------------ | -------------------------------------------------------------------------------------- |
 | Orchestration      | LangGraph (`StateGraph`, conditional edges)                                            |
-| LLM                | OpenAI `gpt-5-mini` (router, graders, generation — all structured output via Pydantic) |
+| LLM                | OpenAI `gpt-5-mini`; router and grader decisions use Pydantic structured output, while generation and query rewriting return strings |
 | Embeddings         | `OpenAIEmbeddings`                                                                     |
 | Vector store       | Chroma (local persistence)                                                             |
-| Web search         | Tavily (`langchain-tavily`)                                                            |
+| Web search         | `tavily.TavilyClient` (`tavily-python`)                                               |
 | Chains             | LangChain LCEL                                                                         |
 | Package management | uv (`pyproject.toml` + committed `uv.lock`)                                            |
 | Web API            | FastAPI + uvicorn (`server/`) — a thin adapter over the engine                          |
@@ -152,7 +152,7 @@ State is a `TypedDict` defined in `graph/state.py` with fourteen fields: the wor
 │   ├── run_eval.py          # Eval runner: real graph runs + deterministic checks (not in CI)
 │   └── results.md           # Generated eval report
 ├── .github/
-│   └── workflows/ci.yml     # CI: runs the fully mocked suites (node, graph, evals) — no API keys
+│   └── workflows/ci.yml     # CI: aggregate keys-free Python tests, lint/type checks, and frontend validation
 ├── graph/
 │   ├── graph.py             # StateGraph assembly, routing/decision functions, MAX_RETRIES, compiled `app`
 │   ├── engine.py            # Canonical engine API: answer_question(), AnswerOptions/AnswerResult, seed_state(),
@@ -172,11 +172,13 @@ State is a `TypedDict` defined in `graph/state.py` with fourteen fields: the wor
 └── tests/
     ├── conftest.py          # Loads .env; provides the `requires_openai` skip marker; autouse fixture
     │                        #   clears the mode/provider env vars so a local .env cannot decide assertions
-    ├── node/                # Unit tests — all external dependencies mocked, no API keys needed
+    ├── node/                # Unit tests — includes test_generation_context_delimiters.py and
+    │                        #   test_generation_short_circuit.py; no API keys
     ├── graph/               # Routing / privacy-toggle / compiled-graph tests — fully mocked
     ├── evals/               # Unit tests for the eval harness's pure helpers — fully mocked
     ├── server/              # FastAPI endpoint tests — engine monkeypatched, no keys, no network
-    └── chains/              # Integration tests — call the real gpt-5-mini, need OPENAI_API_KEY
+    ├── test_env_isolation.py # Root-level regression for deployment/provider env isolation
+    └── chains/              # Five real-model chain modules; no query-rewriter live integration coverage
 ```
 
 ## Setup
@@ -202,10 +204,10 @@ See [`.env.example`](.env.example) for the full template:
 | Variable                                                                            | Required                              | Used for                                                                                                                                                                       |
 | ----------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `OPENAI_API_KEY`                                                                    | Yes (unless `LLM_PROVIDER=ollama`)    | Chat models (router, graders, generation) and embeddings                                                                                                                       |
-| `TAVILY_API_KEY`                                                                    | Yes (unless `LLM_PROVIDER=ollama`)    | Web-search fallback node                                                                                                                                                       |
+| `TAVILY_API_KEY`                                                                    | When the effective run can use web search | Tavily web-search paths; not needed under `PRIVACY_MODE=true`, local-provider mode, or an unoverridden `WEB_SEARCH_ENABLED=false` default                                  |
 | `PRIVACY_MODE`                                                                      | Optional (default `false`)            | Absolute privacy lock: disables all external web search *and* LangSmith trace export, and a per-run option cannot reopen either (see below)                                     |
 | `FULLY_LOCAL_MODE`                                                                  | Optional (default `false`)            | Route every LLM and embedding call to the local endpoint and apply the same lock; equivalent to `LLM_PROVIDER=ollama`                                                           |
-| `WEB_SEARCH_ENABLED`                                                                | Optional (default `true`)             | Legacy spelling of privacy mode: set to `false` to disable web search *and* LangSmith export. A **default**, not a lock — a per-run option still overrides it                   |
+| `WEB_SEARCH_ENABLED`                                                                | Optional (default `true`)             | Web-search and trace-export default: set to `false` to disable both for the run unless a per-run option overrides it; this does not disable OpenAI model calls                |
 | `WEB_FALLBACK_POLICY`                                                               | Optional (default `conservative`)     | `conservative` / `aggressive` / `disabled` — when document grading falls back to web search (see below)                                                                        |
 | `MAX_LLM_CALLS_PER_RUN`, `MAX_WEB_SEARCHES_PER_RUN`, `MAX_WEB_RESULTS_TO_GRADE`     | Optional (defaults `30` / `5` / `15`) | Per-run cost/latency budgets (see below)                                                                                                                                       |
 | `LLM_REQUEST_TIMEOUT_SECONDS`                                                       | Optional (default `60`)               | Per-request timeout for a single LLM call, applied to all six chains; a timeout is handled by the existing failure paths and surfaces as the matching `*_error` stop reason     |
@@ -213,7 +215,7 @@ See [`.env.example`](.env.example) for the full template:
 | `LOCAL_CHAT_MODEL`                                                                  | Optional (default `qwen3:4b-instruct-2507-q4_K_M`) | Chat model used when `LLM_PROVIDER=ollama`; must be installed on the endpoint                                                                                      |
 | `LOCAL_EMBEDDING_MODEL`                                                             | Optional (default `qwen3-embedding:0.6b`) | Embedding model used when `LLM_PROVIDER=ollama`; changing it requires re-running ingestion                                                                             |
 | `OLLAMA_BASE_URL`                                                                   | Optional (default `http://localhost:11434`) | Ollama-compatible endpoint serving both local models                                                                                                                |
-| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT` | Optional                              | LangSmith tracing for LangChain/LangGraph runs. Set `LANGSMITH_TRACING=true`, provide a LangSmith API key, and choose a project name such as `agentic-rag-assistant`. Ignored when `WEB_SEARCH_ENABLED=false` (privacy mode suppresses trace export). |
+| `LANGSMITH_TRACING`, `LANGSMITH_API_KEY`, `LANGSMITH_ENDPOINT`, `LANGSMITH_PROJECT` | Optional                              | LangSmith tracing for LangChain/LangGraph runs. Export is suppressed whenever the run's effective web-search setting is off; `PRIVACY_MODE=true` and local-provider mode enforce that lock. |
 
 `.env` is gitignored; only `.env.example` is committed.
 
@@ -253,14 +255,15 @@ both variables.
 
 See [ADR 015](docs/adr/015-mode-flags.md) for the full precedence tables.
 
-### Privacy mode (`WEB_SEARCH_ENABLED=false`)
+### Web-search-off default (`WEB_SEARCH_ENABLED=false`)
 
 In enterprise or compliance-sensitive deployments, sending user questions to an
 external search API is a data-leak risk: every routed or fallback web search
 transmits the question text to a third-party service, and an enabled LangSmith
 trace transmits considerably more — full prompts and the `page_content` of the
-internal documents that were retrieved. Setting `WEB_SEARCH_ENABLED=false`
-closes both paths:
+internal documents that were retrieved. When a run resolves the
+`WEB_SEARCH_ENABLED=false` default without a per-run override, both paths
+close:
 
 * No LangSmith trace is exported for the run, whatever `LANGSMITH_TRACING` and friends are set to. The suppression is applied per run in `graph/engine.py`, so it covers the CLI, the eval harness, and any programmatic caller of `answer_question()`. The metadata-only engine trace (`AnswerOptions.trace_path`) remains available for debugging.
 * The entry router never sends a question to web search — everything goes to vector retrieval (the router LLM call is skipped entirely on this path).
@@ -271,15 +274,15 @@ closes both paths:
 
   The caveat appears **only** when web search is disabled *and* the workflow would otherwise have needed it — successful local answers are printed without any warning, in both modes.
 
-All grounding and usefulness quality gates remain active in privacy mode, with
+All grounding and usefulness quality gates remain active when web search is off, with
 one principled exception in both modes: the deterministic insufficient-context
 answer skips the graders entirely — it contains no claims to verify, and
 regenerating from the same empty context cannot improve it. The default
 (variable unset or any value other than `false`/`0`/`no`/`off`) preserves the
 full web-search behavior.
 
-**What privacy mode does not do.** It stops external web search and trace
-export; it does not make the assistant local-only. The retrieval grader,
+**What this setting does not do.** It stops external web search and trace
+export for runs that use the default; it does not make the assistant local-only. The retrieval grader,
 generation chain, hallucination grader, and answer grader all still send the
 question and the retrieved chunks to OpenAI. Read the mode as "no third-party
 web search and no trace export", not "nothing leaves the machine" — removing
@@ -287,7 +290,7 @@ the model provider too is what `LLM_PROVIDER=ollama` below is for.
 
 ### Local provider mode (`LLM_PROVIDER=ollama`) — experimental
 
-Privacy mode closes the search and tracing paths but cannot close the model
+Closing the search and tracing paths cannot close the model
 path: only a provider swap can. Setting `LLM_PROVIDER=ollama` routes all six
 chains and both embedding call sites to an Ollama-compatible endpoint.
 
@@ -356,8 +359,10 @@ running.
 
 ### Web fallback policy (`WEB_FALLBACK_POLICY`)
 
-Distinct from the privacy switch: `WEB_SEARCH_ENABLED=false` decides whether
-external web search is allowed *at all* (and overrides everything below);
+Distinct from the web-search gate: the run's effective
+`web_search_enabled=False` setting decides whether external search is allowed
+at all; `WEB_SEARCH_ENABLED` supplies an overridable environment default, while
+`PRIVACY_MODE=true` and local-provider mode are absolute locks.
 `WEB_FALLBACK_POLICY` decides *when* the system chooses retrieval-triggered
 fallback while web search is otherwise allowed.
 
@@ -412,9 +417,11 @@ result.input_redacted          # True when redaction changed the input
 ```
 
 Options left as `None` fall back to the environment defaults
-(`WEB_SEARCH_ENABLED` / `WEB_FALLBACK_POLICY`). The hard privacy guarantee is
-unchanged: `web_search_enabled=False` — per run or via the environment —
-means zero external web searches regardless of the fallback policy.
+(`WEB_SEARCH_ENABLED` / `WEB_FALLBACK_POLICY`). For the current run, an
+effective `web_search_enabled=False` means zero external web searches
+regardless of the fallback policy. `WEB_SEARCH_ENABLED=false` is only the
+environment default and a per-run option can override it; `PRIVACY_MODE=true`
+and local-provider mode cannot be overridden per run.
 
 #### Input redaction
 
@@ -470,11 +477,13 @@ LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 LANGSMITH_PROJECT=agentic-rag-assistant
 ```
 
-> **Privacy mode overrides this.** When `WEB_SEARCH_ENABLED=false`, no trace is
-> exported regardless of the settings above — a LangSmith trace carries full
-> prompts and retrieved document content off the machine, so privacy mode
-> suppresses it along with web search. Use the metadata-only engine trace
-> (`AnswerOptions.trace_path`) to debug private runs. See
+> **The effective web-search setting gates trace export too.** A run resolved
+> with `web_search_enabled=False` exports no LangSmith trace regardless of the
+> settings above. `WEB_SEARCH_ENABLED=false` supplies that default but can be
+> overridden per run; `PRIVACY_MODE=true` and local-provider mode force it off.
+> A LangSmith trace carries full prompts and retrieved document content off the
+> machine. Use the metadata-only engine trace (`AnswerOptions.trace_path`) to
+> debug private runs. See
 > [ADR 002](docs/adr/002-web-search-privacy-mode.md).
 
 The two tracing layers serve different purposes:
@@ -551,13 +560,13 @@ a caveat appended by the CLI:
 
 | Failure                                      | Behavior                                                                                                       | `stop_reason`      |
 | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------ |
-| Chroma retriever                             | Degrade to web-search fallback (or the deterministic insufficient-context answer in privacy mode)              | `retrieval_error`  |
+| Chroma retriever                             | Degrade to web-search fallback (or the deterministic insufficient-context answer when web search is off)       | `retrieval_error`  |
 | Tavily search                                | Continue with local documents only; the failed attempt still counts against the web-search budget              | `web_search_error` |
 | Generation LLM                               | Stop immediately with a safe placeholder answer — the failed generation is never graded or presented as normal | `generation_error` |
 | Query rewriter                               | Fall back to searching with the original question; the retry loop continues fully gated                        | `tool_error`       |
 | Relevance grader (local chunk or web result) | Drop the ungraded content — unvetted content never reaches generation; the rest continues                      | `tool_error`       |
 | Hallucination / answer grader                | Stop and deliver the answer explicitly flagged as unverified                                                   | `tool_error`       |
-| Question router                              | Route to vector retrieval — the conservative destination privacy mode also uses; the run stays fully gated     | *(none)*           |
+| Question router                              | Route to vector retrieval — the conservative destination used whenever web search is off; the run stays gated  | *(none)*           |
 
 Routing is the one failure without a `stop_reason`: it happens on the graph's
 pure conditional entry point, which cannot write state because no node runs
@@ -737,9 +746,10 @@ uv run pytest -v
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) runs three parallel
 jobs on every push and pull request — all keys-free:
 
-* **`mocked-tests`**: the four fully mocked suites (`tests/node/`,
-  `tests/graph/`, `tests/evals/`, `tests/server/`), which also doubles as a
-  regression test that imports stay side-effect-free.
+* **`mocked-tests`**: aggregate collection of `tests/` except
+  `tests/chains/`, including node, graph, eval-helper, server, and root-level
+  tests. This includes the keys-free generation formatting/short-circuit
+  helpers and also checks that imports stay side-effect-free.
 * **`lint`**: `ruff check`, `ruff format --check`, and `mypy` (scoped to the
   engine-API surface plus the server package: `graph/engine.py`,
   `graph/config.py`, `graph/formatting.py`, `graph/state.py`,
@@ -822,13 +832,12 @@ accepted, and the alternatives deliberately not chosen. Start with the
 
 ### Mocked unit tests vs. API-based chain tests
 
-|                | `tests/node/` + `tests/graph/` + `tests/evals/` + `tests/server/` (unit)                                                     | `tests/chains/` (integration)                                                                 |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| What is tested | Node functions (state in/out), routing decisions, the compiled graph with mocked chains, the eval harness's pure helpers, and the FastAPI endpoints | The LCEL chains: real prompts + structured output against the live model                      |
-| External calls | **None** — retriever, graders, Tavily, the generation seam, and `answer_question` itself are monkeypatched at their lazy `get_*()` / module seams | Real OpenAI API calls                                                                         |
-| Requirements   | No API keys                                                                                                                  | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
-| Speed / cost   | Seconds, free                                                                                                                | ~1 minute, small API cost                                                                     |
-| Status         | Four suites, all passing: `tests/node/`, `tests/graph/`, `tests/evals/`, `tests/server/`                                     | Passing (run on demand)                                                                       |
+|                | `tests/` except `tests/chains/` (keys-free) | `tests/chains/` (integration) |
+| -------------- | ----------------------------------------- | ----------------------------- |
+| What is tested | Node functions and pure generation helpers, routing/compiled-graph behavior, eval helpers, FastAPI endpoints, and root-level environment isolation | Five live chain modules: generation, retrieval grader, question router, hallucination grader, and answer grader. There is currently no live query-rewriter integration module. |
+| External calls | **None** — retriever, graders, Tavily, the generation seam, and `answer_question` itself are monkeypatched at their lazy factory/module seams | Real OpenAI API calls |
+| Requirements   | No API keys | `OPENAI_API_KEY` (tests are skipped, not failed, without it via the `requires_openai` marker) |
+| CI             | Collected and run by the `mocked-tests` job | Excluded; collect or run explicitly on demand |
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 
@@ -855,7 +864,7 @@ This project implements several engineering patterns for production-oriented LLM
 
 * **Agentic RAG workflow design** — a CRAG-style LangGraph workflow with conditional routing, document relevance grading, answer grounding checks, usefulness checks, and bounded self-correction loops.
 
-* **Controlled dependency boundaries** — external clients such as OpenAI, Chroma, and Tavily are constructed behind lazy cached factories, keeping imports side-effect-free and making the graph testable without API keys, network access, or runtime cost.
+* **Controlled dependency boundaries** — external clients such as OpenAI, Chroma, and Tavily are constructed behind lazy factories, with caching only where reuse is intentional, keeping imports side-effect-free and making the graph testable without API keys, network access, or runtime cost.
 
 * **Deterministic orchestration testing** — the orchestration layer is covered by fast, fully mocked unit tests, while prompt and model behavior are isolated in clearly labeled integration tests that require explicit API access.
 

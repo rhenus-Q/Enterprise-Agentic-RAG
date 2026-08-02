@@ -57,11 +57,12 @@ type, never the message.
 | `graph/chains/` | LCEL chains: `generation`, `retrieval_grader`, `question_router`, `hallucination_grader`, `answer_grader`, `query_rewriter`. Each exposes a lazy `get_*()` factory. `_llm.py` holds the single shared `get_chat_model()` that all six use, so the model name, `temperature=0`, and the request timeout live in one place rather than six. |
 | `server/` | FastAPI adapter over the engine (ADR 016): `app.py` (`create_app()`, endpoints, error mapping, lifespan preflight, optional `frontend/dist` static mount), `schemas.py` (Pydantic API contract), `runs.py` (`RunStore`: bounded `deque(maxlen=RUN_HISTORY_LIMIT=50)` + lock, metadata-only), `status.py` (resolved runtime + index compatibility, mirroring preflight semantics), `documents.py` (keys-free corpus listing). Imports only `graph.engine` / `graph.config` / `graph.consts` / `graph.formatting` / `ingestion` / `main` — never nodes or chains — and constructs no external client. Endpoints: `POST /api/ask`, `POST /api/ask/cancel`, `GET /api/status`, `GET /api/documents`, `GET /api/runs`, `GET /api/runs/{run_id}`. |
 | `frontend/` | Vite + React + TypeScript UI (Ask / Documents / Runs). Plain CSS, no router/state/UI library. Renders only what the API reports — never an inferred default. `src/api/client.ts` selects the real or mock client with the module constant `USE_MOCKS` (no `VITE_*` env var); `src/api/types.ts` mirrors `server/schemas.py`. Colocated `*.test.ts` / `*.test.tsx` files form the critical-state suite and run under vitest. |
-| `tests/node/` | Unit tests for node functions. Fully mocked — no API keys needed. |
+| `tests/node/` | Unit tests for node functions plus keys-free generation context-formatting (`test_generation_context_delimiters.py`) and no-document short-circuit (`test_generation_short_circuit.py`) helpers. Fully mocked — no API keys needed. |
 | `tests/graph/` | Routing / privacy-toggle / compiled-graph tests. Fully mocked — no API keys needed. |
-| `tests/chains/` | Integration tests for the chains. Call the real `gpt-5-mini` — need `OPENAI_API_KEY`. |
+| `tests/chains/` | Five live-model integration modules (generation, retrieval grader, question router, hallucination grader, answer grader). Every test requires `OPENAI_API_KEY`; query rewriting currently has no live integration module. |
 | `tests/evals/` | Mocked unit tests for the eval harness's pure helpers (validation, checks, metrics, rendering). No API keys needed. |
 | `tests/server/` | Backend tests for the FastAPI layer (ask, cancel, status, documents, runs, error mapping). Fully mocked — the engine is monkeypatched at `graph.engine.answer_question`; no API keys, no network. |
+| `tests/test_env_isolation.py` | Root-level keys-free regression that deployment/provider environment values cannot decide mocked-test assertions. |
 | `evals/` | Behavioral eval harness: `questions.jsonl` (24-row dataset with multi-document and fallback-policy rows; optional per-row `web_fallback_policy`, source-title, min-local-source, and web-search-count checks), `run_eval.py` (runs the real graph via `graph.engine.answer_question()` — **never run the full eval without explicit approval**; `--validate-only` is safe), `results.md` (generated report). Each full run also writes a metadata-only JSON history record and renders a "Delta vs. previous run" section in the report. `--validate-only` must stay keys-free and dependency-free: it returns before the graph is imported *and* before startup preflight runs, so it keeps working with no API keys and no local endpoint. Not part of CI. |
 | `evals/history/` | Append-only, metadata-only eval history records (one JSON per full run; never answer text, `page_content`, prompts, or raw state). The harness only writes new records — never edits/deletes. `evals/history/*.json` is gitignored by default (the dir is tracked via `.gitkeep`); force-add (`git add -f`) to share a known-good baseline. |
 | `docs/adr/` | Architecture Decision Records (001–017) with an index in `docs/adr/README.md`. When a documented decision changes, update or supersede the matching ADR. |
@@ -83,9 +84,11 @@ type, never the message.
   only reproduces `app.invoke()` for last-value channels. If a reducer is ever needed, revisit that merge first.
 - **Refactors should be small, mechanical, and reviewable.** Prefer minimal diffs.
 - **Lazy external clients (required pattern).** `ChatOpenAI`, `OpenAIEmbeddings`,
-  `TavilySearch` (`langchain-tavily`), `Chroma`, `ChatOllama` / `OllamaEmbeddings`
+  `TavilyClient` (`tavily-python`), `Chroma`, `ChatOllama` / `OllamaEmbeddings`
   (`langchain-ollama`), retrievers, and any API-backed tool must be constructed
-  inside a lazy factory — use `@lru_cache(maxsize=1) def get_x(): ...` — never at module level.
+  inside a lazy factory, never at module level. Cache only where lifetime reuse
+  is intentional: the shared chat model and retrievers are cached; embeddings
+  are currently constructed on demand.
   Import the optional local-provider classes *inside* their factory, so the default OpenAI
   path keeps working where `langchain-ollama` is absent.
 - **All six chains obtain their model from `graph/chains/_llm.py::get_chat_model()`.** No chain
@@ -118,10 +121,13 @@ type, never the message.
 - **Unit tests mock all external dependencies** via `monkeypatch`, targeting the lazy seam
   (e.g. patch `get_node_retriever`, `get_web_search_tool`, `get_retrieval_grader`,
   `generate_answer`).
-- **Node tests (`tests/node/`) must never call real OpenAI, Tavily, Chroma, or embeddings.**
-  They must pass with no API keys.
-- **Integration tests (`tests/chains/`) call real services** and require `OPENAI_API_KEY`.
-  Label such tests clearly and gate them with the `requires_openai` marker from `conftest.py`.
+- **Keys-free tests (`tests/` except `tests/chains/`) must never call real OpenAI,
+  Tavily, Chroma, or embeddings.** This includes node, graph, eval-helper,
+  server, and root-level tests. Pure chain helpers belong here rather than in
+  the provider-backed integration directory.
+- **Every test in `tests/chains/` calls the real model** and requires
+  `OPENAI_API_KEY`. Label it clearly and gate it with the `requires_openai`
+  marker from `conftest.py`.
 - **Mode/provider env vars are cleared per test** by the autouse fixture in
   `tests/conftest.py`. A test that needs one sets it explicitly with `monkeypatch`, and must
   `.cache_clear()` any `@lru_cache`'d factory it then calls (`get_chat_model`, `get_retriever`,

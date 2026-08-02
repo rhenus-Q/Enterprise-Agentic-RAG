@@ -1,11 +1,11 @@
 """
 Tests for answer provenance (the "Sources:" section).
 
-format_sources / format_answer in main.py build a deterministic Sources
-section from the final working documents' metadata after the graph finishes —
-no LLM is involved, no document content is exposed. Local corpus documents
-and the web supplement are distinguished by the shared WEB_SEARCH_SOURCE
-metadata marker.
+format_sources / format_answer are defined in graph/formatting.py and re-exported
+by main.py for compatibility. They build a deterministic Sources section from
+the final working documents' metadata after the graph finishes — no LLM is
+involved, no document content is exposed. Local corpus documents and the web
+supplement are distinguished by the shared WEB_SEARCH_SOURCE metadata marker.
 
 The last section covers the other end of the same contract: the pure helpers in
 ingestion.py that WRITE that metadata (title, source key, chunk ids), so the

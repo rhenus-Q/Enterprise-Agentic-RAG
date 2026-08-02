@@ -38,12 +38,22 @@ Deployment-mode and provider configuration is validated before the graph by
 - `graph/chains/_llm.py`: shared provider-aware chat-model factory used by all six
   chains.
 - `graph/formatting.py`: pure answer/source formatting.
-- `ingestion.py`: versioned corpus ingestion, validation plus atomic active
-  pointer switching, retained-version rollback, provider-scoped embeddings and
-  indexes, embedding fingerprints, and lazy per-version retriever construction.
+- `ingestion.py`: corpus loading, splitting, embedding, and provider-scoped Chroma
+  rebuilds. It resets the active collection, uses deterministic chunk ids, writes an
+  embedding-fingerprint sidecar, and exposes a lazy process-cached retriever. A failed
+  mid-ingestion rebuild can leave the active index empty until ingestion succeeds again.
+- `server/`: thin FastAPI adapter over the engine, including API schemas, status and
+  document views, metadata-only run history, error mapping, and cooperative cancellation.
+- `frontend/`: Vite, React, and TypeScript UI. Its API types mirror `server/schemas.py`;
+  colocated Vitest tests cover critical states.
 - `data/acmecorp_internal_docs/`: synthetic corpus; it contains no real company data.
-- `tests/node/`, `tests/graph/`, and `tests/evals/`: fully mocked tests.
-- `tests/chains/`: real-service integration tests requiring `OPENAI_API_KEY`.
+- `tests/node/`, `tests/graph/`, `tests/evals/`, `tests/server/`, and
+  `tests/test_env_isolation.py`: keys-free tests collected by default CI. Pure generation
+  helper and empty-context tests live in `tests/node/test_generation_context_delimiters.py`
+  and `tests/node/test_generation_short_circuit.py`.
+- `tests/chains/`: real-model integration tests requiring `OPENAI_API_KEY`; default CI
+  excludes the directory. The current suite covers five chain modules and has no live
+  query-rewriter integration test.
 - `evals/`: behavioral evaluation harness; full runs call real services.
 - `docs/adr/`: architecture decision records.
 - `docs/roadmap/`: specifications, plans, implementation reports, and review reports.
@@ -61,8 +71,9 @@ Deployment-mode and provider configuration is validated before the graph by
   `typing.Annotated` reducers or accumulating channels without first redesigning the
   `dict.update()` streaming merge in `graph/engine.py`.
 - Construct `ChatOpenAI`, `OpenAIEmbeddings`, `ChatOllama`, `OllamaEmbeddings`,
-  `TavilySearch`, `Chroma`, retrievers, and other API-backed clients only inside lazy
-  factories, normally cached with `@lru_cache(maxsize=1)`. Import optional
+  `TavilyClient` (`tavily-python`), `Chroma`, retrievers, and other API-backed clients
+  only inside lazy factories. Cache them with `@lru_cache(maxsize=1)` only where
+  process-lifetime reuse and cache invalidation are intentional. Import optional
   provider-specific classes inside their factory.
 - Route all six chains through `graph/chains/_llm.py::get_chat_model()`. Provider
   selection is process-level, never per-chain or per-run; do not construct a provider
@@ -81,6 +92,15 @@ Deployment-mode and provider configuration is validated before the graph by
 - Local-provider failures must never fall back to OpenAI, Tavily, or LangSmith. The
   guarantee is no third-party egress; the configured Ollama-compatible endpoint is
   itself the trust boundary and may be private infrastructure rather than localhost.
+- Keep `server/` a thin adapter. It may use `graph.engine`, `graph.config`,
+  `graph.consts`, `graph.formatting`, `ingestion`, and `main`; it must not bypass that
+  boundary by importing graph nodes or chains or by constructing external clients.
+- Preserve the cancellation boundary from ADR 017: the server supplies
+  `AnswerOptions.cancel_event`, the engine checks it at streamed node boundaries, and a
+  cancelled run raises `RunCancelled` without a `stop_reason` or history record.
+- Keep `server/schemas.py` and `frontend/src/api/types.ts` synchronized. Preserve URL
+  scheme validation and sanitized error/config responses at the HTTP boundary; frontend
+  rendering must not bypass those protections.
 - Keep OpenAI and local Chroma indexes provider-scoped and preserve embedding
   fingerprint validation. Changing an embedding model requires rebuilding that
   provider's index; switching between existing matching indexes does not.
@@ -90,10 +110,13 @@ Deployment-mode and provider configuration is validated before the graph by
 ## Testing rules
 
 - Mock every external dependency in unit tests at the lazy factory seam.
-- Node, graph, and eval-helper tests must run without API keys and must never call real
-  OpenAI, Tavily, Chroma, or embedding services.
+- Node, graph, eval-helper, server, and root-level tests must run without API keys and
+  must never call real OpenAI, Tavily, Chroma, or embedding services.
 - Mark real-service chain tests with `requires_openai` and keep their dependency on
-  `OPENAI_API_KEY` explicit.
+  `OPENAI_API_KEY` explicit. Keep keys-free chain helper tests outside `tests/chains/` so
+  the default CI collection runs them.
+- Keep frontend tests colocated as `*.test.ts` / `*.test.tsx`. Frontend validation is
+  TypeScript type-checking, non-watch Vitest, and the Vite production build.
 - Keep mocked tests independent of a developer's deployment settings. The autouse
   fixture in `tests/conftest.py` clears mode/provider environment variables; tests that
   set them must use `monkeypatch` and clear every affected `@lru_cache` factory.
@@ -156,7 +179,9 @@ uv sync --group dev
 uv run pre-commit install
 uv run python ingestion.py
 uv run python main.py
+uv run pytest tests/ --ignore=tests/chains/ -q
 uv run pytest tests/node/ -v
+uv run pytest tests/server/ -v
 uv run pytest tests/chains/ -v
 uv run pytest -v
 uv run ruff check .
@@ -165,4 +190,8 @@ uv run ruff format .
 uv run ruff format --check .
 uv run mypy
 uv run pre-commit run --all-files
+cd frontend
+npm run typecheck
+npx vitest run
+npm run build
 ```
