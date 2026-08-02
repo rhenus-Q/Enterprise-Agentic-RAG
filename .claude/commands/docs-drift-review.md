@@ -27,7 +27,8 @@ corresponding documentation being updated:
 **Embedded documentation prose** means the documentation-like text carried inside
 non-Markdown source and configuration files, including:
 
-- Python module / class / function docstrings;
+- Python module / class / function docstrings, and the equivalent TypeScript/TSX
+  module or exported-symbol doc comments;
 - long explanatory comments (comment blocks that describe behavior, architecture,
   or rationale, not one-line implementation notes);
 - user-facing constants and unsupported-intent / help messages;
@@ -76,6 +77,9 @@ repeated elsewhere.
   code, configuration code, and documented variable names as evidence.
 - Do not run real-model tests, gated integration tests, full evals, or
   provider-backed ingestion.
+- Do not install frontend dependencies, run a frontend build, or start the API
+  server. Frontend and server claims are verified statically from source,
+  `frontend/package.json`, and CI.
 - Do not make external network or provider calls (OpenAI, Tavily, Chroma,
   LangSmith, or any other). Do not access external URLs.
 - Never scan `.claude/commands/**` or local `docs/roadmap/**` artifacts (see
@@ -119,11 +123,16 @@ Embedded-prose source/config inventory:
 
     git ls-files \
       "graph/**/*.py" \
+      "server/**/*.py" \
       "ingestion.py" \
       "main.py" \
       "evals/**/*.py" \
       "scripts/**/*.py" \
       "tests/**/*.py" \
+      "frontend/src/**/*.ts" \
+      "frontend/src/**/*.tsx" \
+      "frontend/package.json" \
+      "frontend/vite.config.ts" \
       "pyproject.toml" \
       ".github/workflows/*.yml" \
       ".github/workflows/*.yaml" \
@@ -137,7 +146,7 @@ template prose, and long descriptive string blocks) for drift.
 
 **Always `Read` (in full, not merely Grep) the package-level `__init__.py` of every
 audited source package** (e.g. `graph/__init__.py`,
-`graph/nodes/__init__.py`, `graph/chains/__init__.py`). Their
+`graph/nodes/__init__.py`, `graph/chains/__init__.py`, `server/__init__.py`). Their
 module/package docstrings are prime prose-drift surfaces — they often summarize the
 package's capabilities, version status, and architecture, and drift silently when the
 code around them evolves.
@@ -182,8 +191,8 @@ memory or naming alone. Inspect the relevant current sources of truth as
 applicable:
 
 - top-level tree, tracked files, source package layout;
-- `graph/`, `evals/`, `tests/`;
-- `.github/workflows/`, `pyproject.toml`, `.env.example`;
+- `graph/`, `server/`, `frontend/src/`, `evals/`, `tests/`;
+- `.github/workflows/`, `pyproject.toml`, `.env.example`, `frontend/package.json`;
 - entry points, routers, engines, schemas, tools, LLM-assist modules;
 - feature flags, model factory / configuration code, test markers, CI
   exclusions, active scripts;
@@ -211,7 +220,7 @@ workflow files are the exception: audit them as Category A active documentation.
 | **B. Historical decision records** | `docs/adr/**` | Preserve what was true when decided. Flag only: broken link; history presented as current; stale current-status/implementation-note section; wrong supersession reference; missing/incorrect supersession metadata; an objective typo or impossible path already wrong at the time. |
 | **C. Release notes / version snapshots** | `docs/releases/**`, dated validation reports | Old versions/paths/totals may be correct history. Flag only: claims to describe the *current* version; broken current navigation link; a command presented as currently runnable that no longer works; contradictory version relationship; stale current-status section; a pointer to an active doc via an obsolete path. |
 | **D. Generated results / eval reports** | tracked eval or benchmark output Markdown | Treat measured values as point-in-time unless they claim to be current. Check links, headings, scope descriptions, runner/dataset paths, and obvious contradictions. Do not rewrite measured values by inference. |
-| **E. Embedded documentation prose** | Python module/class/function docstrings, long explanatory comments, user-facing constants, CLI help text, prompt/template strings | Treat as current documentation when it describes current behavior, capabilities, architecture, commands, config, tests, model/LLM usage, feature flags, paths, or user-facing output. Do not modernize short local implementation comments or clearly historical rationale unless they materially mislead maintainers. |
+| **E. Embedded documentation prose** | Python module/class/function docstrings, TypeScript/TSX doc comments, long explanatory comments, user-facing constants and API/UI messages, CLI help text, prompt/template strings | Treat as current documentation when it describes current behavior, capabilities, architecture, commands, config, tests, model/LLM usage, feature flags, paths, or user-facing output. Do not modernize short local implementation comments or clearly historical rationale unless they materially mislead maintainers. |
 
 For B–E, do not modernize historical bodies (Decision/Context/Rationale/
 Consequences, dated benchmarks, archived facts, or clearly historical rationale
@@ -235,7 +244,8 @@ distinguishing active claims from valid historical records.
    external URLs; report an external link only when its visible label or local
    context is internally contradictory.
 3. **Commands and workflows** — documented `pytest` / eval-runner / script /
-   `ruff` / `mypy` / `uv` / CI / entry-point / setup commands that reference
+   `ruff` / `mypy` / `uv` / `npm` / `vitest` / Vite-build / server-start / CI /
+   entry-point / setup commands that reference
    missing paths, invoke renamed files, unintentionally include gated real-model
    tests, omit required exclusions, contradict current CI, use obsolete flags,
    claim to be keys-free while reaching a provider, describe a gated full eval as
@@ -245,14 +255,18 @@ distinguishing active claims from valid historical records.
 4. **Architecture and module boundaries** — active claims about modules, graph
    structure, engines, routers, deterministic vs. LLM-assisted behavior,
    adapters, tools, eval/test ownership, dependencies, entry points, import
-   direction, and fallback behavior. Verify against implementation; do not infer
-   drift from naming.
-5. **Capabilities and features** — current claims about Office Agent capability
-   count, supported intents, available tools, Meeting Agent, approvals/workflows,
-   Knowledge Q&A, Email Digest, Daily Briefing Narrative, default-off behavior,
-   feature flags, fallback, read-only vs. action-taking, deterministic routing,
-   optional LLM enhancement. Verify against current router, engine, tools,
-   schemas, adapters, and LLM-assist code. Preserve historical ADR counts.
+   direction, and fallback behavior. This includes the API/UI layering: which
+   modules `server/` may import, which endpoints exist, and whether the frontend
+   is described as mirroring the API contract rather than owning it. Verify
+   against implementation; do not infer drift from naming.
+5. **Capabilities and features** — current claims about graph behavior and
+   routing, the quality gates, `stop_reason` values and the caveats they produce,
+   retry caps and run budgets, web-search privacy mode, web fallback policy
+   semantics, local-provider / fully-local mode guarantees, cancellation
+   behavior, corpus contents, server API endpoints and their error mappings, and
+   frontend pages and capabilities. Verify against the current graph, nodes,
+   chains, config readers, engine, `server/` routes and schemas, and
+   `frontend/src/`. Preserve historical ADR counts.
 6. **Models, config, environment** — model names, temperature, provider
    dependencies, env-variable names, defaults, feature flags, retry/budget
    config, optional vs. mandatory keys, keys-free commands, gated-test / real-model
@@ -261,9 +275,11 @@ distinguishing active claims from valid historical records.
 7. **Tests, evals, CI** — test/eval directory locations, mocked vs. real-model
    suites, gated markers, CI scope, runner/dataset/report locations, module
    ownership, the `evals/` vs. `tests/<module>/evals/` distinction, and whether
-   real-model suites are excluded by directory vs. only by missing keys. Verify
-   against the current `tests/` and `evals/` trees, CI workflows, pytest markers,
-   and `tests/conftest.py`.
+   real-model suites are excluded by directory vs. only by missing keys. This
+   includes the API suite (`tests/server/`), the colocated frontend vitest suite,
+   and the separate frontend CI job (type-check / test / build). Verify against
+   the current `tests/`, `evals/`, and `frontend/src/` trees, CI workflows,
+   pytest markers, `frontend/package.json` scripts, and `tests/conftest.py`.
 8. **Versions and release status** — current release/version/milestone claims and
    version labels in active README headings. Report conflicting current-version
    claims, active docs pinned to an obsolete release without reason, "latest"
@@ -274,17 +290,19 @@ distinguishing active claims from valid historical records.
    dates. Decide whether each is a dated/versioned historical snapshot, an active
    current-status claim, or an undated number likely to drift. Do not invent
    replacement totals; prefer removing, dating, or qualifying fragile ones.
-10. **Cross-document contradictions** — active-vs-active conflicts (e.g. one
-    README says five capabilities, another says seven; one doc says "no LLM"
-    while two LLM assists exist; a command includes integration tests CI
-    excludes). Do not treat a correctly historical/superseded ADR as
-    contradicting a current README.
+10. **Cross-document contradictions** — active-vs-active conflicts (e.g. one doc
+    says web search is disabled by default while the config reader defaults it
+    on; one doc lists a `stop_reason` the code no longer sets; a documented
+    command includes suites CI excludes; the API contract is described
+    differently on the `server/` and `frontend/` sides). Do not treat a correctly
+    historical/superseded ADR as contradicting a current README.
 11. **Terminology / semantic drift** — wording that materially misleads a
     maintainer: "case" vs. "check" when semantics differ, "unit test" for a gated
     integration test, "eval" for a test of an eval harness, "deterministic"
     applied to an LLM-backed path, "current" for a historical snapshot,
-    "complete/fully supported" contradicted by implementation, "all assists" for a
-    single-assist report, "keys-free" for a command that can reach a provider.
+    "complete/fully supported" contradicted by implementation, "cancelled"
+    described as a `stop_reason` when cancellation deliberately produces none,
+    "keys-free" for a command that can reach a provider.
 12. **Embedded documentation prose drift** — module docstrings, class/function
     docstrings, long comments, user-facing constants, CLI help text, and
     prompt/template prose that describe current behavior, capabilities, paths,
@@ -363,7 +381,7 @@ directory if needed. Name it using the project's review-command convention:
 Examples:
 
 - full repository → `docs/roadmap/docs-drift-review/2026-07-06-overall-docs-drift-review.md`
-- scoped → `docs/roadmap/docs-drift-review/2026-07-06-office-agent-docs-drift-review.md`
+- scoped → `docs/roadmap/docs-drift-review/2026-07-06-server-api-docs-drift-review.md`
 
 **Collision handling.** Before writing, select the path by checking candidates in
 order with `Glob` and using the first that does not already exist:

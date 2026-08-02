@@ -60,6 +60,8 @@ This review should cover:
 
 * node test coverage
 * graph routing test coverage
+* API-layer test coverage (`server/` via `tests/server/`)
+* frontend test coverage (colocated vitest suite)
 * eval harness test coverage
 * failure-path test coverage
 * privacy-mode test coverage
@@ -177,6 +179,9 @@ First use `Glob` to discover relevant runtime files under:
 * `graph/*.py`
 * `graph/nodes/*.py`
 * `graph/chains/*.py`
+* `server/*.py`
+* `frontend/src/**/*.ts`
+* `frontend/src/**/*.tsx`
 
 Then inspect only the relevant existing files.
 
@@ -195,8 +200,13 @@ Prioritize files that define or affect:
 * retry behavior
 * privacy-mode behavior
 * failure paths
+* API endpoints, request/response schemas, error mapping, and run history
+* the `server/schemas.py` ↔ `frontend/src/api/types.ts` contract
+* frontend state handling for loading, error, cancellation, and empty results
 
-Do not fail or waste time if a likely file is absent. Use the discovered `graph/` file list as the source of truth.
+Do not fail or waste time if a likely file is absent. Use the discovered `graph/`, `server/`, and `frontend/src/` file lists as the source of truth.
+
+Inspect frontend source only to judge what its tests do and do not lock. Do not review styling or layout.
 
 ### Eval system
 
@@ -233,6 +243,9 @@ First use `Glob` to discover relevant test files under:
 * `tests/node/**/*.py`
 * `tests/graph/**/*.py`
 * `tests/evals/**/*.py`
+* `tests/server/**/*.py`
+* `frontend/src/**/*.test.ts`
+* `frontend/src/**/*.test.tsx`
 
 Then inspect only the test files relevant to the requested focus and to coverage-gap analysis.
 
@@ -250,6 +263,8 @@ Prioritize tests that cover:
 * trace / observability behavior
 * failure paths
 * recent security or redaction changes
+* API endpoint behavior, error mapping, cancellation, and run history
+* frontend rendering of API responses, error states, and loading/cancel states
 
 Inspect `tests/chains/` only if the user explicitly asks.
 
@@ -268,6 +283,8 @@ First use `Glob` to discover relevant tooling files under:
 * `*.toml`
 * `*.md`
 * `.gitignore`
+* `frontend/package.json`
+* `frontend/vite.config.ts`
 
 Then inspect only the relevant existing files.
 
@@ -360,6 +377,18 @@ Evaluate the following areas.
 * Are conservative, aggressive, and disabled fallback policies tested?
 * Are budget-exhausted paths tested at graph or node level?
 
+### API and frontend coverage
+
+* Are all API endpoints covered by mocked tests in `tests/server/`?
+* Is HTTP error mapping tested for each mapped failure, including preflight failure, invalid configuration, concurrent runs, cancellation, and unknown runs?
+* Is cancellation tested at the API boundary without adding a `stop_reason`?
+* Is run-history behavior tested, including its bound and its metadata-only contents?
+* Is the optional static mount tested for both present and missing builds?
+* Are the API tests keys-free and mocked at the engine seam rather than calling the real graph?
+* Does the frontend suite cover the states the API can actually return: success, degraded answer with a caveat, error, cancellation, and empty results?
+* Is the `server/schemas.py` ↔ `frontend/src/api/types.ts` contract locked by a test on either side, or only by convention?
+* Are frontend tests scoped to state and rendering behavior rather than styling?
+
 ### Security and privacy coverage
 
 * Are user-input secret redaction behaviors tested?
@@ -389,6 +418,9 @@ Evaluate the following areas.
 * Does CI run the safe mocked tests?
 * Does CI avoid API-key-requiring tests by default?
 * Are lint, formatting, type-checking, and safe tests wired correctly?
+* Does CI collect `tests/server/` automatically rather than by an enumerated directory list that a new suite could miss?
+* Does the frontend CI job cover type-check, tests, and production build?
+* Does the mypy scope include the `server/*.py` modules?
 * Are test commands documented and consistent with CLAUDE.md?
 * Are generated results/history artifacts kept out of accidental commits where appropriate?
 
@@ -397,7 +429,7 @@ Evaluate the following areas.
 * Are missing tests prioritized by risk?
 * Are recommendations specific enough to implement?
 * Are gaps separated into Must fix, Should fix soon, and Optional?
-* Are proposed tests scoped to the right layer: node, graph, eval, engine, config, or docs?
+* Are proposed tests scoped to the right layer: node, graph, server, frontend, eval, engine, config, or docs?
 * Are recommendations careful not to demand brittle tests that lock implementation details unnecessarily?
 
 ## Step 4. Look for risks and improvement opportunities
@@ -408,6 +440,9 @@ Flag:
 * critical failure paths tested only by accident
 * tests that only cover happy paths
 * graph routing not covered by tests
+* API endpoints, error mapping, or cancellation not covered by tests
+* frontend states that the API can return but the UI suite never renders
+* the API schema/type contract drifting with nothing to catch it
 * stop_reason semantics not locked by tests
 * budget behavior not covered
 * privacy mode not covered
@@ -470,6 +505,8 @@ Briefly describe the current test architecture:
 
 * Node tests
 * Graph tests
+* API tests (`tests/server/`)
+* Frontend tests (colocated vitest suite)
 * Eval tests
 * Chain tests if relevant
 * Engine/config tests
@@ -575,18 +612,33 @@ Assess:
 * validate-only
 * markdown reporting
 
-## 12. CI and safe workflow review
+## 12. API and frontend test coverage review
+
+Assess:
+
+* endpoint coverage in `tests/server/`
+* HTTP error mapping coverage
+* cancellation coverage at the API boundary
+* run-history bound and metadata-only coverage
+* static-mount coverage
+* frontend coverage of success, degraded, error, cancelled, and empty states
+* whether the `server/schemas.py` ↔ `frontend/src/api/types.ts` contract is locked by any test
+* missing tests
+* risky or brittle tests
+
+## 13. CI and safe workflow review
 
 Assess:
 
 * mocked test defaults
 * API-key-requiring test isolation
 * lint/format/typecheck coverage
+* frontend CI job (type-check, tests, build)
 * CI workflow correctness
 * docs/CI/test command alignment
 * generated artifact hygiene
 
-## 13. Documentation and workflow review
+## 14. Documentation and workflow review
 
 Assess:
 
@@ -597,7 +649,7 @@ Assess:
 * Claude commands
 * whether test coverage expectations are documented clearly
 
-## 14. Recommended next actions
+## 15. Recommended next actions
 
 Separate recommendations into:
 
@@ -607,7 +659,7 @@ Separate recommendations into:
 
 ### Optional improvements
 
-## 15. Test-readiness verdict
+## 16. Test-readiness verdict
 
 Give one of:
 
@@ -617,7 +669,7 @@ Give one of:
 
 Explain why.
 
-## 16. Overall recommendation
+## 17. Overall recommendation
 
 Do not restate the executive summary or the test-readiness verdict here.
 

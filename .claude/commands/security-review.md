@@ -61,6 +61,7 @@ Review whether the current project is secure enough for a production-oriented Ag
 * trace/log safety
 * `.env` and secret hygiene
 * RAG document safety
+* the HTTP/API boundary and frontend rendering of API-supplied content
 * tool-call boundaries
 * security-related test coverage
 * production-like privacy risks
@@ -187,6 +188,21 @@ Inspect these areas as needed.
 * `graph/nodes/clear_transient_tool_error.py`
 * `graph/nodes/*notice*.py`
 
+### Web/API layer and frontend boundary
+
+* `server/app.py`
+* `server/schemas.py`
+* `server/runs.py`
+* `server/status.py`
+* `server/documents.py`
+* `frontend/src/api/client.ts`
+* `frontend/src/api/types.ts`
+* `frontend/src/components/CitationList.tsx`
+* `frontend/src/components/AnswerCard.tsx`
+
+Inspect frontend files only where they build request payloads or render
+API-supplied content. Do not review frontend styling or layout.
+
 ### Eval and tests
 
 * `evals/run_eval.py`
@@ -195,6 +211,7 @@ Inspect these areas as needed.
 * `tests/node/`
 * `tests/graph/`
 * `tests/evals/`
+* `tests/server/`
 
 Inspect `tests/chains/` only if needed to assess security test coverage.
 
@@ -206,6 +223,8 @@ Do not run `tests/chains/`.
 * `.github/workflows/ci.yml`
 * `.github/workflows/CI.yml`
 * `.gitignore`
+* `frontend/package.json`
+* `frontend/vite.config.ts`
 * `.claude/commands/`
 * `ingestion.py`
 
@@ -266,6 +285,18 @@ Evaluate the following areas.
 * Are web search counts and limits enforced?
 * Are privacy risks documented clearly enough?
 
+### Web/API boundary and frontend rendering safety
+
+* Does the HTTP layer validate and bound request input before it reaches the engine?
+* Are error responses sanitized so configuration values, exception messages, file paths, and secrets never reach the client?
+* Is the run history metadata-only and bounded?
+* Are citation URLs scheme-validated before crossing the HTTP boundary and being rendered as links?
+* Does the frontend render API-supplied answer text, titles, and URLs without creating an injection or link-based exfiltration path?
+* Do privacy mode and local mode hold across the HTTP path, including per-request overrides?
+* Is the optional `frontend/dist` static mount scoped so it cannot expose unintended files?
+* Does the API layer import graph nodes/chains or construct an external client, contrary to its documented boundary?
+* Are cancellation and concurrent-run rejection free of information leakage?
+
 ### Trace, logging, and artifact safety
 
 * Are trace files metadata-only?
@@ -305,6 +336,8 @@ Evaluate the following areas.
 * Are trace-safety guarantees tested?
 * Are failure paths tested without real API keys?
 * Are tests separated so safe tests can run in CI?
+* Are API-layer security behaviors — error sanitization, citation URL validation, run-history contents — covered by `tests/server/`?
+* Are frontend rendering guarantees covered by the colocated vitest suite?
 * Are there missing regression tests around recent security changes?
 
 ## Step 4. Look for risks and improvement opportunities
@@ -319,6 +352,10 @@ Flag:
 * fallback policy confusion
 * logging or trace leakage
 * `.env` or generated artifact hygiene problems
+* unsanitized HTTP error responses that echo configuration values, exception messages, or filesystem paths
+* API responses or run-history records carrying answer text, document content, or raw state
+* citation URLs reaching the frontend without scheme validation
+* an API layer that imports graph nodes/chains or constructs its own external client
 * overly broad Claude command permissions
 * missing security tests
 * stale docs that overstate security guarantees
@@ -376,6 +413,8 @@ Briefly describe the current security-relevant flow:
 * Local retrieval boundary
 * Web search boundary
 * Prompt / chain boundary
+* HTTP/API boundary
+* Frontend rendering boundary
 * Trace and logging boundary
 * Eval and test boundary
 
@@ -445,7 +484,20 @@ Assess:
 * external service failure handling
 * privacy implications
 
-## 10. Trace and observability safety review
+## 10. Web/API boundary and frontend review
+
+Assess:
+
+* request validation and input bounds
+* error-response sanitization
+* run history contents and bounds
+* citation URL scheme validation
+* frontend rendering of API-supplied answers, titles, and URLs
+* privacy-mode enforcement across the HTTP path
+* static-mount exposure
+* whether the documented `server/` import boundary holds
+
+## 11. Trace and observability safety review
 
 Assess:
 
@@ -458,7 +510,7 @@ Assess:
 * trace write failure behavior
 * whether any observability artifact could leak secrets
 
-## 11. Security test coverage review
+## 12. Security test coverage review
 
 Assess:
 
@@ -468,10 +520,12 @@ Assess:
 * web-search-disabled tests
 * prompt-injection tests
 * trace-safety tests
+* API-layer tests (`tests/server/`)
+* frontend critical-state tests
 * missing tests
 * risky tests
 
-## 12. Documentation and workflow review
+## 13. Documentation and workflow review
 
 Assess:
 
@@ -482,7 +536,7 @@ Assess:
 * Claude commands
 * whether security behavior is documented clearly and not overstated
 
-## 13. Recommended next actions
+## 14. Recommended next actions
 
 Separate recommendations into:
 
@@ -492,7 +546,7 @@ Separate recommendations into:
 
 ### Optional improvements
 
-## 14. Security-readiness verdict
+## 15. Security-readiness verdict
 
 Give one of:
 
@@ -502,7 +556,7 @@ Give one of:
 
 Explain why.
 
-## 15. Overall recommendation
+## 16. Overall recommendation
 
 Do not restate the executive summary or the security-readiness verdict here.
 

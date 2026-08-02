@@ -69,6 +69,9 @@ Examples:
 * eval dataset change
 * documentation update
 * graph behavior change
+* web API change (`server/`)
+* frontend change (`frontend/`)
+* API contract change (`server/schemas.py` + `frontend/src/api/types.ts`)
 * test update
 * dev tooling change
 * generated result update
@@ -98,6 +101,11 @@ Flag any unexpected changes to:
 
 Also flag:
 
+* a schema change in `server/schemas.py` without the matching change in `frontend/src/api/types.ts`, or the reverse
+* an API layer importing graph nodes or chains, or constructing an external client
+* new HTTP error paths that echo configuration values, exception text, or filesystem paths
+* committed frontend build output (`frontend/dist/`) or dependency directories
+* `frontend/package.json` changes without the matching `frontend/package-lock.json` update
 * broad unrelated refactors
 * accidental formatting-only churn
 * generated files that should not be committed
@@ -129,6 +137,23 @@ For graph/node/eval-behavior changes, recommend:
 uv run pytest tests/node/ tests/graph/ tests/evals/ -q
 ```
 
+For changes under `server/`, recommend:
+
+```powershell
+uv run pytest tests/server/ -q
+```
+
+For changes under `frontend/`, recommend running from `frontend/`:
+
+```powershell
+npm run typecheck
+npx vitest run
+npm run build
+```
+
+For an API contract change, recommend both sides — `tests/server/` and the
+frontend checks — since neither alone catches the two files drifting apart.
+
 Only recommend full eval when the diff changes eval rows, eval expectations, retrieval behavior, fallback behavior, or generated eval results:
 
 ```powershell
@@ -142,6 +167,8 @@ Do not run `ingestion.py`.
 Do not run `tests/chains/`.
 
 Do not run API-key-requiring commands unless explicitly approved.
+
+Do not run frontend install, test, or build commands — recommend them only.
 
 ## Step 6. Commit readiness judgment
 
@@ -224,4 +251,5 @@ Explicitly state whether the diff appears to change:
 * corpus documents
 * `.env` / `.env.example`
 * graph behavior
+* the API contract (`server/schemas.py` ↔ `frontend/src/api/types.ts`)
 * full eval results

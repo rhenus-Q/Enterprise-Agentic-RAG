@@ -65,6 +65,7 @@ This review should cover:
 * web search budget controls
 * web result grading budget controls
 * external dependency failure behavior
+* web/API boundary failure behavior
 * degraded-mode behavior
 * production-readiness risks
 * failure-related test coverage
@@ -188,6 +189,22 @@ Inspect these areas as needed.
 * `graph/nodes/clear_transient_tool_error.py`
 * `graph/nodes/*notice*.py`
 
+### Web/API layer and frontend failure boundaries
+
+* `server/app.py`
+* `server/runs.py`
+* `server/status.py`
+* `server/documents.py`
+* `frontend/src/api/client.ts`
+* `frontend/src/components/ErrorState.tsx`
+
+`docs/adr/017-cooperative-run-cancellation.md` governs cancellation: a cancelled
+run is abandoned, not degraded, and deliberately produces no `stop_reason`. Do not
+report that absence as a missing failure path.
+
+Inspect the frontend only for how it surfaces API failures. Do not review styling
+or layout.
+
 ### Eval and tests
 
 * `evals/run_eval.py`
@@ -196,6 +213,7 @@ Inspect these areas as needed.
 * `tests/node/`
 * `tests/graph/`
 * `tests/evals/`
+* `tests/server/`
 
 Inspect `tests/chains/` only if needed to assess failure-related test coverage.
 
@@ -207,6 +225,7 @@ Do not run `tests/chains/`.
 * `.github/workflows/ci.yml`
 * `.github/workflows/CI.yml`
 * `.gitignore`
+* `frontend/package.json`
 * `.claude/commands/`
 
 Do not inspect `.env`.
@@ -279,6 +298,18 @@ Evaluate the following areas.
 * Are exception logs careful not to print sensitive messages?
 * Are dependency failures represented accurately in `stop_reason`?
 
+### Web/API boundary failure behavior
+
+* Does every engine failure map to a deliberate HTTP status rather than an unhandled 500?
+* Is startup preflight failure surfaced as a clear, non-crashing service state?
+* Is an invalid runtime configuration reported without echoing the offending value to the caller?
+* Is a concurrent-run request rejected predictably rather than racing?
+* Is cancellation distinguishable from both success and server fault, and does it correctly avoid producing a `stop_reason`?
+* Does a degraded answer keep its `stop_reason` caveat intact across the HTTP boundary?
+* Is run history bounded so a long-lived process cannot grow without limit, and is its loss on restart an accepted limitation?
+* Does a missing frontend build degrade to API-only mode instead of failing startup?
+* Does the frontend surface API errors, cancellations, and degraded answers honestly rather than silently retrying or showing a blank state?
+
 ### Web fallback and degraded mode
 
 * Are fallback policies clear?
@@ -320,6 +351,8 @@ Evaluate the following areas.
 * Are retriever failure paths tested?
 * Are grader failure paths tested?
 * Are trace-write failure paths tested?
+* Are API error mapping, cancellation, and run-history bounds tested in `tests/server/`?
+* Are frontend error and cancellation states tested?
 * Are there missing regression tests for recent failure-handling changes?
 
 ## Step 4. Look for risks and improvement opportunities
@@ -337,6 +370,10 @@ Flag:
 * fallback-policy confusion
 * privacy-mode bypasses
 * exception messages that may leak paths, prompts, raw documents, or secrets
+* engine failures reaching the client as unhandled 500s
+* HTTP error responses that echo configuration values, exception text, or paths
+* unbounded or unrecoverable run-history growth
+* a frontend that hides, silently swallows, or auto-retries API failures
 * observability that is too weak to debug failures
 * tests that only cover happy paths
 * production-readiness gaps that could cause fragile behavior
@@ -397,6 +434,8 @@ Briefly describe the current system failure boundaries:
 * Web search boundary
 * Query rewrite boundary
 * Budget boundary
+* Web/API boundary
+* Frontend error-surfacing boundary
 * Trace/observability boundary
 * Eval/test boundary
 
@@ -475,7 +514,20 @@ Assess:
 * failed web search behavior
 * unverified web result exclusion
 
-## 11. Production readiness review
+## 11. Web/API and frontend failure review
+
+Assess:
+
+* HTTP error mapping completeness
+* preflight and invalid-configuration behavior
+* concurrent-run rejection
+* cancellation semantics at the boundary
+* preservation of `stop_reason` caveats across HTTP
+* run-history bounds and restart loss
+* missing frontend build behavior
+* how the frontend surfaces errors, cancellation, and degraded answers
+
+## 12. Production readiness review
 
 Assess:
 
@@ -487,7 +539,7 @@ Assess:
 * documentation accuracy
 * whether failure-handling gaps should be fixed before adding more features
 
-## 12. Failure-related test coverage review
+## 13. Failure-related test coverage review
 
 Assess:
 
@@ -501,10 +553,12 @@ Assess:
 * retriever-failure tests
 * grader-failure tests
 * trace-write-failure tests
+* API error-mapping and cancellation tests
+* frontend error-state tests
 * missing tests
 * risky tests
 
-## 13. Documentation and workflow review
+## 14. Documentation and workflow review
 
 Assess:
 
@@ -515,7 +569,7 @@ Assess:
 * Claude commands
 * whether failure behavior, budgets, and degraded modes are documented clearly
 
-## 14. Recommended next actions
+## 15. Recommended next actions
 
 Separate recommendations into:
 
@@ -525,7 +579,7 @@ Separate recommendations into:
 
 ### Optional improvements
 
-## 15. Failure-readiness verdict
+## 16. Failure-readiness verdict
 
 Give one of:
 
@@ -535,7 +589,7 @@ Give one of:
 
 Explain why.
 
-## 16. Overall recommendation
+## 17. Overall recommendation
 
 Do not restate the executive summary or the failure-readiness verdict here.
 

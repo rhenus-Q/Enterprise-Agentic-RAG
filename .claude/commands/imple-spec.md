@@ -1,7 +1,7 @@
 ---
 description: Implement an existing spec or implementation plan
 argument-hint: Path to spec or plan file, for example docs/roadmap/plan/eval-history-delta-reporting-plan.md
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(mkdir:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run python -m mypy:*), Bash(uv run pytest tests/node:*), Bash(uv run python -m pytest tests/node:*), Bash(uv run pytest tests/graph:*), Bash(uv run python -m pytest tests/graph:*), Bash(uv run pytest tests/evals:*), Bash(uv run python -m pytest tests/evals:*), Bash(uv run python evals/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(mkdir:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run python -m mypy:*), Bash(uv run pytest tests/node:*), Bash(uv run python -m pytest tests/node:*), Bash(uv run pytest tests/graph:*), Bash(uv run python -m pytest tests/graph:*), Bash(uv run pytest tests/evals:*), Bash(uv run python -m pytest tests/evals:*), Bash(uv run pytest tests/server:*), Bash(uv run python -m pytest tests/server:*), Bash(uv run python evals/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
 ---
 
 You are implementing an existing spec or implementation plan for this Agentic RAG project.
@@ -203,6 +203,8 @@ Unless the plan or spec explicitly approves an exception:
 * Do not change graph nodes.
 * Do not change `stop_reason` semantics.
 * Do not change fallback policy semantics.
+* Do not let the API layer import graph nodes or chains, or construct an external client.
+* Do not change the API contract without updating `server/schemas.py` and `frontend/src/api/types.ts` together.
 * Do not modify `.env` or `.env.example`.
 * Do not run full eval.
 * Do not run `ingestion.py`.
@@ -227,8 +229,20 @@ uv run ruff format --check .
 uv run mypy
 uv run pytest tests/node/ -q
 uv run pytest tests/graph/ -q
+uv run pytest tests/server/ -q
 uv run pytest tests/evals/ -q
 uv run python evals/run_eval.py --validate-only
+```
+
+This command cannot run frontend tooling. If the implemented scope touches
+`frontend/`, do not attempt `npm` or `vitest`. Record the frontend side as
+unvalidated in the implementation report and give the user these commands to run
+from `frontend/`:
+
+```powershell
+npm run typecheck
+npx vitest run
+npm run build
 ```
 
 Do not run full eval unless the plan or spec explicitly says it is needed and the user has separately approved it.
@@ -290,6 +304,7 @@ Include:
 * Implementation report path, if created (the exact collision-safe path selected in Step 9).
 * Files changed.
 * Tests run and results.
+* Whether frontend checks were run, or were left to the user.
 * Whether full eval was run.
 * Whether API-key commands were run.
 * Whether prompts/models/corpus/.env changed.

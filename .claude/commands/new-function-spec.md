@@ -133,6 +133,9 @@ document is grounded in the real repository.
 * Prefer the plan/spec templates and `CLAUDE.md` for structure and rules.
 * Use `Read`/`Grep`/`Glob` to verify real filenames, entry points, schemas, tests,
   and conventions before naming them in the document.
+* When the feature reaches the web layer, verify the actual endpoints, Pydantic
+  schemas, and frontend types before naming them — `server/`, `tests/server/`,
+  and `frontend/src/api/` are the sources of truth, not assumption.
 * When the feature changes a documented architectural decision, identify the
   correct ADR to update, or the **next available ADR number**, from the current
   repository state under `docs/adr/` — do not rely on stale ADR ranges or numbers
@@ -266,6 +269,9 @@ Include these (each holds unless the feature explicitly approves an exception):
 * Do not change prompts, model names, or corpus documents.
 * Do not change graph behavior, graph routing, or graph nodes.
 * Do not change `stop_reason` semantics or fallback policy semantics.
+* Do not let the API layer import graph nodes or chains, or construct an external client.
+* Do not change the API contract without updating `server/schemas.py` and
+  `frontend/src/api/types.ts` together.
 * Do not modify `.env` or `.env.example`.
 * Do not run full eval, `ingestion.py`, `tests/chains/`, or API-key-requiring
   commands without separate user approval.
@@ -282,8 +288,18 @@ uv run ruff format --check .
 uv run mypy
 uv run pytest tests/node/ -q
 uv run pytest tests/graph/ -q
+uv run pytest tests/server/ -q
 uv run pytest tests/evals/ -q
 uv run python evals/run_eval.py --validate-only
+```
+
+Include only the suites the feature actually touches. When the feature reaches
+`frontend/`, the generated document must also list these, run from `frontend/`:
+
+```powershell
+npm run typecheck
+npx vitest run
+npm run build
 ```
 
 Mark full eval as requiring separate approval and only when the feature needs it:

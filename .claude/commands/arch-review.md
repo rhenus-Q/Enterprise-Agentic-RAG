@@ -58,6 +58,7 @@ This review should cover:
 * separation of concerns
 * graph design
 * configuration and side effects
+* web/API and frontend layering
 * observability architecture
 * production readiness
 * eval architecture
@@ -163,6 +164,9 @@ Inspect these areas as needed.
 * `.github/workflows/ci.yml`
 * `.github/workflows/CI.yml`
 * `.gitignore`
+* `main.py`
+* `frontend/package.json`
+* `frontend/vite.config.ts`
 * `CLAUDE.md`
 * `README.md`
 * `structure.md`
@@ -178,6 +182,24 @@ Inspect these areas as needed.
 * `graph/nodes/`
 * `graph/chains/`
 
+### Web/API layer and frontend
+
+* `server/app.py`
+* `server/schemas.py`
+* `server/runs.py`
+* `server/status.py`
+* `server/documents.py`
+* `frontend/src/api/`
+* `frontend/src/pages/`
+
+Inspect the frontend at the layering level — how it consumes the API and where it
+holds state. Do not review component styling or layout.
+
+Consult the ADRs that own this layer when assessing it:
+
+* `docs/adr/016-thin-web-application-layer.md`
+* `docs/adr/017-cooperative-run-cancellation.md`
+
 ### Eval system
 
 * `evals/run_eval.py`
@@ -190,6 +212,8 @@ Inspect these areas as needed.
 * `tests/node/`
 * `tests/graph/`
 * `tests/evals/`
+* `tests/server/`
+* `frontend/src/**/*.test.ts` / `frontend/src/**/*.test.tsx`
 
 Do not inspect `tests/chains/` unless the user explicitly asks.
 
@@ -228,6 +252,17 @@ Evaluate the following areas.
 * Can tests import modules without API keys?
 * Are runtime policies resolved once per run rather than read inconsistently across nodes?
 
+### Web/API and frontend layering
+
+* Is the API a thin adapter over the engine rather than a second place where graph logic lives?
+* Does `server/` import only the engine-facing surface, never graph nodes or chains, and construct no external client?
+* Is the API contract explicit and versionable, and does the frontend mirror it in one place?
+* Does the frontend render only what the API reports rather than inferring defaults?
+* Is cancellation handled at the boundary the ADR specifies, without leaking into `stop_reason` or into nodes?
+* Is run history's in-memory, single-process, bounded nature an understood limitation rather than an accident?
+* Is the frontend build wired so the API can serve it optionally, without making the API depend on it?
+* Would adding a second consumer of the engine require duplicating logic currently living in `server/`?
+
 ### Separation of concerns
 
 * Is graph execution separated from formatting?
@@ -235,6 +270,7 @@ Evaluate the following areas.
 * Are node and chain responsibilities separated?
 * Are nodes responsible for GraphState updates while chains handle LLM/prompt logic?
 * Is persistence/history logic isolated enough?
+* Is the API/UI layer separated from graph internals, with a single engine entry point?
 * Are docs and tests aligned with behavior?
 * Is business behavior separated from observability and reporting?
 
@@ -263,7 +299,7 @@ Evaluate the following areas.
 ### Testability
 
 * Are important behaviors covered by mocked tests?
-* Are graph/node/eval tests separated correctly?
+* Are graph/node/server/frontend/eval tests separated correctly?
 * Are API-key-requiring tests avoided by default?
 * Are there brittle tests or under-tested seams?
 * Are recent features covered by unit tests?
@@ -306,6 +342,8 @@ Evaluate the following areas.
 Flag:
 
 * hidden coupling
+* graph logic leaking into the API layer, or the API layer reaching past the engine
+* API contract and frontend types drifting apart
 * unclear ownership of logic
 * duplicate logic
 * overly broad tool permissions
@@ -368,6 +406,7 @@ Briefly describe the current system architecture:
 * Graph flow
 * Nodes and chains
 * Config/runtime setup
+* Web/API layer and frontend
 * Eval harness
 * Test structure
 * Observability structure
@@ -433,7 +472,19 @@ Assess:
 * whether the system is safe to keep building on
 * whether production-readiness gaps should be fixed before adding more features
 
-## 9. Eval architecture review
+## 9. Web/API and frontend architecture review
+
+Assess:
+
+* whether the API is a thin adapter over the engine
+* the `server/` import boundary
+* API contract ownership and the frontend's mirror of it
+* cancellation placement
+* run-history design and its single-process limitation
+* static-mount coupling between API and frontend build
+* whether this layer makes future features easier or harder
+
+## 10. Eval architecture review
 
 Assess:
 
@@ -445,18 +496,20 @@ Assess:
 * validate-only workflow
 * test coverage
 
-## 10. Test architecture review
+## 11. Test architecture review
 
 Assess:
 
 * mocked tests
 * graph tests
 * node tests
+* API tests (`tests/server/`)
+* frontend tests (colocated vitest suite)
 * eval tests
 * missing tests
 * risky tests
 
-## 11. Documentation and workflow review
+## 12. Documentation and workflow review
 
 Assess:
 
@@ -466,7 +519,7 @@ Assess:
 * Claude commands
 * roadmap artifacts
 
-## 12. Recommended next actions
+## 13. Recommended next actions
 
 Separate recommendations into:
 
@@ -476,7 +529,7 @@ Separate recommendations into:
 
 ### Optional improvements
 
-## 13. Engineering-readiness verdict
+## 14. Engineering-readiness verdict
 
 Give one of:
 
@@ -486,7 +539,7 @@ Give one of:
 
 Explain why.
 
-## 14. Overall recommendation
+## 15. Overall recommendation
 
 Do not restate the executive summary or the engineering-readiness verdict here.
 

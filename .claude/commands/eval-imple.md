@@ -1,7 +1,7 @@
 ---
 description: Evaluate whether a proposed change is justified, then implement the smallest correct change (or none) and validate it
 argument-hint: The proposed task or change request, for example "add a retry cap to web search"
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run python -m mypy:*), Bash(uv run pytest tests/node:*), Bash(uv run python -m pytest tests/node:*), Bash(uv run pytest tests/graph:*), Bash(uv run python -m pytest tests/graph:*), Bash(uv run pytest tests/evals:*), Bash(uv run python -m pytest tests/evals:*), Bash(uv run python evals/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run python -m mypy:*), Bash(uv run pytest tests/node:*), Bash(uv run python -m pytest tests/node:*), Bash(uv run pytest tests/graph:*), Bash(uv run python -m pytest tests/graph:*), Bash(uv run pytest tests/evals:*), Bash(uv run python -m pytest tests/evals:*), Bash(uv run pytest tests/server:*), Bash(uv run python -m pytest tests/server:*), Bash(uv run python evals/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
 ---
 
 You are evaluating a proposed change for this Agentic RAG project, then implementing it **only if the repository evidence justifies it**.
@@ -130,6 +130,10 @@ Unless the request explicitly approves an exception:
 * Do not change prompts, model names, or corpus documents.
 * Do not change graph behavior, graph routing, graph nodes, `stop_reason`
   semantics, or fallback-policy semantics.
+* Do not let the API layer import graph nodes or chains, or construct an external
+  client — it goes through the engine surface.
+* If the change alters the API contract, update `server/schemas.py` and
+  `frontend/src/api/types.ts` together.
 * Do not modify `.env`.
 * Do not run full eval, `ingestion.py`, `tests/chains/`, or any
   API-key-requiring command.
@@ -147,12 +151,23 @@ uv run ruff format --check .
 uv run mypy
 uv run pytest tests/node/ -q
 uv run pytest tests/graph/ -q
+uv run pytest tests/server/ -q
 uv run pytest tests/evals/ -q
 uv run python evals/run_eval.py --validate-only
 ```
 
 Run only the suites relevant to the change. Do not run full eval, ingestion,
 chain integration tests, or API-key commands unless the user separately approves.
+
+This command cannot run frontend tooling. If the change touches `frontend/`, do
+not attempt `npm` or `vitest`. Report the frontend side as unvalidated and give
+the user these commands to run from `frontend/`:
+
+```powershell
+npm run typecheck
+npx vitest run
+npm run build
+```
 
 ## Step 9. Review the final diff
 
