@@ -205,6 +205,12 @@ Do not inspect unrelated source files.
 
 Do not inspect unrelated tests.
 
+When the selected finding touches `server/`, `frontend/`, or their public contract,
+inspect the directly coupled files and tests needed to keep `server/schemas.py` aligned
+with `frontend/src/api/types.ts`, API routes aligned with
+`frontend/src/api/client.ts`, and static-serving behavior aligned with the Vite build.
+Do not expand beyond the selected finding.
+
 ## Step 5. Apply the selected fix
 
 Edit only the files necessary for the selected finding.
@@ -235,7 +241,9 @@ If applying a timeout, budget, or failure-handling fix:
 If applying a test-coverage fix:
 
 * add the smallest behavioral test that locks the reviewed risk
-* add the test only to the most appropriate existing test file (under `tests/node/`, `tests/graph/`, or `tests/evals/`)
+* add the test only to the most appropriate existing test file under `tests/node/`,
+  `tests/graph/`, `tests/evals/`, `tests/server/`, or a co-located frontend
+  `*.test.ts` / `*.test.tsx` file
 * if the fix would genuinely require a new test module, stop and ask the user; this Skill edits existing files and does not create new files
 * do not add API-key-requiring tests by default
 * do not modify `tests/chains/`
@@ -267,7 +275,16 @@ uv run python -m py_compile graph/engine.py graph/config.py
 uv run pytest tests/graph -q
 uv run pytest tests/node -q
 uv run pytest tests/evals -q
+uv run pytest tests/server -q
+npm --prefix frontend run typecheck
+npm --prefix frontend test -- --run
+npm --prefix frontend run build
 ```
+
+Use the server suite for API changes. Use frontend TypeScript type checking, Vitest in
+non-watch mode, and the Vite production build for frontend or cross-contract changes.
+Run only the commands relevant to the selected finding and permitted by the active user
+authorization and repository rules.
 
 Do not run full eval.
 

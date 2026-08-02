@@ -144,6 +144,12 @@ document is grounded in the real repository.
 * Prefer the spec template and `AGENTS.md` for structure and rules.
 * Use targeted text searches, file listings, and focused reads to verify real filenames,
   entry points, schemas, tests, and conventions before naming them in the document.
+* When the feature touches `server/`, `frontend/`, or their public contract, inspect
+  the directly coupled files and tests. Verify `server/schemas.py` against
+  `frontend/src/api/types.ts`, API routes against `frontend/src/api/client.ts`, and
+  FastAPI static serving against the Vite build. Include `tests/server/` and
+  co-located frontend tests in the proposed scope when relevant; do not inspect
+  generated `frontend/dist/` contents.
 * When the feature changes a documented architectural decision, identify the
   correct ADR to update, or the **next available ADR number**, from the current
   repository state under `docs/adr/` — do not rely on stale ADR ranges or numbers
@@ -283,8 +289,9 @@ Include these (each holds unless the feature explicitly approves an exception):
 
 ### Validation plan for the generated document
 
-Recommend the project's safe, keys-free validation set, with each suite run as its
-own command (do not combine test directories into one `pytest` invocation):
+Recommend the relevant commands from the project's safe, keys-free validation set,
+with each suite run as its own command (do not combine test directories into one
+`pytest` invocation):
 
 ```powershell
 uv run ruff check .
@@ -293,8 +300,17 @@ uv run mypy
 uv run pytest tests/node/ -q
 uv run pytest tests/graph/ -q
 uv run pytest tests/evals/ -q
+uv run pytest tests/server/ -q
 uv run python evals/run_eval.py --validate-only
+npm --prefix frontend run typecheck
+npm --prefix frontend test -- --run
+npm --prefix frontend run build
 ```
+
+Use `tests/server/` for API changes. For frontend or frontend/backend contract changes,
+include the relevant TypeScript type check, Vitest run, and Vite production build plus
+any affected Python suite. Do not require unrelated suites, and state that executing
+any validation still requires the active user's approval under repository rules.
 
 Mark full eval as requiring separate approval and only when the feature needs it:
 

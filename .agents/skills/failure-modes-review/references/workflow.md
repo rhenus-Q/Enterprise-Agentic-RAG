@@ -12,6 +12,7 @@ This reference contains the detailed project-specific procedure for the Skill. T
 - Runtime and configuration
 - Graph routing and loop behavior
 - Key node failure boundaries
+- API and browser failure boundaries
 - Eval and tests
 - Tooling and CI
 - Step 3. Review failure handling quality
@@ -20,6 +21,7 @@ This reference contains the detailed project-specific procedure for the Skill. T
 - Retry and loop safety
 - Cost and budget controls
 - External dependency failures
+- API and browser degraded modes
 - Web fallback and degraded mode
 - Privacy and security-related failure behavior
 - Production readiness
@@ -232,6 +234,22 @@ Inspect these areas as needed.
 * `graph/nodes/clear_transient_tool_error.py`
 * `graph/nodes/*notice*.py`
 
+### API and browser failure boundaries
+
+* `server/`, including engine-to-HTTP error mapping, startup preflight degradation,
+  request concurrency, cancellation, run history, runtime status, document metadata,
+  and optional static serving
+* `frontend/src/api/`, including request timeouts, cancellation, response parsing,
+  mocks, and frontend API types
+* Frontend pages and components that present loading, partial, caveat, empty, offline,
+  timeout, and error states
+* `frontend/package.json`, `frontend/vite.config.ts`, and `frontend/tsconfig.json`
+
+Inspect contract failure boundaries between `server/schemas.py` and
+`frontend/src/api/types.ts`, API routes and `frontend/src/api/client.ts`, the Vite
+development proxy, and FastAPI's optional `frontend/dist` mount. Do not inspect
+generated `frontend/dist/` contents.
+
 ### Eval and tests
 
 * `evals/run_eval.py`
@@ -240,6 +258,11 @@ Inspect these areas as needed.
 * `tests/node/`
 * `tests/graph/`
 * `tests/evals/`
+* `tests/server/`
+* `frontend/src/*.test.ts`
+* `frontend/src/*.test.tsx`
+* `frontend/src/**/*.test.ts`
+* `frontend/src/**/*.test.tsx`
 
 Inspect `tests/chains/` only if needed to assess failure-related test coverage.
 
@@ -323,6 +346,18 @@ Evaluate the following areas.
 * Are exception logs careful not to print sensitive messages?
 * Are dependency failures represented accurately in `stop_reason`?
 
+### API and browser degraded modes
+
+* Are engine and preflight failures mapped to stable, sanitized HTTP responses without
+  discarding successful answers?
+* Do single-flight conflicts and cooperative cancellation release server state safely?
+* Do run-history, status, and document-metadata failures degrade without corrupting
+  unrelated requests or exposing internal details?
+* Does a missing frontend build leave the API operational in an explicit API-only mode?
+* Does the frontend distinguish backend-unreachable, timeout, cancellation, malformed
+  response, empty-data, and server-error states honestly?
+* Do server schemas and frontend API types fail visibly rather than silently drifting?
+
 ### Web fallback and degraded mode
 
 * Are fallback policies clear?
@@ -348,6 +383,8 @@ Evaluate the following areas.
 * Are failure behaviors documented clearly enough?
 * Are operational counters sufficient for debugging?
 * Are CI checks enough to prevent regressions in failure handling?
+* Do CI and local workflows cover server failure tests plus frontend type checking,
+  Vitest, and the Vite production build?
 * Are generated artifacts and runtime outputs controlled?
 * Is the system robust enough to demonstrate to a senior engineer?
 * Are production-like risks acknowledged while being explicit that the project is not fully production-hardened?
@@ -364,6 +401,10 @@ Evaluate the following areas.
 * Are retriever failure paths tested?
 * Are grader failure paths tested?
 * Are trace-write failure paths tested?
+* Do `tests/server/` cover preflight, endpoint error mapping, concurrency, cancellation,
+  run-history, status, document, and static-mount failure behavior?
+* Do frontend tests cover client timeout/network failures and user-visible degraded
+  states without requiring a live backend?
 * Are there missing regression tests for recent failure-handling changes?
 
 ## Step 4. Look for risks and improvement opportunities
@@ -382,6 +423,10 @@ Flag:
 * privacy-mode bypasses
 * exception messages that may leak paths, prompts, raw documents, or secrets
 * observability that is too weak to debug failures
+* API failures that return misleading status codes or leak internal details
+* cancellation or request-lock paths that leave the server unavailable
+* frontend failures that collapse distinct backend states into misleading UI
+* server/frontend contract drift that produces unhandled or silent failures
 * tests that only cover happy paths
 * production-readiness gaps that could cause fragile behavior
 * documentation that overstates reliability
@@ -433,6 +478,9 @@ List the files and directories reviewed.
 Briefly describe the current system failure boundaries:
 
 * User input boundary
+* FastAPI request, response, concurrency, and cancellation boundary
+* Frontend API client and user-visible degraded-mode boundary
+* Server/frontend schema and static-serving boundary
 * Graph routing boundary
 * Local retrieval boundary
 * Document grading boundary
@@ -545,6 +593,10 @@ Assess:
 * retriever-failure tests
 * grader-failure tests
 * trace-write-failure tests
+* server preflight, endpoint, concurrency, cancellation, history, and static-mount
+  failure tests
+* frontend client and degraded-state tests
+* frontend/backend failure-contract coverage
 * missing tests
 * risky tests
 

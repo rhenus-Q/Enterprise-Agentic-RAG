@@ -12,6 +12,7 @@ This reference contains the detailed project-specific procedure for the Skill. T
 - Security-sensitive runtime files
 - Prompt and chain files
 - Node files and external boundaries
+- API and browser files
 - Eval and tests
 - Tooling and project hygiene
 - Step 3. Review security quality
@@ -19,6 +20,7 @@ This reference contains the detailed project-specific procedure for the Skill. T
 - Prompt injection defense
 - RAG document and web result safety
 - Privacy and web search controls
+- API and browser boundaries
 - Trace, logging, and artifact safety
 - `.env`, secret, and repository hygiene
 - Tool-call and command boundaries
@@ -229,6 +231,21 @@ Inspect these areas as needed.
 * `graph/nodes/clear_transient_tool_error.py`
 * `graph/nodes/*notice*.py`
 
+### API and browser files
+
+* `server/`, with emphasis on request validation, response construction, exception
+  mapping, runtime status, metadata-only run history, cancellation, and static serving
+* `frontend/src/api/`, including the client, mirrored types, and mock boundary
+* Frontend pages and components that render answers, citations, errors, runtime status,
+  document metadata, or run details
+* `frontend/package.json`, `frontend/package-lock.json`, `frontend/vite.config.ts`,
+  `frontend/tsconfig.json`, and `frontend/index.html` when relevant to dependency,
+  build, proxy, or browser security
+
+Inspect the contracts between `server/schemas.py` and `frontend/src/api/types.ts`, API
+routes and `frontend/src/api/client.ts`, and FastAPI's optional `frontend/dist` mount.
+Do not inspect generated `frontend/dist/` contents.
+
 ### Eval and tests
 
 * `evals/run_eval.py`
@@ -237,6 +254,11 @@ Inspect these areas as needed.
 * `tests/node/`
 * `tests/graph/`
 * `tests/evals/`
+* `tests/server/`
+* `frontend/src/*.test.ts`
+* `frontend/src/*.test.tsx`
+* `frontend/src/**/*.test.ts`
+* `frontend/src/**/*.test.tsx`
 
 Inspect `tests/chains/` only if needed to assess security test coverage.
 
@@ -308,6 +330,21 @@ Evaluate the following areas.
 * Are web search counts and limits enforced?
 * Are privacy risks documented clearly enough?
 
+### API and browser boundaries
+
+* Does FastAPI validate and bound user-controlled request data before calling the
+  engine?
+* Are exception responses and runtime-status diagnostics sanitized so configuration,
+  paths, documents, prompts, and secrets are not disclosed?
+* Are run history and citations limited to the intended metadata and snippets?
+* Are cancellation and single-flight state isolated safely between requests?
+* Does the frontend render untrusted answer, citation, error, and run data without
+  unsafe HTML or URL handling?
+* Are mock mode, the Vite proxy, and the production static mount explicit boundaries
+  that cannot silently weaken runtime security?
+* Do frontend API types stay aligned with server response schemas so security-relevant
+  fields are not ignored or misinterpreted?
+
 ### Trace, logging, and artifact safety
 
 * Are trace files metadata-only?
@@ -347,6 +384,11 @@ Evaluate the following areas.
 * Are trace-safety guarantees tested?
 * Are failure paths tested without real API keys?
 * Are tests separated so safe tests can run in CI?
+* Do `tests/server/` cover API validation, sanitized errors, metadata-only history,
+  cancellation, status responses, and static mounting without external calls?
+* Do frontend tests cover unsafe or malformed API data, error states, citation/link
+  rendering, and client timeout or cancellation behavior where relevant?
+* Does CI run server tests plus frontend type checking, Vitest, and the Vite build?
 * Are there missing regression tests around recent security changes?
 
 ## Step 4. Look for risks and improvement opportunities
@@ -358,6 +400,9 @@ Flag:
 * prompt injection weaknesses in generation, grading, routing, or query rewriting
 * untrusted web results entering generation without filtering
 * privacy mode bypasses
+* API validation, error, or status responses that disclose sensitive data
+* unsafe browser rendering or URL handling for API-provided content
+* frontend/backend contract drift that drops or misclassifies security-relevant fields
 * fallback policy confusion
 * logging or trace leakage
 * `.env` or generated artifact hygiene problems
@@ -414,6 +459,9 @@ Briefly describe the current security-relevant flow:
 
 * User input handling
 * Secret redaction
+* FastAPI request/response boundary
+* Frontend API client and browser-rendering boundary
+* Server/frontend schema contract and static-serving boundary
 * GraphState boundary
 * Local retrieval boundary
 * Web search boundary
@@ -510,6 +558,9 @@ Assess:
 * web-search-disabled tests
 * prompt-injection tests
 * trace-safety tests
+* server API validation, sanitization, history, cancellation, and static-mount tests
+* frontend unsafe-data, error-state, citation/link, timeout, and cancellation tests
+* frontend/backend security-contract coverage
 * missing tests
 * risky tests
 

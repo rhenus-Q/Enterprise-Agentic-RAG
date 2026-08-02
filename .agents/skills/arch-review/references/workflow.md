@@ -11,6 +11,7 @@ This reference contains the detailed project-specific procedure for the Skill. T
 - Step 2. Inspect architecture-relevant areas
 - Project entry points and configuration
 - Graph and runtime flow
+- Web application layer
 - Eval system
 - Tests
 - Codex Skill workflow
@@ -18,6 +19,7 @@ This reference contains the detailed project-specific procedure for the Skill. T
 - Graph design
 - Configuration and side effects
 - Separation of concerns
+- Web application boundaries
 - Eval architecture
 - Observability architecture
 - Testability
@@ -220,6 +222,24 @@ Inspect these areas as needed.
 * `graph/nodes/`
 * `graph/chains/`
 
+### Web application layer
+
+* `server/`, including the FastAPI application, schemas, runtime status, run history,
+  document metadata, and package boundary
+* `frontend/src/`, including API client/types, mocks, pages, components, and co-located
+  tests
+* `frontend/package.json`
+* `frontend/package-lock.json`
+* `frontend/vite.config.ts`
+* `frontend/tsconfig.json`
+* `frontend/index.html`
+
+Inspect the integration boundaries between `server.app` and `graph.engine`,
+`server.status` / `server.documents` and graph or ingestion configuration,
+`server/schemas.py` and `frontend/src/api/types.ts`, API routes and
+`frontend/src/api/client.ts`, the Vite `/api` proxy, and FastAPI's optional
+`frontend/dist` static mount. Do not inspect generated `frontend/dist/` contents.
+
 ### Eval system
 
 * `evals/run_eval.py`
@@ -232,6 +252,11 @@ Inspect these areas as needed.
 * `tests/node/`
 * `tests/graph/`
 * `tests/evals/`
+* `tests/server/`
+* `frontend/src/*.test.ts`
+* `frontend/src/*.test.tsx`
+* `frontend/src/**/*.test.ts`
+* `frontend/src/**/*.test.tsx`
 
 Do not inspect `tests/chains/` unless the user explicitly asks.
 
@@ -277,8 +302,19 @@ Evaluate the following areas.
 * Are node and chain responsibilities separated?
 * Are nodes responsible for GraphState updates while chains handle LLM/prompt logic?
 * Is persistence/history logic isolated enough?
+* Does `server/` remain a thin adapter over the canonical engine rather than
+  duplicating graph or business behavior?
+* Does `frontend/` consume the API contract without duplicating backend policy?
 * Are docs and tests aligned with behavior?
 * Is business behavior separated from observability and reporting?
+
+### Web application boundaries
+
+* Do server request/response schemas and frontend API types remain aligned?
+* Are API error, status, cancellation, citation, document, and run-history contracts
+  explicit and stable?
+* Are development proxying and production static serving clearly separated?
+* Are server and frontend imports/builds side-effect-safe for their respective tools?
 
 ### Eval architecture
 
@@ -305,7 +341,7 @@ Evaluate the following areas.
 ### Testability
 
 * Are important behaviors covered by mocked tests?
-* Are graph/node/eval tests separated correctly?
+* Are graph/node/eval/server tests and co-located frontend tests separated correctly?
 * Are API-key-requiring tests avoided by default?
 * Are there brittle tests or under-tested seams?
 * Are recent features covered by unit tests?
@@ -321,6 +357,8 @@ Evaluate the following areas.
 * Are logs, traces, eval history, and generated reports safe for local development and CI?
 * Are `.env`, secrets, generated artifacts, vector stores, and runtime outputs protected from accidental commit?
 * Are CI checks sufficient for safe development without requiring paid API calls?
+* Do CI and local workflows cover the server suite plus frontend type checking,
+  Vitest, and the Vite production build?
 * Is the project easy to run, test, debug, and explain as a well-engineered system?
 * Are production-like risks documented clearly enough without overengineering the system?
 * Is cleanup needed before adding more features?
@@ -410,6 +448,9 @@ Briefly describe the current system architecture:
 * Graph flow
 * Nodes and chains
 * Config/runtime setup
+* FastAPI adapter and API contracts
+* React frontend and API client
+* Frontend/backend contract and static-serving boundaries
 * Eval harness
 * Test structure
 * Observability structure
@@ -495,6 +536,10 @@ Assess:
 * graph tests
 * node tests
 * eval tests
+* server/API tests
+* co-located frontend Vitest tests
+* frontend type checking and Vite build coverage
+* frontend/backend contract coverage
 * missing tests
 * risky tests
 

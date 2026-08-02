@@ -10,6 +10,7 @@ This reference contains the detailed project-specific procedure for the Skill. T
 - Step 1. Read minimal project context
 - Step 2. Inspect test-coverage-relevant areas
 - Runtime and architecture areas
+- Web application areas
 - Eval system
 - Test directories
 - Tooling and CI
@@ -19,6 +20,8 @@ This reference contains the detailed project-specific procedure for the Skill. T
 - Graph routing coverage
 - Chain seam coverage
 - Engine and state coverage
+- Server/API coverage
+- Frontend and contract coverage
 - Config and budget coverage
 - Security and privacy coverage
 - Eval harness coverage
@@ -242,6 +245,28 @@ Prioritize files that define or affect:
 
 Do not fail or waste time if a likely file is absent. Use the discovered `graph/` file list as the source of truth.
 
+### Web application areas
+
+First list relevant existing files under:
+
+* `server/*.py`
+* `server/**/*.py`
+* `frontend/src/*.ts`
+* `frontend/src/*.tsx`
+* `frontend/src/**/*.ts`
+* `frontend/src/**/*.tsx`
+* `frontend/package.json`
+* `frontend/vite.config.ts`
+* `frontend/tsconfig.json`
+* `frontend/index.html`
+
+Then inspect only the relevant existing files. Prioritize FastAPI request/response
+schemas, endpoint adapters, runtime status, run history, cancellation, static serving,
+the frontend API client and types, mocks, pages/components, and the contracts between
+`server/schemas.py` and `frontend/src/api/types.ts` and between API routes and
+`frontend/src/api/client.ts`. Inspect `frontend/package-lock.json` only when dependency
+or CI reproducibility is relevant. Do not inspect generated `frontend/dist/` contents.
+
 ### Eval system
 
 First list relevant existing eval files under:
@@ -277,6 +302,11 @@ First list relevant existing test files under:
 * `tests/node/**/*.py`
 * `tests/graph/**/*.py`
 * `tests/evals/**/*.py`
+* `tests/server/**/*.py`
+* `frontend/src/*.test.ts`
+* `frontend/src/*.test.tsx`
+* `frontend/src/**/*.test.ts`
+* `frontend/src/**/*.test.tsx`
 
 Then inspect only the test files relevant to the requested focus and to coverage-gap analysis.
 
@@ -294,6 +324,9 @@ Prioritize tests that cover:
 * trace / observability behavior
 * failure paths
 * recent security or redaction changes
+* FastAPI endpoint, schema, status, cancellation, history, and static-mount behavior
+* frontend API client, page/component behavior, and user-visible error states
+* frontend/backend schema and route contract compatibility
 
 Inspect `tests/chains/` only if the user explicitly asks.
 
@@ -311,6 +344,10 @@ First list relevant existing tooling files under:
 * `.agents/skills/*`
 * `*.toml`
 * `*.md`
+* `frontend/package.json`
+* `frontend/package-lock.json`
+* `frontend/vite.config.ts`
+* `frontend/tsconfig.json`
 * `.gitignore`
 
 Then inspect only the relevant existing files.
@@ -393,6 +430,24 @@ Evaluate the following areas.
 * Is question hashing tested?
 * Is raw question exclusion from runtime state tested?
 
+### Server/API coverage
+
+* Are request validation, response construction, citations, and stop-reason/status
+  mapping covered without calling the real engine or external services?
+* Are startup preflight, sanitized errors, runtime/index status, document metadata,
+  bounded metadata-only run history, concurrency, cancellation, and static mounting
+  covered?
+* Are server imports and endpoint tests keys-free and network-free?
+
+### Frontend and contract coverage
+
+* Are the API client, mock client, pages, and critical components covered by Vitest?
+* Are loading, success, caveat, empty, offline, timeout, cancellation, malformed-data,
+  and server-error states covered where relevant?
+* Are server schemas/routes and frontend types/client calls checked for contract drift?
+* Does CI run TypeScript type checking, Vitest in non-watch mode, and the Vite
+  production build?
+
 ### Config and budget coverage
 
 * Are default config values tested?
@@ -461,6 +516,9 @@ Flag:
 * fragile or over-specific tests
 * tests that require API keys in safe/default workflows
 * mismatches between docs, CI, and actual tests
+* server endpoints or failure mappings with no focused tests
+* frontend critical states or API-client paths with no Vitest coverage
+* frontend/backend contracts enforced on only one side
 * generated artifacts that tests may accidentally rely on
 * missing regression tests for recent changes
 
@@ -517,6 +575,9 @@ Briefly describe the current test architecture:
 * Eval tests
 * Chain tests if relevant
 * Engine/config tests
+* Server/API tests
+* Frontend Vitest tests
+* Frontend/backend contract coverage
 * CI test commands
 * Safe versus API-key-requiring workflows
 
@@ -532,7 +593,7 @@ For each gap include:
 * Why it matters
 * Risk level: Low / Medium / High
 * Recommended test
-* Suggested test layer: node / graph / eval / engine / config / docs
+* Suggested test layer: node / graph / eval / engine / config / server / frontend / contract / docs
 * Whether it should be done now or later
 
 ## 6. Node test coverage review
@@ -576,6 +637,16 @@ Assess:
 * trace JSON safety
 * trace write failure behavior
 * config defaults and environment overrides
+
+### Server/API test coverage
+
+Assess endpoint, schema, status, history, cancellation, error-mapping, document, and
+static-mount coverage under `tests/server/`.
+
+### Frontend and contract test coverage
+
+Assess co-located Vitest coverage, TypeScript contract checking, API client and mock
+behavior, critical UI states, server/frontend schema alignment, and Vite build coverage.
 
 ## 9. Security and privacy test coverage review
 
@@ -626,6 +697,8 @@ Assess:
 * mocked test defaults
 * API-key-requiring test isolation
 * lint/format/typecheck coverage
+* server test-suite coverage
+* frontend TypeScript, Vitest, and Vite-build coverage
 * CI workflow correctness
 * docs/CI/test command alignment
 * generated artifact hygiene

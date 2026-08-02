@@ -1,6 +1,6 @@
 ---
 name: test-coverage-review
-description: Review test coverage across nodes, routing, chains, engine, configuration, budgets, security, privacy, evals, and CI, then write a timestamped report. Use for broad or focused coverage-gap audits; do not add tests or modify code.
+description: Review test coverage across nodes, routing, chains, engine, server APIs, frontend behavior, frontend/backend contracts, configuration, budgets, security, privacy, evals, and CI, then write a timestamped report. Use for broad or focused coverage-gap audits; do not add tests or modify code.
 ---
 
 # Test Coverage Review

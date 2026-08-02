@@ -171,6 +171,14 @@ Read the files listed in the plan or spec under:
 
 Prefer the plan file as the source of truth.
 
+When approved work touches `server/`, `frontend/`, or their public contract, inspect
+the directly coupled boundary files and tests needed to implement safely. In
+particular, compare `server/schemas.py` with `frontend/src/api/types.ts`, API routes
+with `frontend/src/api/client.ts`, and FastAPI static serving with the Vite build.
+Inspect `tests/server/` and co-located frontend tests when relevant; do not inspect
+generated `frontend/dist/` contents. If a required counterpart edit is outside the
+approved plan or spec, stop and request confirmation rather than expanding scope.
+
 Do not do a broad architecture review unless the plan or spec asks for it.
 
 Do not read unrelated files unless needed to implement the requested change safely.
@@ -245,8 +253,18 @@ uv run mypy
 uv run pytest tests/node/ -q
 uv run pytest tests/graph/ -q
 uv run pytest tests/evals/ -q
+uv run pytest tests/server/ -q
 uv run python evals/run_eval.py --validate-only
+npm --prefix frontend run typecheck
+npm --prefix frontend test -- --run
+npm --prefix frontend run build
 ```
+
+For server changes, select the relevant `tests/server/` checks. For frontend or
+frontend/backend contract changes, select the relevant TypeScript type check, Vitest
+run, and Vite production build in addition to any affected Python suite. The plan or
+spec and active user authorization remain required; this list does not grant permission
+to run validation.
 
 Do not run full eval unless the plan or spec explicitly says it is needed and the user has separately approved it.
 

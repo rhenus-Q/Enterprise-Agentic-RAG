@@ -67,6 +67,13 @@ Inspect only what is relevant to the request: the current implementation, relate
 tests, configuration, documentation, ADRs (`docs/adr/`), and existing
 abstractions. Prefer targeted text searches, file listings, and focused reads over broad sweeps.
 
+When the request touches `server/`, `frontend/`, or their public contract, inspect the
+directly coupled boundary files and tests. In particular, keep `server/schemas.py`
+aligned with `frontend/src/api/types.ts`, API routes aligned with
+`frontend/src/api/client.ts`, and FastAPI static serving aligned with the Vite build.
+Inspect `tests/server/` and co-located frontend tests when relevant; do not inspect
+generated `frontend/dist/` contents.
+
 Determine whether the current implementation **already solves the problem**. If it
 does, that is strong evidence for a no-change outcome.
 
@@ -165,11 +172,18 @@ uv run mypy
 uv run pytest tests/node/ -q
 uv run pytest tests/graph/ -q
 uv run pytest tests/evals/ -q
+uv run pytest tests/server/ -q
 uv run python evals/run_eval.py --validate-only
+npm --prefix frontend run typecheck
+npm --prefix frontend test -- --run
+npm --prefix frontend run build
 ```
 
 Run only the suites relevant to the change. Do not run full eval, ingestion,
 chain integration tests, or API-key commands unless the user separately approves.
+For frontend or frontend/backend contract changes, select the relevant TypeScript
+type check, Vitest run, and Vite production build in addition to the corresponding
+Python server suite. These examples do not override active approval requirements.
 
 ## Step 9. Review the final diff
 

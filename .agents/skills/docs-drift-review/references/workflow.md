@@ -122,10 +122,20 @@ Embedded-prose source/config inventory:
 
     git ls-files \
       "graph/**/*.py" \
+      "server/*.py" \
+      "server/**/*.py" \
       "main.py" \
       "ingestion.py" \
       "evals/**/*.py" \
       "tests/**/*.py" \
+      "frontend/src/*.ts" \
+      "frontend/src/*.tsx" \
+      "frontend/src/**/*.ts" \
+      "frontend/src/**/*.tsx" \
+      "frontend/package.json" \
+      "frontend/vite.config.ts" \
+      "frontend/tsconfig.json" \
+      "frontend/index.html" \
       "pyproject.toml" \
       ".github/workflows/*.yml" \
       ".github/workflows/*.yaml" \
@@ -134,13 +144,14 @@ Embedded-prose source/config inventory:
 
 The source/config files in the second inventory are **not** audited for all code
 correctness — inspect only their embedded documentation prose (docstrings, long
-explanatory comments, user-facing constants / messages, CLI help text, prompt /
-template prose, and long descriptive string blocks) for drift.
+explanatory comments, TypeScript/TSX prose, user-facing constants / messages, CLI
+help text, prompt / template prose, HTML metadata, and long descriptive string blocks)
+for drift.
 
 **Always read in full (do not rely only on search matches) the package-level
 `__init__.py` of every audited source package** (for this repository:
-`graph/__init__.py`, `graph/nodes/__init__.py`, and
-`graph/chains/__init__.py`). Their module/package docstrings are prime
+`graph/__init__.py`, `graph/nodes/__init__.py`, `graph/chains/__init__.py`, and
+`server/__init__.py`). Their module/package docstrings are prime
 prose-drift surfaces — they often summarize the
 package's capabilities, version status, and architecture, and drift silently when the
 code around them evolves.
@@ -184,9 +195,13 @@ memory or naming alone. Inspect the relevant current sources of truth as
 applicable:
 
 - top-level tree, tracked files, source package layout;
-- `graph/`, `evals/`, `tests/`, and the top-level entry points;
-- `.github/workflows/`, `pyproject.toml`, `.env.example`;
-- entry points, the graph router and engine, state schema, nodes, and chains;
+- `graph/`, `server/`, `frontend/`, `evals/`, `tests/`, and the top-level entry
+  points;
+- `.github/workflows/`, `pyproject.toml`, `.env.example`, `frontend/package.json`,
+  `frontend/package-lock.json`, `frontend/vite.config.ts`, and
+  `frontend/tsconfig.json`;
+- entry points, the graph router and engine, state schema, nodes, chains, FastAPI
+  routes/schemas, the frontend API client/types, and static-serving/proxy boundaries;
 - feature flags, model factory / configuration code, test markers, CI
   exclusions, active scripts;
 - `README` files, the ADR index, ADR status and supersession metadata.
@@ -213,7 +228,7 @@ workflow files are the exception: audit them as Category A active documentation.
 | **B. Historical decision records** | `docs/adr/**` | Preserve what was true when decided. Flag only: broken link; history presented as current; stale current-status/implementation-note section; wrong supersession reference; missing/incorrect supersession metadata; an objective typo or impossible path already wrong at the time. |
 | **C. Release notes / version snapshots** | Dated validation reports and other explicitly versioned snapshots | Old versions/paths/totals may be correct history. Flag only: claims to describe the *current* version; broken current navigation link; a command presented as currently runnable that no longer works; contradictory version relationship; stale current-status section; a pointer to an active doc via an obsolete path. |
 | **D. Generated results / eval reports** | tracked eval or benchmark output Markdown | Treat measured values as point-in-time unless they claim to be current. Check links, headings, scope descriptions, runner/dataset paths, and obvious contradictions. Do not rewrite measured values by inference. |
-| **E. Embedded documentation prose** | Python module/class/function docstrings, long explanatory comments, user-facing constants, CLI help text, prompt/template strings | Treat as current documentation when it describes current behavior, capabilities, architecture, commands, config, tests, model/LLM usage, feature flags, paths, or user-facing output. Do not modernize short local implementation comments or clearly historical rationale unless they materially mislead maintainers. |
+| **E. Embedded documentation prose** | Python/TypeScript/TSX module or API prose, docstrings, long explanatory comments, user-facing constants/messages, CLI help text, prompt/template strings, and HTML metadata | Treat as current documentation when it describes current behavior, capabilities, architecture, commands, config, tests, model/LLM usage, feature flags, paths, API contracts, or user-facing output. Do not modernize short local implementation comments or clearly historical rationale unless they materially mislead maintainers. |
 
 For categories B-D, do not modernize historical bodies (Decision/Context/Rationale/
 Consequences, dated benchmarks, archived facts, or clearly historical rationale
@@ -237,7 +252,8 @@ distinguishing active claims from valid historical records.
    external URLs; report an external link only when its visible label or local
    context is internally contradictory.
 3. **Commands and workflows** — documented `pytest` / eval-runner / script /
-   `ruff` / `mypy` / `uv` / CI / entry-point / setup commands that reference
+   `ruff` / `mypy` / `uv` / `npm` / TypeScript / Vitest / Vite / CI / entry-point /
+   setup commands that reference
    missing paths, invoke renamed files, unintentionally include gated real-model
    tests, omit required exclusions, contradict current CI, use obsolete flags,
    claim to be keys-free while reaching a provider, describe a gated full eval as
@@ -246,6 +262,7 @@ distinguishing active claims from valid historical records.
    execute the commands.
 4. **Architecture and module boundaries** — active claims about modules, graph
    structure, engine and router behavior, nodes, chains, eval/test ownership,
+   server/API and frontend ownership, frontend/backend contracts, static serving,
    dependencies, entry points, import direction, and fallback behavior. Verify
    against implementation; do not infer drift from naming.
 5. **Capabilities and features** — current claims about local retrieval, web-search
@@ -260,7 +277,8 @@ distinguishing active claims from valid historical records.
    not print secrets.
 7. **Tests, evals, CI** — test/eval directory locations, mocked vs. real-model
    suites, gated markers, CI scope, runner/dataset/report locations, module
-   ownership, the `evals/` vs. `tests/evals/` distinction, and whether
+   ownership, `tests/server/`, co-located frontend tests, TypeScript type checking,
+   Vitest, Vite builds, the `evals/` vs. `tests/evals/` distinction, and whether
    real-model suites are excluded by directory vs. only by missing keys. Verify
    against the current `tests/` and `evals/` trees, CI workflows, pytest markers,
    and `tests/conftest.py`.
@@ -286,7 +304,8 @@ distinguishing active claims from valid historical records.
     "complete/fully supported" contradicted by implementation, or "keys-free" for
     a command that can reach a provider.
 12. **Embedded documentation prose drift** — module docstrings, class/function
-    docstrings, long comments, user-facing constants, CLI help text, and
+    docstrings, TypeScript/TSX explanatory prose, long comments, user-facing
+    constants/messages, HTML metadata, CLI help text, and
     prompt/template prose that describe current behavior, capabilities, paths,
     tests, feature flags, LLM usage, model names, version status, or user-facing
     output. Verify against current implementation. Do not flag short local comments
@@ -496,7 +515,8 @@ excerpts unless the user asks. Use this structure:
 3. Classify reviewed documents and prose (active / historical ADR / release /
    generated / embedded documentation prose).
 4. Inspect current repository structure, config, CI, tests, evals, entry points,
-   and relevant implementation.
+   relevant implementation, and the server/frontend schema, route, client, proxy,
+   and static-serving boundaries.
 5. Search Markdown and embedded documentation prose for high-risk claims: paths,
    shell commands, capability counts, model names, feature flags, env variables,
    version labels, test totals, and words like "current", "latest", "complete",
