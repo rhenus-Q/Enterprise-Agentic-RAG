@@ -107,6 +107,26 @@ describe("CitationList", () => {
     expect(screen.getByText(/current remote access zero trust guidance/i)).not.toBeNull();
   });
 
+  it("renders a citation with an unsafe URL as text, never as a clickable link", () => {
+    const hostile: Citation = {
+      kind: "web",
+      title: "Zero Trust Architecture",
+      source: null,
+      url: "javascript:alert(1)",
+      document_category: null,
+      query: null,
+      snippet: "Remote access requires an enrolled company device.",
+    };
+
+    const { container } = render(<CitationList citations={[hostile]} />);
+
+    expect(screen.getByText("Zero Trust Architecture")).not.toBeNull();
+    expect(screen.getByText(hostile.snippet!)).not.toBeNull();
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
+    expect(container.querySelector(".citation-open-link")).toBeNull();
+    expect(container.innerHTML).not.toContain("javascript:");
+  });
+
   it("keeps long source metadata in safe wrapping and truncation elements", () => {
     const fullPath =
       "data/acmecorp_internal_docs/policies/finance/very_long_expense_reimbursement_and_approval_policy_filename.md";

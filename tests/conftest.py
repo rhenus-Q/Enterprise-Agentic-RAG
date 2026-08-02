@@ -32,12 +32,29 @@ PROVIDER_ENV_VARS = (
     "OLLAMA_BASE_URL",
 )
 
+# Environment variables tuning per-run behavior: the web-search default, the
+# fallback policy, the three budgets, and the per-request LLM timeout.
+RUNTIME_POLICY_ENV_VARS = (
+    "WEB_SEARCH_ENABLED",
+    "WEB_FALLBACK_POLICY",
+    "MAX_LLM_CALLS_PER_RUN",
+    "MAX_WEB_SEARCHES_PER_RUN",
+    "MAX_WEB_RESULTS_TO_GRADE",
+    "LLM_REQUEST_TIMEOUT_SECONDS",
+)
+
+ISOLATED_ENV_VARS = PROVIDER_ENV_VARS + RUNTIME_POLICY_ENV_VARS
+
 
 @pytest.fixture(autouse=True)
 def isolate_provider_env(monkeypatch):
     """
-    Run every test as if no mode or provider configuration existed, so a
-    developer's local .env cannot change what the suite asserts.
+    Run every test as if no mode, provider, or runtime-policy configuration
+    existed, so a developer's local .env cannot change what the suite asserts.
+
+    Both groups above are cleared: PROVIDER_ENV_VARS (deployment mode and
+    LLM/embedding provider) and RUNTIME_POLICY_ENV_VARS (web-search default,
+    fallback policy, the three per-run budgets, and the LLM request timeout).
 
     load_dotenv() above deliberately loads .env before collection, which means
     an operator who sets PRIVACY_MODE=true or LLM_PROVIDER=ollama to actually
@@ -53,15 +70,25 @@ def isolate_provider_env(monkeypatch):
     AnswerOptions(web_search_enabled=True) cannot override, so it would break
     the same tests even where an explicit per-run option is passed.
 
-    Clearing the variables here makes mode selection opt-in: a test that cares
+    The runtime-policy variables carry the same class of risk, one register
+    quieter: a developer running with WEB_FALLBACK_POLICY=aggressive or
+    MAX_LLM_CALLS_PER_RUN=1 in .env would see budget and policy tests fail on
+    their machine while passing in CI, or the reverse. Per-test delenv() calls
+    already guard many of those tests; clearing here makes the guarantee
+    structural instead of a convention, and leaves those calls harmlessly
+    redundant.
+
+    Clearing the variables here makes every setting opt-in: a test that cares
     sets it explicitly with monkeypatch (see tests/graph/test_mode_flags.py and
     tests/graph/test_local_provider.py, which set or delete them in every test
-    and are therefore unaffected either way). It also pins tests/chains/ to the
-    real gpt-5-mini those integration tests are written against, rather than
-    silently redirecting them to a local endpoint.
+    and are therefore unaffected either way). Because this fixture runs before
+    the test body, an explicit monkeypatch.setenv() inside a test still wins.
+    It also pins tests/chains/ to the real gpt-5-mini those integration tests
+    are written against, rather than silently redirecting them to a local
+    endpoint.
 
     monkeypatch restores the original environment after each test.
     """
 
-    for name in PROVIDER_ENV_VARS:
+    for name in ISOLATED_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
