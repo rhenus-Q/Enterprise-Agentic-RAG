@@ -116,10 +116,16 @@ def run_startup_preflight():
     swallowed by the eval harness's per-row handler and reported as a generic
     failed row.
 
+    Index presence is checked in BOTH modes. A missing index is not a loud
+    failure at runtime: Chroma happily opens an empty collection, every
+    retrieve returns [], and the graph answers from an empty corpus — the
+    honest-sounding insufficient-context answer, with nothing anywhere saying
+    the knowledge base was never built.
+
     The remaining checks — endpoint reachable, both models installed, index
-    present and matching — apply only in local mode, so an OpenAI deployment
-    behaves exactly as it did before, including one whose index predates
-    fingerprints.
+    fingerprint matching — apply only in local mode, so an OpenAI deployment
+    keeps working with an index that predates fingerprints and needs no
+    re-ingestion.
 
     Returns a banner string in local mode and None in OpenAI mode. Raises
     PreflightError on the first failed check, with a message naming what to fix.
@@ -133,6 +139,16 @@ def run_startup_preflight():
         raise PreflightError(str(exc)) from exc
 
     if provider != PROVIDER_OLLAMA:
+        openai_index_directory, _openai_collection_name = active_index_config()
+
+        if not index_exists(openai_index_directory):
+            raise PreflightError(
+                f"No knowledge-base index found at {openai_index_directory}. "
+                "Build it with `uv run python ingestion.py`."
+            )
+
+        # No fingerprint check here on purpose: in OpenAI mode a missing
+        # fingerprint means a legacy index, which stays valid.
         return None
 
     base_url = ollama_base_url()

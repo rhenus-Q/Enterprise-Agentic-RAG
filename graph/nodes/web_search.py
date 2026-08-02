@@ -88,7 +88,10 @@ def web_search(state: GraphState):
       cause unbounded retries.
     - A grader failure on an individual result drops that result ungraded
       (unvetted web content never reaches generation) and records
-      stop_reason=tool_error; remaining results are still graded.
+      stop_reason=tool_error, but only when no reason is recorded yet — a
+      transient grading failure must never overwrite a durable one (e.g. the
+      retrieval_error that sent the run here); remaining results are still
+      graded.
     """
 
     print("---WEB SEARCH---")
@@ -228,8 +231,13 @@ def web_search(state: GraphState):
         "web_result_grading_count": web_result_grading_count,
         "llm_call_count": llm_call_count,
     }
-    # Only write stop_reason on failure: a normal pass must not clobber a
-    # reason recorded by an earlier node.
-    if grading_error:
+    # Only write stop_reason on failure, and only when none is recorded yet:
+    # a normal pass must not clobber a reason recorded by an earlier node, and
+    # neither must a transient grading failure. The reachable case is exactly
+    # the one this node serves: retrieve failed (retrieval_error), the run fell
+    # back to the web, and one result's grading call then hiccuped. tool_error
+    # is the weaker reason — it is cleared again on a fully successful answer —
+    # so writing it here would hide that the local corpus was unavailable.
+    if grading_error and not state.get("stop_reason"):
         result["stop_reason"] = STOP_REASON_TOOL_ERROR
     return result

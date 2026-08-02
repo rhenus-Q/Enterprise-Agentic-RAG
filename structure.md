@@ -330,7 +330,8 @@ default to off and reject unparseable values at startup.
   control. Only `FULLY_LOCAL_MODE=true` + `LLM_PROVIDER=openai` raises.
 * **Startup validation.** `main.py::run_startup_preflight()` (renamed from
   `run_local_mode_preflight()`) validates both flags and the provider in every
-  mode, before the local-only checks, so an invalid value becomes a
+  mode, then checks that the active provider's index exists — also in every
+  mode — before the local-only checks, so an invalid value becomes a
   `PreflightError` rather than a raw traceback in the CLI or a swallowed
   per-row failure in the eval harness. `--validate-only` still bypasses it.
 
@@ -367,7 +368,9 @@ rather than replacing it.
   mismatch in local mode).
 * **Startup preflight, outside the graph.** `main.py` checks the provider
   value, endpoint reachability, both installed models (reported individually),
-  and index presence + fingerprint match, then prints a mode banner.
+  and index presence + fingerprint match, then prints a mode banner. Of these,
+  only the endpoint, installed-model, and fingerprint checks are
+  local-mode-only — index presence is checked in OpenAI mode too.
   `evals/run_eval.py` calls the same helpers *after* its `--validate-only`
   early return, so dataset validation stays keys-free and never imports the
   graph. Preflight lives outside the graph because ADR 006 requires in-graph

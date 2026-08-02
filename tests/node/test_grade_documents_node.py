@@ -7,9 +7,14 @@ Relevance is driven by a content -> bool mapping for deterministic results.
 
 import importlib
 
+import pytest
 from langchain_core.documents import Document
 
-from graph.consts import STOP_REASON_TOOL_ERROR
+from graph.consts import (
+    STOP_REASON_RETRIEVAL_ERROR,
+    STOP_REASON_TOOL_ERROR,
+    STOP_REASON_WEB_SEARCH_ERROR,
+)
 from graph.nodes.grade_documents import grade_documents
 
 # graph/nodes/__init__.py re-exports the `grade_documents` function under the same
@@ -136,6 +141,41 @@ def test_success_does_not_write_stop_reason(monkeypatch):
     result = grade_documents({"question": "Q", "documents": docs})
 
     assert "stop_reason" not in result
+
+
+@pytest.mark.parametrize(
+    "durable_reason",
+    [STOP_REASON_RETRIEVAL_ERROR, STOP_REASON_WEB_SEARCH_ERROR],
+)
+def test_grader_failure_never_overwrites_a_durable_stop_reason(monkeypatch, durable_reason):
+    # tool_error is the weakest reason in the vocabulary -- it is even cleared
+    # again on a fully successful answer -- so writing it over a whole-source
+    # degradation would replace "the local corpus was unavailable" with a
+    # lesser caveat, or with none at all.
+    _patch_grader_with_failures(monkeypatch, {"boom": "raise"})
+
+    result = grade_documents(
+        {
+            "question": "Q",
+            "documents": [Document(page_content="boom")],
+            "stop_reason": durable_reason,
+        }
+    )
+
+    assert "stop_reason" not in result  # the durable reason in state survives
+    assert result["web_search"] is True  # the fallback request is still made
+
+
+def test_grader_failure_records_tool_error_when_no_reason_is_recorded_yet(monkeypatch):
+    # The guard is "is anything recorded", not "is it tool_error": a clean run
+    # must still surface the transient failure.
+    _patch_grader_with_failures(monkeypatch, {"boom": "raise"})
+
+    result = grade_documents(
+        {"question": "Q", "documents": [Document(page_content="boom")], "stop_reason": ""}
+    )
+
+    assert result["stop_reason"] == STOP_REASON_TOOL_ERROR
 
 
 def test_preserves_incoming_web_search_fallback_request(monkeypatch):

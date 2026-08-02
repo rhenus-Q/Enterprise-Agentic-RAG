@@ -9,9 +9,14 @@ gate applied to external web results before they are appended.
 
 import importlib
 
+import pytest
 from langchain_core.documents import Document
 
-from graph.consts import STOP_REASON_TOOL_ERROR, STOP_REASON_WEB_SEARCH_ERROR
+from graph.consts import (
+    STOP_REASON_RETRIEVAL_ERROR,
+    STOP_REASON_TOOL_ERROR,
+    STOP_REASON_WEB_SEARCH_ERROR,
+)
 from graph.nodes.web_search import web_search
 
 # graph/nodes/__init__.py re-exports the `web_search` function under the same name
@@ -509,3 +514,28 @@ def test_web_search_success_does_not_write_stop_reason(monkeypatch):
     result = web_search({"question": "Q", "documents": []})
 
     assert "stop_reason" not in result
+
+
+@pytest.mark.parametrize(
+    "durable_reason",
+    [STOP_REASON_RETRIEVAL_ERROR, STOP_REASON_WEB_SEARCH_ERROR],
+)
+def test_grader_failure_never_overwrites_a_durable_stop_reason(monkeypatch, durable_reason):
+    # The reachable case: retrieval failed, the run fell back to the web, and
+    # one result's grading call then hiccuped. The user must still be told the
+    # local corpus was unavailable -- not handed the weaker tool_error caveat,
+    # which the successful path would clear away entirely.
+    _patch_tool(monkeypatch, [{"content": "boom"}, {"content": "good"}])
+
+    class FlakyGrader:
+        def invoke(self, payload):
+            if payload["document"] == "boom":
+                raise RuntimeError("grader is down")
+            return _FakeGrade(True)
+
+    monkeypatch.setattr(web_search_module, "get_retrieval_grader", lambda: FlakyGrader())
+
+    result = web_search({"question": "Q", "documents": [], "stop_reason": durable_reason})
+
+    assert "stop_reason" not in result  # the durable reason in state survives
+    assert result["documents"][0].page_content == "good"  # vetted content still used

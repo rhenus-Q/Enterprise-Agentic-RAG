@@ -549,7 +549,12 @@ def test_preflight_requests_ingestion_when_the_local_index_is_missing(monkeypatc
     with pytest.raises(main_module.PreflightError) as excinfo:
         main_module.run_startup_preflight()
 
-    assert "ingestion.py" in str(excinfo.value)
+    message = str(excinfo.value)
+    assert "ingestion.py" in message
+    # Local mode keeps its own message: rebuilding must happen with the local
+    # provider selected, or it would build the OpenAI index instead.
+    assert ingestion_module.LOCAL_CHROMA_PATH in message
+    assert "LLM_PROVIDER=ollama" in message
 
 
 def test_preflight_treats_a_missing_fingerprint_as_a_mismatch_in_local_mode(monkeypatch):
@@ -626,15 +631,80 @@ def test_preflight_accepts_a_bare_model_name_against_an_installed_latest_tag(mon
     assert main_module.run_startup_preflight() is not None
 
 
-def test_openai_mode_preflight_is_a_no_op_even_with_a_legacy_index(monkeypatch):
+def test_openai_mode_preflight_accepts_a_legacy_index_without_probing_anything_else(monkeypatch):
     # 7.7 case 3: an existing fingerprint-less OpenAI index must keep working
-    # with no re-ingestion, and no endpoint must be probed.
+    # with no re-ingestion, no endpoint probe, and no fingerprint read. Index
+    # PRESENCE is the one check that applies here too (below).
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
     monkeypatch.setattr(main_module, "installed_ollama_models", _tripwire("endpoint probe"))
-    monkeypatch.setattr(main_module, "index_exists", _tripwire("index_exists"))
+    monkeypatch.setattr(main_module, "index_exists", lambda directory: True)
     monkeypatch.setattr(main_module, "read_index_fingerprint", _tripwire("read_index_fingerprint"))
 
     assert main_module.run_startup_preflight() is None
+
+
+def test_openai_mode_preflight_requests_ingestion_when_the_index_is_missing(monkeypatch):
+    # A missing index is silent at runtime: Chroma opens an empty collection,
+    # every retrieve returns [], and the graph answers from an empty corpus
+    # with no error anywhere. Preflight is the only place that can say so.
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.setattr(main_module, "installed_ollama_models", _tripwire("endpoint probe"))
+    monkeypatch.setattr(main_module, "index_exists", lambda directory: False)
+    monkeypatch.setattr(main_module, "read_index_fingerprint", _tripwire("read_index_fingerprint"))
+
+    with pytest.raises(main_module.PreflightError) as excinfo:
+        main_module.run_startup_preflight()
+
+    message = str(excinfo.value)
+    assert ingestion_module.CHROMA_PATH in message  # names the OpenAI index
+    assert "uv run python ingestion.py" in message  # the existing guidance
+    assert "LLM_PROVIDER=ollama" not in message  # not the local-mode advice
+
+
+def test_openai_mode_preflight_checks_the_openai_index_location(monkeypatch):
+    # The check must inspect the ACTIVE provider's directory: pointing it at
+    # the local index would pass on a machine that only ever ran local mode.
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    inspected = []
+
+    def record(directory):
+        inspected.append(directory)
+        return True
+
+    monkeypatch.setattr(main_module, "index_exists", record)
+
+    assert main_module.run_startup_preflight() is None
+    assert inspected == [ingestion_module.CHROMA_PATH]
+
+
+def test_privacy_mode_preflight_still_only_checks_the_index_in_openai_mode(monkeypatch):
+    # Privacy mode is orthogonal to the provider: it must not pull in the
+    # local-mode endpoint/fingerprint checks, and it returns no banner (the
+    # CLI prints its own privacy notice).
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("PRIVACY_MODE", "true")
+    monkeypatch.setattr(main_module, "installed_ollama_models", _tripwire("endpoint probe"))
+    monkeypatch.setattr(main_module, "read_index_fingerprint", _tripwire("read_index_fingerprint"))
+
+    monkeypatch.setattr(main_module, "index_exists", lambda directory: True)
+    assert main_module.run_startup_preflight() is None
+
+    monkeypatch.setattr(main_module, "index_exists", lambda directory: False)
+    with pytest.raises(main_module.PreflightError):
+        main_module.run_startup_preflight()
+
+
+def test_preflight_rejects_an_invalid_privacy_mode_before_touching_the_index(monkeypatch):
+    # Config errors still come first: an unparseable flag must be reported as
+    # itself, not as a missing index.
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("PRIVACY_MODE", "yes-please")
+    monkeypatch.setattr(main_module, "index_exists", _tripwire("index_exists"))
+
+    with pytest.raises(main_module.PreflightError) as excinfo:
+        main_module.run_startup_preflight()
+
+    assert "PRIVACY_MODE" in str(excinfo.value)
 
 
 def test_validate_only_never_runs_preflight(monkeypatch, capsys):

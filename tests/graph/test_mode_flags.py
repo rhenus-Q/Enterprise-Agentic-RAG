@@ -442,11 +442,14 @@ def test_preflight_reports_the_provider_contradiction(monkeypatch):
     assert "LLM_PROVIDER" in message
 
 
-def test_preflight_is_a_no_op_for_a_valid_openai_configuration(monkeypatch):
+def test_preflight_runs_no_local_checks_for_a_valid_openai_configuration(monkeypatch):
     monkeypatch.setenv("PRIVACY_MODE", "true")
     monkeypatch.delenv("FULLY_LOCAL_MODE", raising=False)
     monkeypatch.delenv("LLM_PROVIDER", raising=False)
     monkeypatch.setattr(main_module, "installed_ollama_models", _endpoint_tripwire)
+    # Index presence is checked in both modes; stubbed so the assertion below
+    # is about the mode flags rather than about this machine's chroma_db/.
+    monkeypatch.setattr(main_module, "index_exists", lambda directory: True)
 
     # Privacy mode alone does not switch provider, so no local checks run.
     assert main_module.run_startup_preflight() is None

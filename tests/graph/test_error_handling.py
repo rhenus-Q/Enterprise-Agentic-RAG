@@ -472,6 +472,44 @@ def test_app_successful_answer_keeps_retrieval_error(monkeypatch):
     assert result["stop_reason"] == STOP_REASON_RETRIEVAL_ERROR
 
 
+def test_app_transient_grading_failure_never_overwrites_retrieval_error(monkeypatch):
+    # The full degradation chain in one run: the retriever fails
+    # (retrieval_error), the run falls back to the web, one web result's
+    # relevance-grading call then hiccups transiently, and the vetted remainder
+    # produces an answer that passes both gates.
+    #
+    # Two things could hide the retrieval failure here. The web_search node
+    # could overwrite retrieval_error with the weaker tool_error -- and the
+    # successful path would then clear that away, so the user would be told
+    # nothing at all about a knowledge base that never answered.
+    _patch_router(monkeypatch, RETRIEVE)
+    _patch_graders(monkeypatch, grounded=True, useful=True)
+    _patch_all_node_seams(monkeypatch, retriever_raises=True)
+
+    web_module = importlib.import_module("graph.nodes.web_search")
+
+    class FakeWebTool:
+        def search(self, query, *, max_results, timeout):
+            return [{"content": "boom"}, {"content": "good"}]
+
+    class FlakyGrader:
+        def invoke(self, payload):
+            if payload["document"] == "boom":
+                raise RuntimeError("grader hiccup")
+            return SimpleNamespace(is_relevant=True)
+
+    monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())
+    monkeypatch.setattr(web_module, "get_retrieval_grader", lambda: FlakyGrader())
+
+    result = graph_module.app.invoke(_initial_state())
+
+    assert result["generation"] == "FINAL ANSWER"  # the run still succeeds
+    assert result["stop_reason"] == STOP_REASON_RETRIEVAL_ERROR
+    # And the caveat the user actually reads is the retrieval one, end to end.
+    assert RETRIEVAL_ERROR_NOTE in format_answer(result)
+    assert TOOL_ERROR_NOTE not in format_answer(result)
+
+
 # ---------------------------------------------------------------------------
 # stop_reason vocabulary <-> user-facing caveats
 # ---------------------------------------------------------------------------
