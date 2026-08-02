@@ -1,7 +1,7 @@
 ---
 description: Review a Claude Code command file for correctness, safety, and project fit
 argument-hint: Command path or command name, for example .claude/commands/arch-review.md or /arch-review
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
 ---
 
 You are reviewing a Claude Code command file for this Agentic RAG project.
@@ -144,10 +144,6 @@ git status --short
 Do not run tests.
 
 ## Step 3. Determine review report path
-
-Create the directory if needed:
-
-`docs/roadmap/commands-review/`
 
 Create a unique report filename using this format:
 

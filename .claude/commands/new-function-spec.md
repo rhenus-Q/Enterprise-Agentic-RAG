@@ -1,7 +1,7 @@
 ---
 description: Create an implementation-ready function spec from a short feature description
 argument-hint: Short feature description
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
 ---
 
 You are creating a single implementation-ready **function spec** for this Agentic RAG project.
@@ -207,11 +207,7 @@ existing spec. If the command fails, stop and report the failure; do not write
 the spec with a guessed date.
 
 Only once the target path is confirmed unused (or the user explicitly chooses a
-path), create the directory if needed:
-
-`docs/roadmap/spec/`
-
-Then create exactly one file:
+path), create exactly one file:
 
 `docs/roadmap/spec/<feature_slug>.md`
 

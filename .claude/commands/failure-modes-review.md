@@ -1,7 +1,7 @@
 ---
 description: Review failure handling, cost/budget controls, and production-readiness risks and write a timestamped failure-mode review report
 argument-hint: Optional review focus, for example "web search failures" or "budget limits"
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(date:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
 ---
 
 You are reviewing failure modes, failure handling, cost/budget controls, and production-readiness risks in this Agentic RAG project.
@@ -223,7 +223,6 @@ Do not run `tests/chains/`.
 
 * `pyproject.toml`
 * `.github/workflows/ci.yml`
-* `.github/workflows/CI.yml`
 * `.gitignore`
 * `frontend/package.json`
 * `.claude/commands/`
@@ -386,10 +385,6 @@ Do not implement fixes.
 Only review and recommend.
 
 ## Step 5. Write failure-mode review report
-
-Create the directory if needed:
-
-`docs/roadmap/failure-modes-review/`
 
 Create a new unique report file using the filename rule above.
 

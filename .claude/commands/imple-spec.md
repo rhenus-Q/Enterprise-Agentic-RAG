@@ -1,7 +1,7 @@
 ---
 description: Implement an existing spec or implementation plan
 argument-hint: Path to spec or plan file, for example docs/roadmap/plan/eval-history-delta-reporting-plan.md
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(mkdir:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run python -m mypy:*), Bash(uv run pytest tests/node:*), Bash(uv run python -m pytest tests/node:*), Bash(uv run pytest tests/graph:*), Bash(uv run python -m pytest tests/graph:*), Bash(uv run pytest tests/evals:*), Bash(uv run python -m pytest tests/evals:*), Bash(uv run pytest tests/server:*), Bash(uv run python -m pytest tests/server:*), Bash(uv run python evals/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(git status:*), Bash(git diff:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*), Bash(uv run ruff:*), Bash(uv run mypy:*), Bash(uv run python -m mypy:*), Bash(uv run pytest tests/node:*), Bash(uv run python -m pytest tests/node:*), Bash(uv run pytest tests/graph:*), Bash(uv run python -m pytest tests/graph:*), Bash(uv run pytest tests/evals:*), Bash(uv run python -m pytest tests/evals:*), Bash(uv run pytest tests/server:*), Bash(uv run python -m pytest tests/server:*), Bash(uv run python evals/run_eval.py --validate-only:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
 ---
 
 You are implementing an existing spec or implementation plan for this Agentic RAG project.
@@ -267,11 +267,8 @@ knowledge, conversation history, Git history, existing reports, or existing
 filenames, and never copy the date from an existing report. If the command
 fails, stop and report the failure; do not write the report with a guessed date.
 
-If `docs/roadmap/implementation/implementation-template.md` exists, create the directory if needed:
-
-`docs/roadmap/implementation/`
-
-Then choose a collision-safe report path. Before writing, use `Glob` (or an
+If `docs/roadmap/implementation/implementation-template.md` exists, choose a
+collision-safe report path. Before writing, use `Glob` (or an
 equivalent permitted existence check) to select the first unused path in this
 order:
 

@@ -1,7 +1,7 @@
 ---
 description: Review the project architecture and write a timestamped architecture review report
 argument-hint: Optional review focus, for example "eval harness" or "graph flow"
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(mkdir:*), Bash(date:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
 ---
 
 You are reviewing the architecture of this Agentic RAG project.
@@ -162,7 +162,6 @@ Inspect these areas as needed.
 
 * `pyproject.toml`
 * `.github/workflows/ci.yml`
-* `.github/workflows/CI.yml`
 * `.gitignore`
 * `main.py`
 * `frontend/package.json`
@@ -364,10 +363,6 @@ Do not implement fixes.
 Only review and recommend.
 
 ## Step 5. Write architecture review report
-
-Create the directory if needed:
-
-`docs/roadmap/architecture-review/`
 
 Create a new unique report file using the filename rule above.
 

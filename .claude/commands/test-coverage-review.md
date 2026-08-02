@@ -1,7 +1,7 @@
 ---
 description: Review test coverage gaps and write a timestamped test coverage review report
 argument-hint: Optional review focus, for example "graph routing" or "privacy mode"
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(date:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
 ---
 
 You are reviewing test coverage for this Agentic RAG project.
@@ -464,10 +464,6 @@ Do not modify code.
 Only review and recommend.
 
 ## Step 5. Write test coverage review report
-
-Create the directory if needed:
-
-`docs/roadmap/test-coverage-review/`
 
 Create a new unique report file using the filename rule above.
 

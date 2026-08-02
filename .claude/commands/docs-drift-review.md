@@ -9,8 +9,6 @@ allowed-tools:
   - Bash(git status --short:*)
   - Bash(git ls-files:*)
   - Bash(git grep:*)
-  - Bash(mkdir -p:*)
-  - Bash(date:*)
   - Bash(powershell.exe -NoProfile -Command "Get-Date:*)
 ---
 
@@ -367,8 +365,8 @@ Git history, existing reports, or existing filenames, and never copy the date
 from an existing report. If the command fails, stop and report the failure; do
 not write a report with a guessed date.
 
-Write the complete report under `docs/roadmap/docs-drift-review/`, creating the
-directory if needed. Name it using the project's review-command convention:
+Write the complete report under `docs/roadmap/docs-drift-review/`. Name it using
+the project's review-command convention:
 
     docs/roadmap/docs-drift-review/<YYYY-MM-DD>-<focus-slug>-docs-drift-review.md
 

@@ -1,7 +1,7 @@
 ---
 description: Review security, prompt-injection, and privacy risks and write a timestamped security review report
 argument-hint: Optional review focus, for example "prompt injection" or "web search privacy"
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(date:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*)
 ---
 
 You are reviewing the security, prompt-injection, and privacy posture of this Agentic RAG project.
@@ -221,7 +221,6 @@ Do not run `tests/chains/`.
 
 * `pyproject.toml`
 * `.github/workflows/ci.yml`
-* `.github/workflows/CI.yml`
 * `.gitignore`
 * `frontend/package.json`
 * `frontend/vite.config.ts`
@@ -368,10 +367,6 @@ Do not implement fixes.
 Only review and recommend.
 
 ## Step 5. Write security review report
-
-Create the directory if needed:
-
-`docs/roadmap/security-review/`
 
 Create a new unique report file using the filename rule above.
 
