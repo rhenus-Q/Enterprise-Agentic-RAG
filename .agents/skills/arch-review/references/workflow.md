@@ -5,52 +5,21 @@ This reference contains the detailed project-specific procedure for the Skill. T
 ## Contents
 
 - Goal
-- Step 0. Determine the authoritative date and time
+- Focus is a hard boundary
 - Report filename rule
 - Step 1. Read minimal project context
 - Step 2. Inspect architecture-relevant areas
-- Project entry points and configuration
-- Graph and runtime flow
-- Web application layer
-- Eval system
-- Tests
-- Codex Skill workflow
 - Step 3. Review architecture quality
-- Graph design
-- Configuration and side effects
-- Separation of concerns
-- Web application boundaries
-- Eval architecture
-- Observability architecture
-- Testability
-- Production readiness
-- Documentation quality
-- Engineering quality
 - Step 4. Look for risks and improvement opportunities
 - Step 5. Write architecture review report
-- Architecture Review
-- 1. Executive summary
-- 2. Files reviewed
-- 3. Architecture map
-- 4. What is strong
-- 5. Main issues found
-- 6. Project-specific safety review
-- 7. Observability architecture review
-- 8. Production readiness review
-- 9. Eval architecture review
-- 10. Test architecture review
-- 11. Documentation and workflow review
-- 12. Recommended next actions
-- Must fix
-- Should fix soon
-- Optional improvements
-- 13. Engineering-readiness verdict
-- 14. Overall recommendation
+- Conditional report structure
 - Step 6. Final response
 
 You are reviewing the architecture of this Agentic RAG project.
 
 User input: the user's skill input
+
+## Safety constraints (authoritative)
 
 This is a review-only task.
 
@@ -94,7 +63,13 @@ Use as few tools as possible.
 
 ## Goal
 
-Review whether the current project architecture is clean, maintainable, testable, observable, safe to continue building on, and suitable as a production-oriented Agentic RAG / LangGraph project.
+Primary question:
+
+> Is the system structure and dependency design appropriate for the requested scope?
+
+Review whether the requested architecture is clean, maintainable, testable, observable,
+and structurally safe to continue building on. For an unscoped review, assess the
+repository's broader architectural readiness.
 
 This review should cover:
 
@@ -103,24 +78,16 @@ This review should cover:
 * graph design
 * configuration and side effects
 * observability architecture
-* production readiness
+* architectural readiness
 * eval architecture
-* test architecture
-* documentation and workflow quality
+* testability architecture, dependency injection, and mock seams
+* architecture diagrams and boundary documentation when directly relevant
 
 Write a new architecture review report under:
 
 `docs/roadmap/architecture-review/`
 
 Do not overwrite previous architecture review reports.
-
-## Step 0. Determine the authoritative date and time
-
-Before the first report write, run this command exactly once:
-
-    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
-
-Treat the returned timestamp as the only authoritative current local time, and reuse that same value throughout this run. Use its `YYYY-MM-DD` portion consistently for the report filename, the report title, the `Date:` / metadata field, and any generated-date text in the body. Never infer or guess the date from model knowledge, conversation history, Git history, existing reports, or existing filenames, and never copy the date from an existing report. If the command fails, stop and report the failure; do not write a report with a guessed date.
 
 ## Report filename rule
 
@@ -130,7 +97,8 @@ Create a unique report filename using this format:
 
 Where:
 
-* `<YYYY-MM-DD>` is the verified date from Step 0.
+* `<YYYY-MM-DD>` is the verified date collected immediately before report creation in
+  Step 5.
 
 * `<focus-slug>` is derived from `the user's skill input`.
 
@@ -175,15 +143,25 @@ Create only the selected unique report file.
 
 Do not write any other file.
 
-If the user provides a focus in `the user's skill input`, prioritize that focus while still checking the overall architecture.
+## Focus is a hard boundary
+
+When the user supplies a focus, scope, path, component, layer, or named concern, review
+only that target and the minimum directly dependent evidence required to verify it.
+Direct evidence may include imported or called modules, adjacent API contracts,
+directly relevant tests, directly relevant configuration, and directly relevant
+documentation. It must not automatically include unrelated repository areas.
+
+Apply this boundary consistently to discovery commands, files read, findings, report
+sections, readiness conclusions, and recommended actions. Do not perform a
+repository-wide scan, produce an overall architectural-readiness verdict, or populate
+unrelated report sections. When no focus is supplied, the broader default review may
+remain.
 
 ## Step 1. Read minimal project context
 
-Read:
-
-* `AGENTS.md`
-* `README.md`
-* `structure.md`
+Always read `AGENTS.md`. For an unscoped review, also read `README.md` and
+`structure.md`. For a focused review, read those documents only when they contain a
+directly relevant architectural claim.
 
 Run:
 
@@ -191,21 +169,20 @@ Run:
 git status --short
 ```
 
-Use the authoritative date from Step 0 for the report filename and body; do not use any other date source.
-
-Then inspect only architecture-relevant files.
+Then inspect only files permitted by the focus boundary.
 
 Prefer targeted reads over broad file reading.
 
 ## Step 2. Inspect architecture-relevant areas
 
-Inspect these areas as needed.
+Inspect these areas only when allowed by the focus boundary. For an unscoped review,
+consider them as needed; do not read every listed area mechanically.
 
 ### Project entry points and configuration
 
 * `pyproject.toml`
-* Discover CI workflow files under `.github/workflows/` using `*.yml` and `*.yaml`;
-  inspect every match (the current workflow is `.github/workflows/ci.yml`).
+* Discover relevant CI workflows only through `.github/workflows/*.yml` and
+  `.github/workflows/*.yaml`; do not assume one filename is authoritative.
 * `.gitignore`
 * `AGENTS.md`
 * `README.md`
@@ -247,7 +224,7 @@ Inspect the integration boundaries between `server.app` and `graph.engine`,
 * `evals/README.md`
 * `evals/history/`
 
-### Tests
+### Testability evidence
 
 * `tests/node/`
 * `tests/graph/`
@@ -258,13 +235,18 @@ Inspect the integration boundaries between `server.app` and `graph.engine`,
 * `frontend/src/**/*.test.ts`
 * `frontend/src/**/*.test.tsx`
 
-Do not inspect `tests/chains/` unless the user explicitly asks.
+Use tests only to assess architectural testability, contract seams, dependency
+injection, mock seams, import isolation, and whether the design makes correct testing
+possible. Do not build a complete coverage map or enumerate missing tests. Do not
+inspect `tests/chains/` unless the user explicitly asks.
 
 ### Codex Skill workflow
 
-* `.agents/skills/`
+Do not inspect `.agents/skills/**` by default. Inspect it only when the user explicitly
+focuses on agent/Skill architecture or files there are part of the reviewed change.
 
-Inspect roadmap artifacts only when needed for workflow review.
+Inspect roadmap artifacts only when they contain a directly relevant architectural
+decision or boundary claim.
 
 Do not inspect `.env`.
 
@@ -279,10 +261,7 @@ Evaluate the following areas.
 * Is the graph flow understandable?
 * Are node responsibilities clear?
 * Are routing decisions explicit?
-* Are loop limits and retry behavior safe?
-* Are stop reasons consistent?
-* Are fallback policies clear and testable?
-* Are terminal paths clear?
+* Are cycles, terminal paths, and policy ownership placed in the correct layer?
 * Are quality gates such as document grading, hallucination grading, and answer usefulness grading placed in the right layer?
 
 ### Configuration and side effects
@@ -291,7 +270,6 @@ Evaluate the following areas.
 * Are imports side-effect free where they should be?
 * Is environment/config access centralized?
 * Are expensive operations avoided at import time?
-* Are `.env` and secrets protected?
 * Can tests import modules without API keys?
 * Are runtime policies resolved once per run rather than read inconsistently across nodes?
 
@@ -305,7 +283,6 @@ Evaluate the following areas.
 * Does `server/` remain a thin adapter over the canonical engine rather than
   duplicating graph or business behavior?
 * Does `frontend/` consume the API contract without duplicating backend policy?
-* Are docs and tests aligned with behavior?
 * Is business behavior separated from observability and reporting?
 
 ### Web application boundaries
@@ -340,44 +317,43 @@ Evaluate the following areas.
 
 ### Testability
 
-* Are important behaviors covered by mocked tests?
-* Are graph/node/eval/server tests and co-located frontend tests separated correctly?
-* Are API-key-requiring tests avoided by default?
-* Are there brittle tests or under-tested seams?
-* Are recent features covered by unit tests?
-* Are privacy mode, fallback policies, budget limits, stop reasons, and failure paths covered?
-* Are monkeypatch seams clean and intentional?
+* Are dependency-injection, lazy-factory, monkeypatch, and mock seams clean and
+  intentional?
+* Are graph, node, eval, server, frontend, and contract test layers structurally
+  separated?
+* Can important boundaries be tested without external services or import-time side
+  effects?
+* Does the design make correct testing possible without locking tests to internal
+  implementation details?
 
-### Production readiness
+Do not inventory missing tests here. Detailed suite completeness belongs to
+`test-coverage-review`.
 
-* Are runtime configuration, privacy controls, and fallback policies clear and centralized?
-* Are LLM call budgets, web search limits, and web result grading limits enforced consistently?
-* Are external dependency failures handled safely, including LLM, retriever, vector store, web search, and grading failures?
-* Are import-time side effects avoided so tests and tooling can run without API keys?
-* Are logs, traces, eval history, and generated reports safe for local development and CI?
-* Are `.env`, secrets, generated artifacts, vector stores, and runtime outputs protected from accidental commit?
-* Are CI checks sufficient for safe development without requiring paid API calls?
-* Do CI and local workflows cover the server suite plus frontend type checking,
-  Vitest, and the Vite production build?
-* Is the project easy to run, test, debug, and explain as a well-engineered system?
-* Are production-like risks documented clearly enough without overengineering the system?
-* Is cleanup needed before adding more features?
+### Architectural readiness
 
-### Documentation quality
+* Are structural deployability, coupling, state ownership, interfaces, persistence
+  boundaries, scaling constraints, and build/runtime boundaries credible?
+* Are import-time side effects and dependency construction compatible with deployment
+  and tooling?
+* Are concurrency and persistence responsibilities explicit rather than hidden in
+  adapters or global state?
 
-* Do README and structure docs match the code?
-* Are Skill workflows documented enough?
-* Are eval docs accurate?
-* Are roadmap artifacts useful rather than noisy?
-* Do docs explain how to run safe tests versus API-key-requiring workflows?
-* Do docs clearly describe the architecture without overstating production readiness?
+Do not turn architectural readiness into an operational timeout, retry, cancellation,
+fallback, degradation, or failure-path audit. Those questions belong to
+`failure-modes-review`.
+
+### Architectural documentation
+
+Inspect documentation only to verify architecture diagrams, module responsibilities,
+dependency direction, interface ownership, and architectural boundary claims. Do not
+perform a general documentation-drift audit.
 
 ### Engineering quality
 
 * Would this architecture read as credible to a senior engineer?
 * Are there signs of overengineering?
 * Are there signs of underengineering?
-* What would make the project more production-ready?
+* What would improve architectural readiness?
 * Is the project's design explainable in a clear technical narrative?
 * Does the architecture reflect real engineering judgment rather than only prototype LLM behavior?
 
@@ -388,16 +364,14 @@ Flag:
 * hidden coupling
 * unclear ownership of logic
 * duplicate logic
-* overly broad tool permissions
-* generated files that should be ignored
-* stale docs
 * fragile eval assumptions
-* excessive command/template complexity
-* missing tests around important behavior
 * architecture that makes future features harder
-* observability that leaks too much or explains too little
-* production-readiness gaps that could cause fragile behavior
-* places where security, privacy, fallback, budget, or stop_reason semantics are unclear
+* observability seams that are structurally coupled to behavior
+* structural deployment constraints that make future operation or scaling harder
+
+Security, reliability, test, and documentation evidence may be cited only when it
+proves an architectural boundary or consequence. Do not independently audit those
+neighboring domains.
 
 Do not rewrite the architecture.
 
@@ -407,181 +381,44 @@ Only review and recommend.
 
 ## Step 5. Write architecture review report
 
-Create the directory if needed:
+Immediately before the first report write, run this command exactly once:
 
-`docs/roadmap/architecture-review/`
+    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
 
-Create a new unique report file using the filename rule above.
+Treat the returned timestamp as the only authoritative current local time. Reuse its
+`YYYY-MM-DD` portion in the filename and report body. Never infer or copy the date from
+model knowledge, conversation history, Git history, existing reports, or filenames. If
+the command fails, stop and do not write a report with a guessed date.
 
-Do not overwrite an existing architecture review report.
+Create `docs/roadmap/architecture-review/` if needed, then create only the selected
+unique report using the filename rule above. Do not overwrite an existing report.
 
-Use this structure:
+### Conditional report structure
 
-# Architecture Review
+Include report metadata: title `Architecture Review`, status `Review`, verified date,
+requested focus or `Overall architecture`, and selected report path.
 
-Status: Review
+Always retain this compact core:
 
-Date: <YYYY-MM-DD>
+1. **Review summary** — give a scope-specific conclusion. Include an architectural-
+   readiness verdict only for an unscoped overall review.
+2. **Scope reviewed** — state the requested boundary, included dependencies, and
+   explicit exclusions.
+3. **Evidence inspected** — list exact files, directories, and repository commands.
+4. **Findings** — for each finding give evidence, architectural consequence, risk,
+   recommended action, and timing; state clearly when no material issue was confirmed.
+5. **Recommendations or priority** — Must fix / Should fix soon / Optional, using only
+   findings inside scope.
+6. **Limitations / not reviewed** — omit unrelated domains or state briefly:
+   `Not reviewed because it was outside the requested scope.`
+7. **Validation or commands run** — list commands actually run and prohibited
+   validation that did not run.
 
-Focus: <user input or "Overall architecture">
-
-Report file: <selected unique report path>
-
-## 1. Executive summary
-
-State whether the architecture is:
-
-* Strong / production-oriented
-* Good but needs minor cleanup
-* Needs significant improvement
-
-Give a short explanation.
-
-## 2. Files reviewed
-
-List the files and directories reviewed.
-
-## 3. Architecture map
-
-Briefly describe the current system architecture:
-
-* Graph flow
-* Nodes and chains
-* Config/runtime setup
-* FastAPI adapter and API contracts
-* React frontend and API client
-* Frontend/backend contract and static-serving boundaries
-* Eval harness
-* Test structure
-* Observability structure
-* Docs/workflow structure
-
-## 4. What is strong
-
-List the strongest architectural choices.
-
-## 5. Main issues found
-
-For each issue include:
-
-* Issue
-* Why it matters
-* Risk level: Low / Medium / High
-* Recommended fix
-* Whether it should be done now or later
-
-## 6. Project-specific safety review
-
-Explicitly assess whether these are protected:
-
-* prompts
-* model names
-* corpus documents
-* `.env` / `.env.example`
-* graph behavior
-* graph routing
-* graph nodes
-* `stop_reason` semantics
-* fallback policy semantics
-* full eval
-* `ingestion.py`
-* `tests/chains/`
-
-## 7. Observability architecture review
-
-Assess:
-
-* run_id design
-* node_path visibility
-* node timing usefulness
-* operational counters
-* trace JSON safety
-* metadata-only guarantees
-* trace failure behavior
-* whether observability helps debug graph failures without changing behavior
-* whether any observability artifact could leak raw documents, prompts, raw state, or secrets
-
-## 8. Production readiness review
-
-Assess:
-
-* runtime configuration
-* privacy controls
-* fallback policies
-* budget limits
-* external dependency failure handling
-* CI safety
-* import-time side effects
-* generated artifact hygiene
-* whether the system is safe to keep building on
-* whether production-readiness gaps should be fixed before adding more features
-
-## 9. Eval architecture review
-
-Assess:
-
-* eval schema
-* eval checks
-* history records
-* delta reporting
-* full eval workflow
-* validate-only workflow
-* test coverage
-
-## 10. Test architecture review
-
-Assess:
-
-* mocked tests
-* graph tests
-* node tests
-* eval tests
-* server/API tests
-* co-located frontend Vitest tests
-* frontend type checking and Vite build coverage
-* frontend/backend contract coverage
-* missing tests
-* risky tests
-
-## 11. Documentation and workflow review
-
-Assess:
-
-* README
-* structure.md
-* AGENTS.md
-* Codex Skills
-* roadmap artifacts
-
-## 12. Recommended next actions
-
-Separate recommendations into:
-
-### Must fix
-
-### Should fix soon
-
-### Optional improvements
-
-## 13. Engineering-readiness verdict
-
-Give one of:
-
-* Production-oriented
-* Production-oriented after minor cleanup
-* Not production-ready yet
-
-Explain why.
-
-## 14. Overall recommendation
-
-Do not restate the executive summary or the engineering-readiness verdict here.
-
-Instead, give a short, action-oriented recommendation that answers:
-
-* Is the architecture safe to continue building on?
-* Is cleanup needed before adding more features?
-* What is the single next recommended action?
+Add domain-specific sections—such as graph structure, API contracts, eval architecture,
+observability seams, testability architecture, architectural documentation, or
+architectural readiness—only when relevant to the requested focus and evidence
+actually inspected. Do not fill unrelated sections with speculative findings or expand
+the scan merely to avoid writing `Not reviewed`.
 
 ## Step 6. Final response
 
@@ -589,7 +426,7 @@ After writing the report, respond with:
 
 Architecture review report: `<selected unique report path>`
 
-Overall recommendation: `<overall recommendation>`
+Scope conclusion: `<scope-specific conclusion>`
 
 Top issues:
 
@@ -597,4 +434,5 @@ Top issues:
 * <issue 2>
 * <issue 3>
 
-Do not repeat the full report in chat unless the user explicitly asks.
+Do not repeat the full report in chat unless the user explicitly asks. For a focused
+review, do not present the conclusion as a repository-wide readiness verdict.

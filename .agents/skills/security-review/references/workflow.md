@@ -5,52 +5,21 @@ This reference contains the detailed project-specific procedure for the Skill. T
 ## Contents
 
 - Goal
-- Step 0. Determine the authoritative date and time
+- Focus is a hard boundary
 - Report filename rule
 - Step 1. Read minimal project context
 - Step 2. Inspect security-relevant areas
-- Security-sensitive runtime files
-- Prompt and chain files
-- Node files and external boundaries
-- API and browser files
-- Eval and tests
-- Tooling and project hygiene
 - Step 3. Review security quality
-- User input secret handling
-- Prompt injection defense
-- RAG document and web result safety
-- Privacy and web search controls
-- API and browser boundaries
-- Trace, logging, and artifact safety
-- `.env`, secret, and repository hygiene
-- Tool-call and command boundaries
-- Security test coverage
 - Step 4. Look for risks and improvement opportunities
 - Step 5. Write security review report
-- Security Review
-- 1. Executive summary
-- 2. Files reviewed
-- 3. Security map
-- 4. What is strong
-- 5. Main issues found
-- 6. Prompt injection review
-- 7. Privacy review
-- 8. Secret handling review
-- 9. Web search and external dependency review
-- 10. Trace and observability safety review
-- 11. Security test coverage review
-- 12. Documentation and workflow review
-- 13. Recommended next actions
-- Must fix
-- Should fix soon
-- Optional improvements
-- 14. Security-readiness verdict
-- 15. Overall recommendation
+- Conditional report structure
 - Step 6. Final response
 
 You are reviewing the security, prompt-injection, and privacy posture of this Agentic RAG project.
 
 User input: the user's skill input
+
+## Safety constraints (authoritative)
 
 This is a review-only task.
 
@@ -96,7 +65,12 @@ Use as few tools as possible.
 
 ## Goal
 
-Review whether the current project is secure enough for a production-oriented Agentic RAG / LangGraph system, with special attention to:
+Primary question:
+
+> Are the trust boundaries, data handling, permissions, secrets, and external
+> interactions secure for the requested scope?
+
+Review security and privacy risks for the requested scope, with special attention to:
 
 * prompt injection
 * untrusted retrieved context
@@ -106,22 +80,15 @@ Review whether the current project is secure enough for a production-oriented Ag
 * `.env` and secret hygiene
 * RAG document safety
 * tool-call boundaries
-* security-related test coverage
-* production-like privacy risks
+* authentication and authorization when present
+* regression evidence for security-critical guarantees
+* fail-open behavior with security consequences
 
 Write a new security review report under:
 
 `docs/roadmap/security-review/`
 
 Do not overwrite previous security review reports.
-
-## Step 0. Determine the authoritative date and time
-
-Before the first report write, run this command exactly once:
-
-    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
-
-Treat the returned timestamp as the only authoritative current local time, and reuse that same value throughout this run. Use its `YYYY-MM-DD` portion consistently for the report filename, the report title, the `Date:` / metadata field, and any generated-date text in the body. Never infer or guess the date from model knowledge, conversation history, Git history, existing reports, or existing filenames, and never copy the date from an existing report. If the command fails, stop and report the failure; do not write a report with a guessed date.
 
 ## Report filename rule
 
@@ -131,7 +98,8 @@ Create a unique report filename using this format:
 
 Where:
 
-* `<YYYY-MM-DD>` is the verified date from Step 0.
+* `<YYYY-MM-DD>` is the verified date collected immediately before report creation in
+  Step 5.
 
 * `<focus-slug>` is derived from `the user's skill input`.
 
@@ -176,15 +144,25 @@ Create only the selected unique report file.
 
 Do not write any other file.
 
-If the user provides a focus in `the user's skill input`, prioritize that focus while still checking the overall security posture.
+## Focus is a hard boundary
+
+When the user supplies a focus, scope, path, component, layer, or named concern, review
+only that target and the minimum directly dependent evidence required to verify it.
+Direct evidence may include imported or called modules, adjacent API contracts,
+directly relevant tests, directly relevant configuration, and directly relevant
+documentation. It must not automatically include unrelated repository areas.
+
+Apply this boundary consistently to discovery commands, files read, findings, report
+sections, readiness conclusions, and recommended actions. Do not perform a
+repository-wide scan, produce an overall security-readiness verdict, or populate
+unrelated report sections. When no focus is supplied, the broader default security
+review may remain.
 
 ## Step 1. Read minimal project context
 
-Read:
-
-* `AGENTS.md`
-* `README.md`
-* `structure.md`
+Always read `AGENTS.md`. For an unscoped review, also read `README.md` and
+`structure.md`. For a focused review, read those documents only when they contain a
+directly relevant security promise or boundary claim.
 
 Run:
 
@@ -192,15 +170,14 @@ Run:
 git status --short
 ```
 
-Use the authoritative date from Step 0 for the report filename and body; do not use any other date source.
-
-Then inspect only security-relevant files.
+Then inspect only files permitted by the focus boundary.
 
 Prefer targeted reads over broad file reading.
 
 ## Step 2. Inspect security-relevant areas
 
-Inspect these areas as needed.
+Inspect these areas only when allowed by the focus boundary. For an unscoped review,
+consider them as needed; do not read every listed area mechanically.
 
 ### Security-sensitive runtime files
 
@@ -246,7 +223,7 @@ Inspect the contracts between `server/schemas.py` and `frontend/src/api/types.ts
 routes and `frontend/src/api/client.ts`, and FastAPI's optional `frontend/dist` mount.
 Do not inspect generated `frontend/dist/` contents.
 
-### Eval and tests
+### Eval and regression evidence
 
 * `evals/run_eval.py`
 * `evals/questions.jsonl`
@@ -260,18 +237,24 @@ Do not inspect generated `frontend/dist/` contents.
 * `frontend/src/**/*.test.ts`
 * `frontend/src/**/*.test.tsx`
 
-Inspect `tests/chains/` only if needed to assess security test coverage.
+Use tests only as regression evidence for security-critical guarantees. The Skill may
+report that a security guarantee lacks evidence, but it must not construct a complete
+test inventory or coverage map. Inspect `tests/chains/` only if the user explicitly
+places it in scope.
 
 Do not run `tests/chains/`.
 
 ### Tooling and project hygiene
 
 * `pyproject.toml`
-* Discover CI workflow files under `.github/workflows/` using `*.yml` and `*.yaml`;
-  inspect every match (the current workflow is `.github/workflows/ci.yml`).
+* Discover relevant CI workflows only through `.github/workflows/*.yml` and
+  `.github/workflows/*.yaml`; do not assume one filename is authoritative.
 * `.gitignore`
-* `.agents/skills/`
 * `ingestion.py`
+
+Do not inspect `.agents/skills/**` by default. Inspect it only when the focus concerns
+tool or agent permissions, Skill files are part of the reviewed change, or the user
+explicitly requests a Skill security review.
 
 Do not run `ingestion.py`.
 
@@ -368,6 +351,9 @@ Evaluate the following areas.
 
 ### Tool-call and command boundaries
 
+Review these boundaries only when tool or agent permissions are in scope or directly
+affect the reviewed security boundary.
+
 * Do Codex Skills use narrow tool permissions?
 * Do review commands avoid modifying code unless explicitly intended?
 * Are dangerous commands, full eval, ingestion, and API-key workflows blocked by default?
@@ -375,21 +361,24 @@ Evaluate the following areas.
 * Are generated reports written only to intended report paths?
 * Is command behavior safe if the working tree is dirty?
 
-### Security test coverage
+### Regression evidence for security-critical guarantees
 
-* Are user-input redaction behaviors tested?
-* Is privacy mode tested?
-* Is web-search-disabled behavior tested?
-* Are prompt-injection guardrails tested at least through mocked unit tests or eval rows?
-* Are trace-safety guarantees tested?
-* Are failure paths tested without real API keys?
-* Are tests separated so safe tests can run in CI?
-* Do `tests/server/` cover API validation, sanitized errors, metadata-only history,
-  cancellation, status responses, and static mounting without external calls?
-* Do frontend tests cover unsafe or malformed API data, error states, citation/link
-  rendering, and client timeout or cancellation behavior where relevant?
-* Does CI run server tests plus frontend type checking, Vitest, and the Vite build?
-* Are there missing regression tests around recent security changes?
+When directly relevant, determine whether the security guarantee has regression
+evidence, such as a focused mocked test, contract test, or eval row. Report the absent
+evidence as a security risk modifier, for example: `The security guarantee lacks
+regression evidence.` Do not inventory unrelated suites, prescribe complete test
+placement, or assess repository-wide coverage; that belongs to
+`test-coverage-review`.
+
+Failure handling is in scope only when it has a security effect, such as fail-open
+behavior, privacy bypass, secret leakage, unintended external transmission, or
+authorization bypass. Generic retry, timeout, cancellation, degradation, and recovery
+correctness belongs to `failure-modes-review`.
+
+Documentation is evidence only for directly relevant security, privacy, permission,
+secret, or egress promises. Do not perform a general documentation-drift audit.
+
+Do not turn this workflow into a generic implementation-correctness review.
 
 ## Step 4. Look for risks and improvement opportunities
 
@@ -403,12 +392,12 @@ Flag:
 * API validation, error, or status responses that disclose sensitive data
 * unsafe browser rendering or URL handling for API-provided content
 * frontend/backend contract drift that drops or misclassifies security-relevant fields
-* fallback policy confusion
+* fallback behavior that creates a security or privacy bypass
 * logging or trace leakage
 * `.env` or generated artifact hygiene problems
 * overly broad Codex Skill permissions
-* missing security tests
-* stale docs that overstate security guarantees
+* a security-critical guarantee without regression evidence
+* directly relevant documentation that overstates a security guarantee
 * areas where the project looks secure by accident rather than by design
 
 Do not rewrite the architecture.
@@ -419,191 +408,46 @@ Only review and recommend.
 
 ## Step 5. Write security review report
 
-Create the directory if needed:
+Immediately before the first report write, run this command exactly once:
 
-`docs/roadmap/security-review/`
+    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
 
-Create a new unique report file using the filename rule above.
+Treat the returned timestamp as the only authoritative current local time. Reuse its
+`YYYY-MM-DD` portion in the filename and report body. Never infer or copy the date from
+model knowledge, conversation history, Git history, existing reports, or filenames. If
+the command fails, stop and do not write a report with a guessed date.
 
-Do not overwrite an existing security review report.
+Create `docs/roadmap/security-review/` if needed, then create only the selected unique
+report using the filename rule above. Do not overwrite an existing report.
 
-Use this structure:
+### Conditional report structure
 
-# Security Review
+Include report metadata: title `Security Review`, status `Review`, verified date,
+requested focus or `Overall security`, and selected report path.
 
-Status: Review
+Always retain this compact core:
 
-Date: <YYYY-MM-DD>
+1. **Review summary** — give a scope-specific conclusion. Include a security-readiness
+   verdict only for an unscoped overall review.
+2. **Scope reviewed** — state the requested boundary, included dependencies, and
+   explicit exclusions.
+3. **Evidence inspected** — list exact files, directories, and repository commands.
+4. **Findings** — for each finding give evidence, security consequence, risk,
+   recommended action, and timing; state clearly when no material issue was confirmed.
+5. **Recommendations or priority** — Must fix / Should fix soon / Optional, using only
+   findings inside scope.
+6. **Limitations / not reviewed** — omit unrelated domains or state briefly:
+   `Not reviewed because it was outside the requested scope.`
+7. **Validation or commands run** — list commands actually run and prohibited
+   validation that did not run.
 
-Focus: <user input or "Overall security">
-
-Report file: <selected unique report path>
-
-## 1. Executive summary
-
-State whether the security posture is:
-
-* Strong / production-oriented
-* Good but needs minor cleanup
-* Needs significant improvement
-
-Give a short explanation.
-
-## 2. Files reviewed
-
-List the files and directories reviewed.
-
-## 3. Security map
-
-Briefly describe the current security-relevant flow:
-
-* User input handling
-* Secret redaction
-* FastAPI request/response boundary
-* Frontend API client and browser-rendering boundary
-* Server/frontend schema contract and static-serving boundary
-* GraphState boundary
-* Local retrieval boundary
-* Web search boundary
-* Prompt / chain boundary
-* Trace and logging boundary
-* Eval and test boundary
-
-## 4. What is strong
-
-List the strongest security choices.
-
-## 5. Main issues found
-
-For each issue include:
-
-* Issue
-* Why it matters
-* Risk level: Low / Medium / High
-* Recommended fix
-* Whether it should be done now or later
-
-## 6. Prompt injection review
-
-Assess:
-
-* generation prompt
-* retrieved-context treatment
-* web result treatment
-* grader prompts
-* router prompt
-* query rewriter prompt
-* retry feedback path
-* whether untrusted content can override trusted instructions
-
-## 7. Privacy review
-
-Assess:
-
-* user input redaction
-* original question storage
-* web search privacy mode
-* fallback policy interaction
-* outbound web query safety
-* trace privacy
-* eval history privacy
-* generated artifact privacy
-
-## 8. Secret handling review
-
-Assess:
-
-* `.env`
-* `.env.example`
-* API key handling
-* token/password redaction
-* question hashing
-* AnswerResult fields
-* raw_state risks
-* CI secret usage
-* accidental commit risks
-
-## 9. Web search and external dependency review
-
-Assess:
-
-* Tavily/web search boundary
-* search query construction
-* web result grading
-* web source metadata
-* failed web search behavior
-* external service failure handling
-* privacy implications
-
-## 10. Trace and observability safety review
-
-Assess:
-
-* trace JSON contents
-* metadata-only guarantees
-* question preview redaction
-* question hash correlation
-* node_path and timing safety
-* counter safety
-* trace write failure behavior
-* whether any observability artifact could leak secrets
-
-## 11. Security test coverage review
-
-Assess:
-
-* mocked security tests
-* privacy mode tests
-* redaction tests
-* web-search-disabled tests
-* prompt-injection tests
-* trace-safety tests
-* server API validation, sanitization, history, cancellation, and static-mount tests
-* frontend unsafe-data, error-state, citation/link, timeout, and cancellation tests
-* frontend/backend security-contract coverage
-* missing tests
-* risky tests
-
-## 12. Documentation and workflow review
-
-Assess:
-
-* README
-* structure.md
-* AGENTS.md
-* eval docs
-* Codex Skills
-* whether security behavior is documented clearly and not overstated
-
-## 13. Recommended next actions
-
-Separate recommendations into:
-
-### Must fix
-
-### Should fix soon
-
-### Optional improvements
-
-## 14. Security-readiness verdict
-
-Give one of:
-
-* Security-ready / production-oriented
-* Security-ready after minor cleanup
-* Not security-ready yet
-
-Explain why.
-
-## 15. Overall recommendation
-
-Do not restate the executive summary or the security-readiness verdict here.
-
-Instead, give a short, action-oriented recommendation that answers:
-
-* Is the security posture safe to continue building on?
-* Is cleanup needed before adding more features?
-* What is the single next recommended action?
+Add domain-specific sections—such as trust boundaries, prompt injection, privacy,
+secrets, external egress, browser safety, trace disclosure, tool permissions,
+security-effect failure handling, directly relevant security promises, or regression
+evidence for security-critical guarantees—only when relevant to the requested focus
+and evidence actually inspected. Do not produce a full test-coverage or documentation
+section, fill unrelated sections speculatively, or expand the scan merely to avoid
+writing `Not reviewed`.
 
 ## Step 6. Final response
 
@@ -611,7 +455,7 @@ After writing the report, respond with:
 
 Security review report: `<selected unique report path>`
 
-Overall recommendation: `<overall recommendation>`
+Scope conclusion: `<scope-specific conclusion>`
 
 Top issues:
 
@@ -619,4 +463,5 @@ Top issues:
 * <issue 2>
 * <issue 3>
 
-Do not repeat the full report in chat unless the user explicitly asks.
+Do not repeat the full report in chat unless the user explicitly asks. For a focused
+review, do not present the conclusion as a repository-wide readiness verdict.

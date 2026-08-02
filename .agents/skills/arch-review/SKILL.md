@@ -1,6 +1,6 @@
 ---
 name: arch-review
-description: Review this Agentic RAG repository architecture and write a timestamped architecture report. Use for broad or focused audits of graph design, boundaries, configuration, observability, testability, evaluation architecture, and production readiness; do not implement fixes.
+description: Review this Agentic RAG repository structure and dependency design and write a timestamped architecture report. Use for broad or focused audits of graph design, boundaries, configuration ownership, observability and testability seams, evaluation architecture, and architectural readiness; do not implement fixes.
 ---
 
 # Architecture Review
@@ -10,6 +10,9 @@ description: Review this Agentic RAG repository architecture and write a timesta
 - Treat the user's request that triggered or explicitly invoked this Skill as the input.
 - Resolve an omitted focus or path from unambiguous repository context only.
 - Ask one concise question when a required input cannot be inferred safely.
+- Treat any user-provided focus, scope, path, component, layer, or named concern as a
+  hard review boundary. Inspect only that target and the minimum directly dependent
+  evidence needed to verify it; do not expand into a repository-wide review.
 
 ## Required procedure
 

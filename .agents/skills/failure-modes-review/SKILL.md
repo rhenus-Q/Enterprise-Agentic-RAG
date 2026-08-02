@@ -1,6 +1,6 @@
 ---
 name: failure-modes-review
-description: Review failure handling, retries, budgets, degraded modes, privacy-related failures, and production readiness, then write a timestamped report. Use for broad or focused reliability audits; do not implement fixes.
+description: Review failure handling, retries, timeouts, cancellation, budgets, degraded modes, recovery, and operational reliability readiness, then write a timestamped report. Use for broad or focused reliability audits; do not implement fixes.
 ---
 
 # Failure Modes Review
@@ -10,6 +10,9 @@ description: Review failure handling, retries, budgets, degraded modes, privacy-
 - Treat the user's request that triggered or explicitly invoked this Skill as the input.
 - Resolve an omitted focus or path from unambiguous repository context only.
 - Ask one concise question when a required input cannot be inferred safely.
+- Treat any user-provided focus, scope, path, component, layer, or named concern as a
+  hard review boundary. Inspect only that target and the minimum directly dependent
+  evidence needed to verify it; do not expand into a repository-wide review.
 
 ## Required procedure
 

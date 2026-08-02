@@ -1,6 +1,6 @@
 ---
 name: security-review
-description: Review security, prompt-injection, privacy, secret handling, external tool boundaries, trace safety, and related test coverage, then write a timestamped report. Use for broad or focused security audits; do not implement fixes.
+description: Review security, prompt injection, privacy, secret handling, external interactions, tool boundaries, trace safety, and regression evidence for security-critical guarantees, then write a timestamped report. Use for broad or focused security audits; do not implement fixes.
 ---
 
 # Security Review
@@ -10,6 +10,9 @@ description: Review security, prompt-injection, privacy, secret handling, extern
 - Treat the user's request that triggered or explicitly invoked this Skill as the input.
 - Resolve an omitted focus or path from unambiguous repository context only.
 - Ask one concise question when a required input cannot be inferred safely.
+- Treat any user-provided focus, scope, path, component, layer, or named concern as a
+  hard review boundary. Inspect only that target and the minimum directly dependent
+  evidence needed to verify it; do not expand into a repository-wide review.
 
 ## Required procedure
 

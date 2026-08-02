@@ -5,55 +5,21 @@ This reference contains the detailed project-specific procedure for the Skill. T
 ## Contents
 
 - Goal
-- Step 0. Determine the authoritative date and time
+- Focus is a hard boundary
 - Report filename rule
 - Step 1. Read minimal project context
 - Step 2. Inspect test-coverage-relevant areas
-- Runtime and architecture areas
-- Web application areas
-- Eval system
-- Test directories
-- Tooling and CI
-- Documentation
 - Step 3. Review test coverage quality
-- Node test coverage
-- Graph routing coverage
-- Chain seam coverage
-- Engine and state coverage
-- Server/API coverage
-- Frontend and contract coverage
-- Config and budget coverage
-- Security and privacy coverage
-- Eval harness coverage
-- CI and safe default coverage
-- Coverage gap quality
 - Step 4. Look for risks and improvement opportunities
 - Step 5. Write test coverage review report
-- Test Coverage Review
-- 1. Executive summary
-- 2. Files reviewed
-- 3. Test coverage map
-- 4. What is strong
-- 5. Main coverage gaps
-- 6. Node test coverage review
-- 7. Graph routing test coverage review
-- 8. Engine/config/observability test coverage review
-- 9. Security and privacy test coverage review
-- 10. Budget and failure-path test coverage review
-- 11. Eval harness test coverage review
-- 12. CI and safe workflow review
-- 13. Documentation and workflow review
-- 14. Recommended next actions
-- Must fix
-- Should fix soon
-- Optional improvements
-- 15. Test-readiness verdict
-- 16. Overall recommendation
+- Conditional report structure
 - Step 6. Final response
 
 You are reviewing test coverage for this Agentic RAG project.
 
 User input: the user's skill input
+
+## Safety constraints (authoritative)
 
 This is a review-only task.
 
@@ -99,7 +65,13 @@ Use as few tools as possible.
 
 ## Goal
 
-Review whether the current project has enough test coverage for a production-oriented Agentic RAG / LangGraph system.
+Primary question:
+
+> Are the intended behaviors protected by sufficient tests at the correct level, and
+> are those tests executed by CI?
+
+Review test evidence, coverage gaps, regression risks, test-layer placement, and CI
+execution for the requested scope.
 
 This review should focus on coverage gaps, regression risks, and missing tests around important behavior.
 
@@ -109,28 +81,27 @@ This review should cover:
 * graph routing test coverage
 * eval harness test coverage
 * failure-path test coverage
+* cancellation and retry test coverage
 * privacy-mode test coverage
 * fallback-policy test coverage
 * budget-limit test coverage
 * stop_reason test coverage
 * trace/observability test coverage
 * security-related test coverage
-* documentation/test alignment
+* server/API and frontend/backend contract coverage
+* frontend TypeScript type checking, Vitest, and Vite build validation
+* documentation/test/CI alignment
 * risky untested seams
+
+Review test evidence, not whether the implementation itself is architecturally
+correct, secure, or operationally appropriate. Those conclusions belong to the
+corresponding review Skills.
 
 Write a new test coverage review report under:
 
 `docs/roadmap/test-coverage-review/`
 
 Do not overwrite previous test coverage review reports.
-
-## Step 0. Determine the authoritative date and time
-
-Before the first report write, run this command exactly once:
-
-    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
-
-Treat the returned timestamp as the only authoritative current local time, and reuse that same value throughout this run. Use its `YYYY-MM-DD` portion consistently for the report filename, the report title, the `Date:` / metadata field, and any generated-date text in the body. Never infer or guess the date from model knowledge, conversation history, Git history, existing reports, or existing filenames, and never copy the date from an existing report. If the command fails, stop and report the failure; do not write a report with a guessed date.
 
 ## Report filename rule
 
@@ -140,7 +111,8 @@ Create a unique report filename using this format:
 
 Where:
 
-* `<YYYY-MM-DD>` is the verified date from Step 0.
+* `<YYYY-MM-DD>` is the verified date collected immediately before report creation in
+  Step 5.
 
 * `<focus-slug>` is derived from `the user's skill input`.
 
@@ -185,15 +157,25 @@ Create only the selected unique report file.
 
 Do not write any other file.
 
-If the user provides a focus in `the user's skill input`, prioritize that focus while still checking the overall test coverage posture.
+## Focus is a hard boundary
+
+When the user supplies a focus, scope, path, component, layer, or named concern, review
+only that target and the minimum directly dependent evidence required to map its test
+evidence. Direct evidence may include imported or called modules, adjacent API
+contracts, directly relevant tests, directly relevant configuration, and directly
+relevant documentation. It must not automatically include unrelated repository areas.
+
+Apply this boundary consistently to discovery commands, files read, findings, report
+sections, readiness conclusions, and recommended actions. Do not perform a
+repository-wide scan, produce an overall test-readiness verdict, or populate unrelated
+report sections. When no focus is supplied, the broader default coverage review may
+remain.
 
 ## Step 1. Read minimal project context
 
-Read:
-
-* `AGENTS.md`
-* `README.md`
-* `structure.md`
+Always read `AGENTS.md`. For an unscoped review, also read `README.md` and
+`structure.md`. For a focused review, read those documents only when they contain a
+directly relevant test, validation, or CI claim.
 
 Run:
 
@@ -201,21 +183,24 @@ Run:
 git status --short
 ```
 
-Use the authoritative date from Step 0 for the report filename and body; do not use any other date source.
-
-Then inspect only test-coverage-relevant files.
+Then inspect only files permitted by the focus boundary.
 
 Prefer targeted reads over broad file reading.
 
 ## Step 2. Inspect test-coverage-relevant areas
 
-Inspect these areas as needed.
+Inspect these areas only when allowed by the focus boundary. For an unscoped review,
+consider them as needed; do not read every listed area mechanically.
 
 Use discovery first, then targeted reads.
 
 Do not assume exact implementation filenames. Inspect the actual project layout before reading files.
 
 Read only files that are relevant to the requested focus and to test coverage review.
+
+Read implementation files only to identify intended behavior, contracts, seams, and
+risk. Do not use this workflow to conclude that the implementation is architecturally
+correct, secure, or operationally appropriate.
 
 ### Runtime and architecture areas
 
@@ -249,12 +234,8 @@ Do not fail or waste time if a likely file is absent. Use the discovered `graph/
 
 First list relevant existing files under:
 
-* `server/*.py`
-* `server/**/*.py`
-* `frontend/src/*.ts`
-* `frontend/src/*.tsx`
-* `frontend/src/**/*.ts`
-* `frontend/src/**/*.tsx`
+* `server/`
+* `frontend/src/`
 * `frontend/package.json`
 * `frontend/vite.config.ts`
 * `frontend/tsconfig.json`
@@ -340,10 +321,9 @@ Do not run API-key-requiring tests.
 
 First list relevant existing tooling files under:
 
-* `.github/workflows/*`
-* `.agents/skills/*`
+* `.github/workflows/*.yml`
+* `.github/workflows/*.yaml`
 * `*.toml`
-* `*.md`
 * `frontend/package.json`
 * `frontend/package-lock.json`
 * `frontend/vite.config.ts`
@@ -362,8 +342,11 @@ Prioritize tooling files that define or document:
 * API-key-requiring test isolation
 * generated artifact hygiene
 * ignored runtime outputs
-* Skill workflow expectations
 * safe versus unsafe test workflows
+
+Do not inspect `.agents/skills/**` by default. Use Skill files only as on-demand
+evidence when the user places them in scope or when verifying a Skill's claimed test or
+validation command.
 
 Do not inspect `.env`.
 
@@ -374,6 +357,10 @@ Do not inspect generated runtime artifacts unless needed.
 Use the already-read project docs from Step 1 as the primary documentation context.
 
 Inspect additional documentation only when needed to verify test command accuracy, CI expectations, eval workflow, or coverage-related claims.
+
+Limit documentation findings to test commands, markers, CI suites, coverage claims,
+Vitest, frontend type checking, frontend builds, and validation instructions. Do not
+perform a general documentation-drift audit.
 
 Do not broadly read roadmap artifacts unless they are directly relevant to the test coverage review.
 
@@ -470,6 +457,13 @@ Evaluate the following areas.
 * Are raw document/prompt/raw_state leakage risks covered by tests or review checks?
 * Are prompt-injection defenses covered by mocked tests, eval rows, or Skill reviews?
 
+Report whether intended security behavior lacks regression evidence. Do not conclude
+that the implementation is secure; security correctness belongs to `security-review`.
+
+For timeout, cancellation, retry, budget, fallback, degraded-mode, and other failure
+behavior, report only the presence, absence, placement, and CI execution of tests. The
+correctness of the failure design belongs to `failure-modes-review`.
+
 ### Eval harness coverage
 
 * Are eval schema validations tested?
@@ -496,7 +490,8 @@ Evaluate the following areas.
 * Are missing tests prioritized by risk?
 * Are recommendations specific enough to implement?
 * Are gaps separated into Must fix, Should fix soon, and Optional?
-* Are proposed tests scoped to the right layer: node, graph, eval, engine, config, or docs?
+* Are proposed tests scoped to the right layer: node, graph, eval, engine, config,
+  server, frontend, contract, integration, end-to-end, or documentation/CI validation?
 * Are recommendations careful not to demand brittle tests that lock implementation details unnecessarily?
 
 ## Step 4. Look for risks and improvement opportunities
@@ -532,217 +527,50 @@ Only review and recommend.
 
 ## Step 5. Write test coverage review report
 
-Create the directory if needed:
-
-`docs/roadmap/test-coverage-review/`
-
-Create a new unique report file using the filename rule above.
-
-Do not overwrite an existing test coverage review report.
-
-Use this structure:
-
-# Test Coverage Review
-
-Status: Review
-
-Date: <YYYY-MM-DD>
-
-Focus: <user input or "Overall test coverage">
-
-Report file: <selected unique report path>
-
-## 1. Executive summary
-
-State whether the test coverage posture is:
-
-* Strong / production-oriented
-* Good but needs minor cleanup
-* Needs significant improvement
-
-Give a short explanation.
-
-## 2. Files reviewed
-
-List the files and directories reviewed.
-
-## 3. Test coverage map
-
-Briefly describe the current test architecture:
-
-* Node tests
-* Graph tests
-* Eval tests
-* Chain tests if relevant
-* Engine/config tests
-* Server/API tests
-* Frontend Vitest tests
-* Frontend/backend contract coverage
-* CI test commands
-* Safe versus API-key-requiring workflows
-
-## 4. What is strong
-
-List the strongest test coverage choices.
-
-## 5. Main coverage gaps
-
-For each gap include:
-
-* Gap
-* Why it matters
-* Risk level: Low / Medium / High
-* Recommended test
-* Suggested test layer: node / graph / eval / engine / config / server / frontend / contract / docs
-* Whether it should be done now or later
-
-## 6. Node test coverage review
-
-Assess:
-
-* retrieve
-* grade_documents
-* generate
-* web_search
-* rewrite_query
-* notice nodes
-* transient error cleanup
-* node-level failure paths
-* state update expectations
-
-## 7. Graph routing test coverage review
-
-Assess:
-
-* conditional edges
-* terminal paths
-* retry loops
-* web fallback paths
-* privacy-mode paths
-* budget-exhausted paths
-* max-retry paths
-* insufficient-context paths
-
-## 8. Engine/config/observability test coverage review
-
-Assess:
-
-* seed_state
-* AnswerOptions
-* AnswerResult
-* per-run config resolution
-* runtime input redaction
-* question hashing
-* trace collection
-* trace JSON safety
-* trace write failure behavior
-* config defaults and environment overrides
-
-### Server/API test coverage
-
-Assess endpoint, schema, status, history, cancellation, error-mapping, document, and
-static-mount coverage under `tests/server/`.
-
-### Frontend and contract test coverage
-
-Assess co-located Vitest coverage, TypeScript contract checking, API client and mock
-behavior, critical UI states, server/frontend schema alignment, and Vite build coverage.
-
-## 9. Security and privacy test coverage review
-
-Assess:
-
-* secret redaction tests
-* privacy mode tests
-* web-search-disabled tests
-* outbound web query safety
-* prompt-injection related tests or eval rows
-* trace/log safety tests
-* raw input/raw_state risks
-
-## 10. Budget and failure-path test coverage review
-
-Assess:
-
-* LLM budget tests
-* web search budget tests
-* web result grading budget tests
-* generation failure tests
-* retriever failure tests
-* web search failure tests
-* grader failure tests
-* query rewriter failure tests
-* stale stop_reason cleanup tests
-
-## 11. Eval harness test coverage review
-
-Assess:
-
-* eval schema validation
-* expected_contains
-* OR-group semantics
-* expected_not_contains
-* expected_web_search_count
-* expected_stop_reason
-* expected_min_local_sources
-* history records
-* delta reporting
-* validate-only
-* markdown reporting
-
-## 12. CI and safe workflow review
-
-Assess:
-
-* mocked test defaults
-* API-key-requiring test isolation
-* lint/format/typecheck coverage
-* server test-suite coverage
-* frontend TypeScript, Vitest, and Vite-build coverage
-* CI workflow correctness
-* docs/CI/test command alignment
-* generated artifact hygiene
-
-## 13. Documentation and workflow review
-
-Assess:
-
-* README
-* structure.md
-* AGENTS.md
-* eval docs
-* Codex Skills
-* whether test coverage expectations are documented clearly
-
-## 14. Recommended next actions
-
-Separate recommendations into:
-
-### Must fix
-
-### Should fix soon
-
-### Optional improvements
-
-## 15. Test-readiness verdict
-
-Give one of:
-
-* Test-ready / production-oriented
-* Test-ready after minor cleanup
-* Not test-ready yet
-
-Explain why.
-
-## 16. Overall recommendation
-
-Do not restate the executive summary or the test-readiness verdict here.
-
-Instead, give a short, action-oriented recommendation that answers:
-
-* Is the current test posture safe to continue building on?
-* Is cleanup needed before adding more features?
-* What is the single next recommended test to add?
+Immediately before the first report write, run this command exactly once:
+
+    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
+
+Treat the returned timestamp as the only authoritative current local time. Reuse its
+`YYYY-MM-DD` portion in the filename and report body. Never infer or copy the date from
+model knowledge, conversation history, Git history, existing reports, or filenames. If
+the command fails, stop and do not write a report with a guessed date.
+
+Create `docs/roadmap/test-coverage-review/` if needed, then create only the selected
+unique report using the filename rule above. Do not overwrite an existing report.
+
+### Conditional report structure
+
+Include report metadata: title `Test Coverage Review`, status `Review`, verified date,
+requested focus or `Overall test coverage`, and selected report path.
+
+Always retain this compact core:
+
+1. **Review summary** — give a scope-specific conclusion. Include a test-readiness
+   verdict only for an unscoped overall review.
+2. **Scope reviewed** — state the requested boundary, included dependencies, and
+   explicit exclusions.
+3. **Evidence inspected** — list exact implementation, test, configuration,
+   documentation, and CI files plus repository commands.
+4. **Findings** — for each gap give evidence, regression risk, recommended test,
+   suggested layer, priority, and timing; state clearly when no material gap was
+   confirmed.
+5. **Recommendations or priority** — Must fix / Should fix soon / Optional, using only
+   gaps inside scope.
+6. **Limitations / not reviewed** — omit unrelated domains or state briefly:
+   `Not reviewed because it was outside the requested scope.`
+7. **Validation or commands run** — list commands actually run and prohibited
+   validation that did not run.
+
+Add domain-specific sections—such as node, graph, engine, config, server/API,
+frontend, frontend/backend contract, security/privacy, failure and cancellation
+behavior, eval harness,
+unit/integration/contract/end-to-end placement, mocked versus real dependencies,
+Vitest, TypeScript type checking, Vite build, Python selection, markers, or CI
+execution—only when relevant to the requested focus and evidence actually inspected.
+Do not add a general architecture, security, reliability, or documentation verdict,
+fill unrelated sections speculatively, or expand the scan merely to avoid writing
+`Not reviewed`.
 
 ## Step 6. Final response
 
@@ -750,7 +578,7 @@ After writing the report, respond with:
 
 Test coverage review report: `<selected unique report path>`
 
-Overall recommendation: `<overall recommendation>`
+Scope conclusion: `<scope-specific conclusion>`
 
 Top coverage gaps:
 
@@ -758,4 +586,5 @@ Top coverage gaps:
 * <gap 2>
 * <gap 3>
 
-Do not repeat the full report in chat unless the user explicitly asks.
+Do not repeat the full report in chat unless the user explicitly asks. For a focused
+review, do not present the conclusion as a repository-wide test-readiness verdict.

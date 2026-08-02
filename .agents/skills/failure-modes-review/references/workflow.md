@@ -5,54 +5,22 @@ This reference contains the detailed project-specific procedure for the Skill. T
 ## Contents
 
 - Goal
-- Step 0. Determine the authoritative date and time
+- Focus is a hard boundary
 - Report filename rule
 - Step 1. Read minimal project context
 - Step 2. Inspect failure-mode-relevant areas
-- Runtime and configuration
-- Graph routing and loop behavior
-- Key node failure boundaries
-- API and browser failure boundaries
-- Eval and tests
-- Tooling and CI
 - Step 3. Review failure handling quality
-- Failure-mode map
-- Stop reason correctness
-- Retry and loop safety
-- Cost and budget controls
-- External dependency failures
-- API and browser degraded modes
-- Web fallback and degraded mode
-- Privacy and security-related failure behavior
-- Production readiness
-- Failure-related test coverage
 - Step 4. Look for risks and improvement opportunities
 - Step 5. Write failure-mode review report
-- Failure Modes Review
-- 1. Executive summary
-- 2. Files reviewed
-- 3. Failure-mode map
-- 4. What is strong
-- 5. Main issues found
-- 6. Stop reason review
-- 7. Retry and loop review
-- 8. Cost and budget review
-- 9. External dependency failure review
-- 10. Web fallback and degraded-mode review
-- 11. Production readiness review
-- 12. Failure-related test coverage review
-- 13. Documentation and workflow review
-- 14. Recommended next actions
-- Must fix
-- Should fix soon
-- Optional improvements
-- 15. Failure-readiness verdict
-- 16. Overall recommendation
+- Conditional report structure
 - Step 6. Final response
 
-You are reviewing failure modes, failure handling, cost/budget controls, and production-readiness risks in this Agentic RAG project.
+You are reviewing failure modes, failure handling, cost/budget controls, and operational
+reliability readiness in this Agentic RAG project.
 
 User input: the user's skill input
+
+## Safety constraints (authoritative)
 
 This is a review-only task.
 
@@ -98,7 +66,13 @@ Use as few tools as possible.
 
 ## Goal
 
-Review whether the current project handles failures safely and predictably enough for a production-oriented Agentic RAG / LangGraph system.
+Primary question:
+
+> When this system or dependency fails, is the behavior bounded, honest, recoverable,
+> and operationally safe?
+
+Review whether failure behavior in the requested scope supports operational reliability
+readiness.
 
 This review should cover:
 
@@ -106,28 +80,21 @@ This review should cover:
 * retry and loop behavior
 * stop_reason correctness
 * fallback policy behavior
-* privacy-mode failure behavior
+* timeout and cancellation behavior
 * LLM cost and budget controls
 * web search budget controls
 * web result grading budget controls
 * external dependency failure behavior
 * degraded-mode behavior
-* production-readiness risks
-* failure-related test coverage
+* partial success, cleanup, concurrency, and persistence failures
+* recovery, retryability, and operational observability
+* regression evidence for critical failure guarantees
 
 Write a new failure-mode review report under:
 
 `docs/roadmap/failure-modes-review/`
 
 Do not overwrite previous failure-mode review reports.
-
-## Step 0. Determine the authoritative date and time
-
-Before the first report write, run this command exactly once:
-
-    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
-
-Treat the returned timestamp as the only authoritative current local time, and reuse that same value throughout this run. Use its `YYYY-MM-DD` portion consistently for the report filename, the report title, the `Date:` / metadata field, and any generated-date text in the body. Never infer or guess the date from model knowledge, conversation history, Git history, existing reports, or existing filenames, and never copy the date from an existing report. If the command fails, stop and report the failure; do not write a report with a guessed date.
 
 ## Report filename rule
 
@@ -137,7 +104,8 @@ Create a unique report filename using this format:
 
 Where:
 
-* `<YYYY-MM-DD>` is the verified date from Step 0.
+* `<YYYY-MM-DD>` is the verified date collected immediately before report creation in
+  Step 5.
 
 * `<focus-slug>` is derived from `the user's skill input`.
 
@@ -182,15 +150,25 @@ Create only the selected unique report file.
 
 Do not write any other file.
 
-If the user provides a focus in `the user's skill input`, prioritize that focus while still checking the overall failure-handling and budget-control posture.
+## Focus is a hard boundary
+
+When the user supplies a focus, scope, path, component, layer, or named concern, review
+only that target and the minimum directly dependent evidence required to verify it.
+Direct evidence may include imported or called modules, adjacent API contracts,
+directly relevant tests, directly relevant configuration, and directly relevant
+documentation. It must not automatically include unrelated repository areas.
+
+Apply this boundary consistently to discovery commands, files read, findings, report
+sections, readiness conclusions, and recommended actions. Do not perform a
+repository-wide scan, produce an overall operational-reliability-readiness verdict, or
+populate unrelated report sections. When no focus is supplied, the broader default
+failure-mode review may remain.
 
 ## Step 1. Read minimal project context
 
-Read:
-
-* `AGENTS.md`
-* `README.md`
-* `structure.md`
+Always read `AGENTS.md`. For an unscoped review, also read `README.md` and
+`structure.md`. For a focused review, read those documents only when they contain a
+directly relevant failure-semantics claim.
 
 Run:
 
@@ -198,15 +176,14 @@ Run:
 git status --short
 ```
 
-Use the authoritative date from Step 0 for the report filename and body; do not use any other date source.
-
-Then inspect only failure-mode-relevant files.
+Then inspect only files permitted by the focus boundary.
 
 Prefer targeted reads over broad file reading.
 
 ## Step 2. Inspect failure-mode-relevant areas
 
-Inspect these areas as needed.
+Inspect these areas only when allowed by the focus boundary. For an unscoped review,
+consider them as needed; do not read every listed area mechanically.
 
 ### Runtime and configuration
 
@@ -250,7 +227,7 @@ Inspect contract failure boundaries between `server/schemas.py` and
 development proxy, and FastAPI's optional `frontend/dist` mount. Do not inspect
 generated `frontend/dist/` contents.
 
-### Eval and tests
+### Eval and regression evidence
 
 * `evals/run_eval.py`
 * `evals/questions.jsonl`
@@ -264,17 +241,22 @@ generated `frontend/dist/` contents.
 * `frontend/src/**/*.test.ts`
 * `frontend/src/**/*.test.tsx`
 
-Inspect `tests/chains/` only if needed to assess failure-related test coverage.
+Use tests only as regression evidence for critical failure guarantees. The Skill may
+report that a guarantee lacks evidence, but it must not construct a complete test
+inventory, prescribe detailed test placement, or assess suite completeness. Inspect
+`tests/chains/` only when the user explicitly places it in scope.
 
 Do not run `tests/chains/`.
 
 ### Tooling and CI
 
 * `pyproject.toml`
-* Discover CI workflow files under `.github/workflows/` using `*.yml` and `*.yaml`;
-  inspect every match (the current workflow is `.github/workflows/ci.yml`).
+* Discover relevant CI workflows only through `.github/workflows/*.yml` and
+  `.github/workflows/*.yaml`; do not assume one filename is authoritative.
 * `.gitignore`
-* `.agents/skills/`
+
+Do not inspect `.agents/skills/**` by default. Inspect it only when Skill files are
+explicitly in focus or are part of the reviewed change.
 
 Do not inspect `.env`.
 
@@ -298,6 +280,8 @@ Evaluate the following areas.
 * Are query rewriter failures handled?
 * Are trace-write failures handled?
 * Are eval/reporting failures isolated from runtime behavior?
+* Are timeout, cancellation, partial-success, cleanup, concurrency, and persistence
+  failures handled?
 * Does the system degrade safely instead of crashing where appropriate?
 
 ### Stop reason correctness
@@ -321,6 +305,15 @@ Evaluate the following areas.
 * Are max retry terminal paths clear?
 * Are retry counters incremented consistently?
 * Does retry feedback change the next generation attempt meaningfully?
+
+### Timeout, cancellation, cleanup, and recovery
+
+* Are timeouts explicit, bounded, and classified accurately?
+* Does cancellation stop work cooperatively and release locks or shared state?
+* Do partial-success paths preserve useful results without claiming complete success?
+* Are state cleanup, retryability, and recovery ownership explicit?
+* Can concurrency or persistence failures corrupt unrelated runs or leave the service
+  unavailable?
 
 ### Cost and budget controls
 
@@ -371,41 +364,34 @@ Evaluate the following areas.
 
 ### Privacy and security-related failure behavior
 
+Review privacy and security only when caused by a failure mode.
+
 * If user input contains secrets, are they redacted before failure paths can log or persist them?
 * If web search is disabled, is the privacy guarantee preserved under all failure paths?
 * If a tool fails, can raw user input, raw documents, or secrets leak through logs/traces?
 * Are trace and observability failures safe?
 * Are exception messages intentionally limited?
 
-### Production readiness
+General security posture belongs to `security-review`.
+
+### Operational reliability readiness
 
 * Is the project safe to continue building on without accumulating fragile failure paths?
-* Are failure behaviors documented clearly enough?
 * Are operational counters sufficient for debugging?
-* Are CI checks enough to prevent regressions in failure handling?
-* Do CI and local workflows cover server failure tests plus frontend type checking,
-  Vitest, and the Vite production build?
-* Are generated artifacts and runtime outputs controlled?
-* Is the system robust enough to demonstrate to a senior engineer?
-* Are production-like risks acknowledged while being explicit that the project is not fully production-hardened?
+* Are failure behavior, cleanup, recovery, retryability, and degraded operation bounded
+  and honest?
+* Are operational risks explicit without making a repository-wide architecture or
+  security judgment?
 
-### Failure-related test coverage
+### Regression evidence for critical failure guarantees
 
-* Are mocked node tests covering failure paths?
-* Are graph tests covering terminal notice paths?
-* Are eval tests covering stop_reason and fallback behavior?
-* Are budget-exhausted paths tested?
-* Are privacy-mode failure paths tested?
-* Are web search failure paths tested?
-* Are generation failure paths tested?
-* Are retriever failure paths tested?
-* Are grader failure paths tested?
-* Are trace-write failure paths tested?
-* Do `tests/server/` cover preflight, endpoint error mapping, concurrency, cancellation,
-  run-history, status, document, and static-mount failure behavior?
-* Do frontend tests cover client timeout/network failures and user-visible degraded
-  states without requiring a live backend?
-* Are there missing regression tests for recent failure-handling changes?
+When directly relevant, determine whether a critical failure guarantee has regression
+evidence. Report absent evidence as a reliability risk modifier, but leave detailed
+test placement, suite completeness, and coverage mapping to `test-coverage-review`.
+
+Documentation checks are limited to directly relevant claims about retries, budgets,
+timeouts, cancellation, fallback, degraded behavior, `stop_reason`, and failure
+semantics. Do not perform a broad documentation-drift audit.
 
 ## Step 4. Look for risks and improvement opportunities
 
@@ -427,9 +413,9 @@ Flag:
 * cancellation or request-lock paths that leave the server unavailable
 * frontend failures that collapse distinct backend states into misleading UI
 * server/frontend contract drift that produces unhandled or silent failures
-* tests that only cover happy paths
-* production-readiness gaps that could cause fragile behavior
-* documentation that overstates reliability
+* a critical failure guarantee without regression evidence
+* operational reliability gaps that could cause fragile behavior
+* directly relevant documentation that overstates failure handling or recovery
 
 Do not rewrite the architecture.
 
@@ -439,207 +425,47 @@ Only review and recommend.
 
 ## Step 5. Write failure-mode review report
 
-Create the directory if needed:
+Immediately before the first report write, run this command exactly once:
 
-`docs/roadmap/failure-modes-review/`
+    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
 
-Create a new unique report file using the filename rule above.
+Treat the returned timestamp as the only authoritative current local time. Reuse its
+`YYYY-MM-DD` portion in the filename and report body. Never infer or copy the date from
+model knowledge, conversation history, Git history, existing reports, or filenames. If
+the command fails, stop and do not write a report with a guessed date.
 
-Do not overwrite an existing failure-mode review report.
+Create `docs/roadmap/failure-modes-review/` if needed, then create only the selected
+unique report using the filename rule above. Do not overwrite an existing report.
 
-Use this structure:
+### Conditional report structure
 
-# Failure Modes Review
+Include report metadata: title `Failure Modes Review`, status `Review`, verified date,
+requested focus or `Overall failure modes`, and selected report path.
 
-Status: Review
+Always retain this compact core:
 
-Date: <YYYY-MM-DD>
+1. **Review summary** — give a scope-specific conclusion. Include an operational-
+   reliability-readiness verdict only for an unscoped overall review.
+2. **Scope reviewed** — state the requested boundary, included dependencies, and
+   explicit exclusions.
+3. **Evidence inspected** — list exact files, directories, and repository commands.
+4. **Findings** — for each finding give evidence, reliability consequence, risk,
+   recommended action, and timing; state clearly when no material issue was confirmed.
+5. **Recommendations or priority** — Must fix / Should fix soon / Optional, using only
+   findings inside scope.
+6. **Limitations / not reviewed** — omit unrelated domains or state briefly:
+   `Not reviewed because it was outside the requested scope.`
+7. **Validation or commands run** — list commands actually run and prohibited
+   validation that did not run.
 
-Focus: <user input or "Overall failure modes">
-
-Report file: <selected unique report path>
-
-## 1. Executive summary
-
-State whether the failure-handling posture is:
-
-* Strong / production-oriented
-* Good but needs minor cleanup
-* Needs significant improvement
-
-Give a short explanation.
-
-## 2. Files reviewed
-
-List the files and directories reviewed.
-
-## 3. Failure-mode map
-
-Briefly describe the current system failure boundaries:
-
-* User input boundary
-* FastAPI request, response, concurrency, and cancellation boundary
-* Frontend API client and user-visible degraded-mode boundary
-* Server/frontend schema and static-serving boundary
-* Graph routing boundary
-* Local retrieval boundary
-* Document grading boundary
-* Generation boundary
-* Hallucination/usefulness grading boundary
-* Web search boundary
-* Query rewrite boundary
-* Budget boundary
-* Trace/observability boundary
-* Eval/test boundary
-
-## 4. What is strong
-
-List the strongest failure-handling, budget-control, and degraded-mode choices.
-
-## 5. Main issues found
-
-For each issue include:
-
-* Issue
-* Why it matters
-* Risk level: Low / Medium / High
-* Recommended fix
-* Whether it should be done now or later
-
-## 6. Stop reason review
-
-Assess:
-
-* stop_reason coverage
-* terminal notice nodes
-* stale stop_reason cleanup
-* formatting behavior
-* eval/test stability
-* whether stop_reason semantics are consistent enough for future automation
-
-## 7. Retry and loop review
-
-Assess:
-
-* graph cycles
-* max retry behavior
-* retry counters
-* grounding retry behavior
-* usefulness retry behavior
-* query rewriting retry behavior
-* whether any path could loop indefinitely
-
-## 8. Cost and budget review
-
-Assess:
-
-* LLM call budgets
-* web search budgets
-* web result grading budgets
-* config defaults
-* invalid environment handling
-* budget-exhausted behavior
-* tracked counter accuracy
-* whether expensive paths are bounded
-
-## 9. External dependency failure review
-
-Assess:
-
-* LLM failure handling
-* retriever/vector-store failure handling
-* web search failure handling
-* grader failure handling
-* query rewriter failure handling
-* trace write failure handling
-* exception logging safety
-
-## 10. Web fallback and degraded-mode review
-
-Assess:
-
-* conservative fallback
-* aggressive fallback if present
-* disabled fallback
-* privacy-mode interaction
-* local document preservation
-* insufficient-context behavior
-* failed web search behavior
-* unverified web result exclusion
-
-## 11. Production readiness review
-
-Assess:
-
-* operational robustness
-* CI safety
-* import-time side effects
-* generated artifact hygiene
-* observability usefulness
-* documentation accuracy
-* whether failure-handling gaps should be fixed before adding more features
-
-## 12. Failure-related test coverage review
-
-Assess:
-
-* node failure tests
-* graph terminal-path tests
-* eval stop_reason tests
-* budget tests
-* privacy-mode tests
-* web-search-failure tests
-* generation-failure tests
-* retriever-failure tests
-* grader-failure tests
-* trace-write-failure tests
-* server preflight, endpoint, concurrency, cancellation, history, and static-mount
-  failure tests
-* frontend client and degraded-state tests
-* frontend/backend failure-contract coverage
-* missing tests
-* risky tests
-
-## 13. Documentation and workflow review
-
-Assess:
-
-* README
-* structure.md
-* AGENTS.md
-* eval docs
-* Codex Skills
-* whether failure behavior, budgets, and degraded modes are documented clearly
-
-## 14. Recommended next actions
-
-Separate recommendations into:
-
-### Must fix
-
-### Should fix soon
-
-### Optional improvements
-
-## 15. Failure-readiness verdict
-
-Give one of:
-
-* Failure-ready / production-oriented
-* Failure-ready after minor cleanup
-* Not failure-ready yet
-
-Explain why.
-
-## 16. Overall recommendation
-
-Do not restate the executive summary or the failure-readiness verdict here.
-
-Instead, give a short, action-oriented recommendation that answers:
-
-* Is the failure-handling posture safe to continue building on?
-* Is cleanup needed before adding more features?
-* What is the single next recommended action?
+Add domain-specific sections—such as retries, timeouts, cancellation, budgets, loop
+termination, fallback, degraded modes, provider failures, partial success, cleanup,
+concurrency, persistence, `stop_reason`, error classification, recovery, operational
+observability, directly relevant failure-semantics documentation, or regression
+evidence for a critical guarantee—only when relevant to the requested focus and
+evidence actually inspected. Do not produce a full test-coverage, security,
+architecture, or documentation section, and do not expand the scan merely to avoid
+writing `Not reviewed`.
 
 ## Step 6. Final response
 
@@ -647,7 +473,7 @@ After writing the report, respond with:
 
 Failure-mode review report: `<selected unique report path>`
 
-Overall recommendation: `<overall recommendation>`
+Scope conclusion: `<scope-specific conclusion>`
 
 Top issues:
 
@@ -655,4 +481,5 @@ Top issues:
 * <issue 2>
 * <issue 3>
 
-Do not repeat the full report in chat unless the user explicitly asks.
+Do not repeat the full report in chat unless the user explicitly asks. For a focused
+review, do not present the conclusion as a repository-wide readiness verdict.

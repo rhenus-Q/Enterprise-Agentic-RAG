@@ -58,8 +58,10 @@ Optional scope supplied by the user:
     the user's skill input
 
 When `the user's skill input` is empty, review the full repository. When it names a file,
-directory, module, or drift category, narrow the review to that scope while still
-inspecting enough repository evidence to validate the claims within it.
+directory, module, or drift category, treat that scope as a hard review boundary.
+Inspect only the documentation target and the minimum code, configuration, test,
+command, or CI evidence needed to validate claims within it. Do not review unrelated
+implementation areas or draw conclusions about their correctness.
 
 ---
 
@@ -81,8 +83,10 @@ repeated elsewhere.
   provider-backed ingestion.
 - Do not make external network or provider calls (OpenAI, Tavily, Chroma,
   LangSmith, or any other). Do not access external URLs.
-- Never scan `.agents/skills/**` or local `docs/roadmap/**` artifacts (see
-  "Scope and exclusions"). The three tracked `docs/roadmap/` workflow files
+- Do not scan `.agents/skills/**` by default. Inspect it only when the user explicitly
+  requests documentation-drift review of Skill files. Never scan local
+  `docs/roadmap/**` artifacts (see "Scope and exclusions"). The three tracked
+  `docs/roadmap/` workflow files
   (`docs/roadmap/README.md`, `docs/roadmap/spec/spec-template.md`, and
   `docs/roadmap/implementation/implementation-template.md`) are the sole
   exception: they are version-controlled active documentation and **are**
@@ -100,8 +104,8 @@ source/config files**. The current working tree is the documentation reality bei
 checked — including intentional uncommitted changes. Do not treat an uncommitted
 path as stale merely because it differs from `HEAD`.
 
-Build **two** inventories from files tracked by Git, both excluding
-`.agents/skills/**` and all local `docs/roadmap/**` artifacts (specs, plans,
+Build **two** inventories from files tracked by Git, excluding `.agents/skills/**` by
+default and always excluding local `docs/roadmap/**` artifacts (specs, plans,
 implementation reports, and review artifacts) — **except** the three tracked
 `docs/roadmap/` workflow files, which are active documentation and are audited.
 
@@ -118,20 +122,21 @@ tracked workflow files, and returns each only while it is tracked):
       "docs/roadmap/spec/spec-template.md" \
       "docs/roadmap/implementation/implementation-template.md"
 
+If the user explicitly requests Skill documentation review, build a separate tracked
+inventory limited to the named `.agents/skills/<skill>/` scope instead of removing the
+default exclusion globally. Keep unrelated Skills excluded.
+
 Embedded-prose source/config inventory:
 
     git ls-files \
-      "graph/**/*.py" \
-      "server/*.py" \
-      "server/**/*.py" \
+      ":(glob)graph/**/*.py" \
+      ":(glob)server/**/*.py" \
       "main.py" \
       "ingestion.py" \
-      "evals/**/*.py" \
-      "tests/**/*.py" \
-      "frontend/src/*.ts" \
-      "frontend/src/*.tsx" \
-      "frontend/src/**/*.ts" \
-      "frontend/src/**/*.tsx" \
+      ":(glob)evals/**/*.py" \
+      ":(glob)tests/**/*.py" \
+      ":(glob)frontend/src/**/*.ts" \
+      ":(glob)frontend/src/**/*.tsx" \
       "frontend/package.json" \
       "frontend/vite.config.ts" \
       "frontend/tsconfig.json" \
@@ -156,11 +161,11 @@ prose-drift surfaces — they often summarize the
 package's capabilities, version status, and architecture, and drift silently when the
 code around them evolves.
 
-**Excluded audit input (never scanned):**
+**Default excluded audit input:**
 
 | Path | Why excluded |
 |---|---|
-| `.agents/skills/**` | Command definitions, including this file — not project documentation. |
+| `.agents/skills/**` | Command definitions, including this file — excluded unless the user explicitly requests Skill documentation review. |
 | `docs/roadmap/**` local artifacts | Temporary plans, local review artifacts, and process documents — not active documentation. Includes this Skill's own report directory. **Excludes the three tracked workflow files below, which are audited.** |
 
 **Audited despite living under `docs/roadmap/` (tracked active documentation):**
@@ -406,9 +411,9 @@ Write the detailed report using this structure:
 
     ## Report metadata
     Timestamp; requested scope; report path; repository root; Markdown and
-    embedded-prose discovery rules; exclusions (`.agents/skills/**` and local
-    `docs/roadmap/**` artifacts, noting the three tracked roadmap workflow files
-    are audited as active documentation); Markdown files discovered; Markdown
+    embedded-prose discovery rules; exclusions (`.agents/skills/**` unless explicitly
+    requested, and local `docs/roadmap/**` artifacts, noting the three tracked roadmap
+    workflow files are audited as active documentation); Markdown files discovered; Markdown
     files reviewed;
     embedded-prose source/config files discovered; embedded-prose source/config
     files reviewed, split into **read in depth** vs. **search-triaged** (located but
@@ -466,8 +471,9 @@ Write the detailed report using this structure:
     ## Final verdict
     Overall drift risk; any blocking item; whether a repair pass is recommended;
     whether active documentation is trustworthy for onboarding/maintenance; and
-    confirmations that this was review-only, that `.agents/skills/**` and local
-    `docs/roadmap/**` artifacts were excluded (the three tracked roadmap workflow
+    confirmations that this was review-only, that `.agents/skills/**` was excluded
+    unless explicitly requested and local `docs/roadmap/**` artifacts were excluded
+    (the three tracked roadmap workflow
     files audited as active documentation), that no existing file was modified,
     that no repair was applied, and that no external calls, real-model tests, or
     full evals ran.
@@ -476,30 +482,13 @@ Cite evidence for every confirmed finding; do not quote long passages.
 
 ### Chat summary
 
-Keep the chat response concise — do not paste the full report or long evidence
-excerpts unless the user asks. Use this structure:
-
-    # Documentation Drift Review — Summary
-
-    - **Scope:** ...
-    - **Markdown files scanned:** N
-    - **Embedded-prose source/config files scanned:** N
-    - **Confirmed drift:** N
-    - **Possible drift:** N
-    - **Broken links / stale commands:** N
-    - **Blocking findings:** yes / no
-    - **Detailed report:** `docs/roadmap/docs-drift-review/<YYYY-MM-DD>-<focus-slug>-docs-drift-review.md`
-
-    ## Highest-priority findings
-    Up to five, as `[SEVERITY] path/to/file.md — short explanation`. If none:
-    "No material documentation drift was confirmed."
-
-    ## Verdict
-    Active documentation is broadly healthy / moderately drifted / significantly
-    drifted. Confirm in one paragraph: no repair applied; no existing file
-    modified; only the new report created; `.agents/skills/**` and local
-    `docs/roadmap/**` artifacts excluded (three tracked roadmap workflow files
-    audited); no external calls, real-model tests, or full evals run.
+Keep the chat response concise. State the scope, reviewed Markdown and embedded-prose
+counts, confirmed and possible drift counts, blocking status, detailed report path, up
+to five highest-priority findings, and the overall documentation-trust verdict. If no
+material drift was confirmed, say so directly. Confirm that no repair or existing-file
+modification occurred, only the report was created, exclusions were honored, and no
+external calls, real-model tests, or full evals ran. Do not paste the full report or
+long evidence excerpts unless the user asks.
 
 ---
 
@@ -508,15 +497,16 @@ excerpts unless the user asks. Use this structure:
 1. Read `AGENTS.md`. Run `git status --short` and record the initial working-tree
    state.
 2. Build both inventories — the tracked-Markdown inventory and the tracked
-   source/config embedded-prose inventory — excluding `.agents/skills/**` and
-   local `docs/roadmap/**` artifacts, but additively including the three tracked
+   source/config embedded-prose inventory — excluding `.agents/skills/**` unless it
+   is the explicit scope and always excluding local `docs/roadmap/**` artifacts, but
+   additively including the three tracked
    roadmap workflow files in the Markdown inventory as active documentation. Apply
    `the user's skill input` scope when provided.
 3. Classify reviewed documents and prose (active / historical ADR / release /
    generated / embedded documentation prose).
-4. Inspect current repository structure, config, CI, tests, evals, entry points,
-   relevant implementation, and the server/frontend schema, route, client, proxy,
-   and static-serving boundaries.
+4. Within the hard scope boundary, inspect only enough current repository structure,
+   config, CI, tests, evals, entry points, implementation, and server/frontend contract
+   evidence to verify the documentation claims under review.
 5. Search Markdown and embedded documentation prose for high-risk claims: paths,
    shell commands, capability counts, model names, feature flags, env variables,
    version labels, test totals, and words like "current", "latest", "complete",

@@ -1,4 +1,4 @@
 interface:
   display_name: "Architecture Review"
-  short_description: "Audit architecture and write a structured report"
-  default_prompt: "Use $arch-review to audit this repository architecture and write a report."
+  short_description: "Audit structure and architectural readiness"
+  default_prompt: "Use $arch-review to audit structure and architectural readiness within the requested scope."

@@ -1,6 +1,6 @@
 ---
 name: test-coverage-review
-description: Review test coverage across nodes, routing, chains, engine, server APIs, frontend behavior, frontend/backend contracts, configuration, budgets, security, privacy, evals, and CI, then write a timestamped report. Use for broad or focused coverage-gap audits; do not add tests or modify code.
+description: Review test evidence, coverage gaps, test-layer placement, and CI execution across nodes, routing, chains, engine, server APIs, frontend behavior, frontend/backend contracts, configuration, failure modes, security, privacy, and evals, then write a timestamped report. Use for broad or focused coverage-gap audits; do not judge implementation correctness, add tests, or modify code.
 ---
 
 # Test Coverage Review
@@ -10,6 +10,9 @@ description: Review test coverage across nodes, routing, chains, engine, server 
 - Treat the user's request that triggered or explicitly invoked this Skill as the input.
 - Resolve an omitted focus or path from unambiguous repository context only.
 - Ask one concise question when a required input cannot be inferred safely.
+- Treat any user-provided focus, scope, path, component, layer, or named concern as a
+  hard review boundary. Inspect only that target and the minimum directly dependent
+  evidence needed to map its test evidence; do not expand into a repository-wide review.
 
 ## Required procedure
 

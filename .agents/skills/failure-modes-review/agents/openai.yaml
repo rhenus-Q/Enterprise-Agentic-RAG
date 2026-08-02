@@ -1,4 +1,4 @@
 interface:
   display_name: "Failure Modes Review"
-  short_description: "Audit reliability, budgets, and failure handling"
-  default_prompt: "Use $failure-modes-review to audit failure handling and production readiness."
+  short_description: "Audit failure handling and operational reliability"
+  default_prompt: "Use $failure-modes-review to audit failure handling and operational reliability readiness within the requested scope."

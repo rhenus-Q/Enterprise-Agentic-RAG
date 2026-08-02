@@ -1,4 +1,4 @@
 interface:
   display_name: "Test Coverage Review"
-  short_description: "Audit test coverage and identify meaningful gaps"
-  default_prompt: "Use $test-coverage-review to audit this repository test coverage and write a report."
+  short_description: "Audit test evidence, coverage gaps, and CI execution"
+  default_prompt: "Use $test-coverage-review to audit test evidence and CI execution within the requested scope."
