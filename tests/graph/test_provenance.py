@@ -269,9 +269,7 @@ def _patch_seams(monkeypatch, retrieved_docs, web_results=None):
 
     class FakeWebTool:
         def search(self, query, *, max_results, timeout):
-            web_calls.append(
-                {"query": query, "max_results": max_results, "timeout": timeout}
-            )
+            web_calls.append({"query": query, "max_results": max_results, "timeout": timeout})
             return web_results if web_results is not None else [{"content": "web result"}]
 
     monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())
@@ -348,9 +346,7 @@ def test_app_web_routed_answer_cites_the_search(monkeypatch):
     assert formatted.startswith("FINAL ANSWER")
     assert '- Web search: "current events"' in formatted
     assert "Local corpus" not in formatted
-    assert web_calls == [
-        {"query": "current events", "max_results": 3, "timeout": 30.0}
-    ]
+    assert web_calls == [{"query": "current events", "max_results": 3, "timeout": 30.0}]
     assert result["stop_reason"] == ""
 
 
@@ -383,9 +379,7 @@ def test_app_web_routed_answer_cites_actual_pages_when_urls_present(monkeypatch)
     assert "- Web search: Big Story — https://news.example/story" in formatted
     assert '"current events"' not in formatted  # page-level beats query-level
     assert "Local corpus" not in formatted
-    assert web_calls == [
-        {"query": "current events", "max_results": 3, "timeout": 30.0}
-    ]
+    assert web_calls == [{"query": "current events", "max_results": 3, "timeout": 30.0}]
     assert result["stop_reason"] == ""
 
 

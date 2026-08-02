@@ -404,9 +404,7 @@ def test_web_search_query_is_redacted_without_changing_policy(monkeypatch):
 
     class FakeWebTool:
         def search(self, query, *, max_results, timeout):
-            web_calls.append(
-                {"query": query, "max_results": max_results, "timeout": timeout}
-            )
+            web_calls.append({"query": query, "max_results": max_results, "timeout": timeout})
             return [{"content": "web result"}]
 
     monkeypatch.setattr(
@@ -488,9 +486,7 @@ def _patch_node_seams(monkeypatch):
 
     class FakeWebTool:
         def search(self, query, *, max_results, timeout):
-            web_calls.append(
-                {"query": query, "max_results": max_results, "timeout": timeout}
-            )
+            web_calls.append({"query": query, "max_results": max_results, "timeout": timeout})
             return [{"content": "web result"}]
 
     monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())

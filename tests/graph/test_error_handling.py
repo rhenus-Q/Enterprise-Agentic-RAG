@@ -174,9 +174,7 @@ def _patch_all_node_seams(
 
     class FakeWebTool:
         def search(self, query, *, max_results, timeout):
-            web_calls.append(
-                {"query": query, "max_results": max_results, "timeout": timeout}
-            )
+            web_calls.append({"query": query, "max_results": max_results, "timeout": timeout})
             if web_tool_raises:
                 raise TimeoutError("tavily timed out")
             return [{"content": "web result"}]
@@ -423,9 +421,7 @@ def test_app_successful_web_answer_clears_transient_grading_tool_error(monkeypat
 
     class FakeWebTool:
         def search(self, query, *, max_results, timeout):
-            web_calls.append(
-                {"query": query, "max_results": max_results, "timeout": timeout}
-            )
+            web_calls.append({"query": query, "max_results": max_results, "timeout": timeout})
             return [{"content": "boom"}, {"content": "good"}]
 
     monkeypatch.setattr(web_module, "get_web_search_tool", lambda: FakeWebTool())
