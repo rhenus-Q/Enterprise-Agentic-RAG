@@ -690,8 +690,14 @@ Things worth knowing before pointing anything real at it:
 * **A `stop_reason` is never an HTTP error.** Degraded runs return 200 with the
   same honest caveat the CLI prints. Errors are reserved for HTTP-layer
   problems (422 / 409 / 503 / 500, plus 499 for a cancelled run).
-* **Run history is in-memory, bounded (50), and metadata-only** — no answer
-  text, snippets, or `page_content`, and it is lost on restart. Run uvicorn
+* **Run history is stored in server memory, bounded to 50 records, and cleared
+  when the server restarts.** It does not store answer text, document snippets,
+  prompts, document bodies
+  (`page_content`), or raw graph state. It does store a redacted question
+  preview (`question_redacted`) and a SHA-256 hash of the original question
+  (`question_sha256`). It is metadata-only with respect to answers and document
+  content, but it is not anonymous: treat it as user data, and do not share or
+  persist it without considering the privacy of the questions. Run uvicorn
   single-process; a multi-worker deployment would split the history.
 * **Responses are sanitized**: no endpoint URLs or hostnames (including
   `OLLAMA_BASE_URL`), no absolute paths, no raw exception messages — a failed
