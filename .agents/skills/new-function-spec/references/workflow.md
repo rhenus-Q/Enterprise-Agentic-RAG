@@ -211,7 +211,7 @@ Do not silently overwrite an existing function spec.
 Before writing the spec, determine the authoritative date and time by running
 this command exactly once:
 
-    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
+    date "+%Y-%m-%d %H:%M:%S %z"
 
 Treat the returned timestamp as the only authoritative current local time, and
 use its `YYYY-MM-DD` portion for the `Date:` field in the document header below.

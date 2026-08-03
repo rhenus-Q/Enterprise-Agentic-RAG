@@ -427,7 +427,7 @@ Only review and recommend.
 
 Immediately before the first report write, run this command exactly once:
 
-    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
+    date "+%Y-%m-%d %H:%M:%S %z"
 
 Treat the returned timestamp as the only authoritative current local time. Reuse its
 `YYYY-MM-DD` portion in the filename and report body. Never infer or copy the date from

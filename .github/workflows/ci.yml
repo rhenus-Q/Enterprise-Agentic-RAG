@@ -26,6 +26,11 @@ on:
   push:
   pull_request:
 
+# Least privilege: every job only reads the checked-out source. No job publishes
+# packages, writes commits, or comments on pull requests.
+permissions:
+  contents: read
+
 jobs:
   mocked-tests:
     runs-on: ubuntu-latest

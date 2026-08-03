@@ -1,7 +1,7 @@
 ---
 description: Create an implementation-ready function spec from a short feature description
 argument-hint: Short feature description
-allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(powershell.exe -NoProfile -Command "Get-Date:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
+allowed-tools: Read, Write, Glob, Grep, Bash(git status:*), Bash(date:*), mcp__docs-langchain__search_docs_by_lang_chain, mcp__docs-langchain__query_docs_filesystem_docs_by_lang_chain
 ---
 
 You are creating a single implementation-ready **function spec** for this Agentic RAG project.
@@ -197,7 +197,7 @@ Do not silently overwrite an existing function spec.
 Before writing the spec, determine the authoritative date and time by running
 this command exactly once:
 
-    powershell.exe -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'"
+    date "+%Y-%m-%d %H:%M:%S %z"
 
 Treat the returned timestamp as the only authoritative current local time, and
 use its `YYYY-MM-DD` portion for the `Date:` field in the document header below.
