@@ -1,14 +1,14 @@
 # Agentic RAG Assistant for Enterprise Document Q&A
 
 [![CI](https://github.com/rhenus-Q/Enterprise-Agentic-RAG/actions/workflows/ci.yml/badge.svg)](https://github.com/rhenus-Q/Enterprise-Agentic-RAG/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 
 **A self-correcting, enterprise-style document Q&A assistant built with LangGraph (CRAG pattern).**
 
-## Overview
+**Evaluating this project:** [Product Tour](#product-tour) · [Overview](#overview) · [Key Features](#key-features) · [Engineering Highlights](#engineering-highlights) · [Architecture](#architecture) · [AI workflow](#ai-assisted-development)
 
-This project implements an internal-document Q&A assistant as an **agentic RAG workflow**: instead of a single retrieve-then-generate pass, the system routes each question to the best data source, grades the relevance of every retrieved document, checks each generated answer for hallucinations and usefulness, and automatically falls back to web search or regenerates when a quality gate fails. The graph is a LangGraph `StateGraph` with explicit conditional edges, a bounded retry loop, and three independent LLM quality gates — a practical implementation of the **Corrective RAG (CRAG)** pattern.
-
-The knowledge base is a **synthetic enterprise corpus**: six fictional AcmeCorp internal documents (VPN access policy, expense reimbursement policy, security incident response playbook, on-call & escalation policy, data retention policy, employee onboarding guide) under [`data/acmecorp_internal_docs/`](data/acmecorp_internal_docs/). The documents are entirely fictional — no real company data — but written with realistic structure (effective dates, owners, thresholds, SLAs, escalation paths, exceptions), so privacy mode, provenance, and the quality gates operate on enterprise-shaped content rather than tutorial pages.
+**Running it:** [Setup](#setup) · [Ingestion](#build-the-knowledge-base-ingestion) · [CLI](#run-the-assistant) · [Web app](#web-application-api--ui) · [Tests](#run-the-tests) · [Evals](#behavioral-evals) · [ADRs](#architecture-decision-records)
 
 ## Product Tour
 
@@ -54,6 +54,12 @@ and validates the stored embedding provider and model before retrieval.
 
 ![Ollama document index health and embedding compatibility](docs/assets/screenshots/ollama/ollama-index-health.png)
 
+## Overview
+
+This project implements an internal-document Q&A assistant as an **agentic RAG workflow**: instead of a single retrieve-then-generate pass, the system routes each question to the best data source, grades the relevance of every retrieved document, checks each generated answer for hallucinations and usefulness, and automatically falls back to web search or regenerates when a quality gate fails. The graph is a LangGraph `StateGraph` with explicit conditional edges, a bounded retry loop, and three independent LLM quality gates — a practical implementation of the **Corrective RAG (CRAG)** pattern.
+
+The knowledge base is a **synthetic enterprise corpus**: six fictional AcmeCorp internal documents (VPN access policy, expense reimbursement policy, security incident response playbook, on-call & escalation policy, data retention policy, employee onboarding guide) under [`data/acmecorp_internal_docs/`](data/acmecorp_internal_docs/). The documents are entirely fictional — no real company data — but written with realistic structure (effective dates, owners, thresholds, SLAs, escalation paths, exceptions), so privacy mode, provenance, and the quality gates operate on enterprise-shaped content rather than tutorial pages.
+
 ## Key Features
 
 * **Question routing** — an LLM router sends knowledge-base questions to vector retrieval and out-of-scope questions straight to web search.
@@ -71,6 +77,22 @@ and validates the stored embedding provider and model before retrieval.
 * **Answer provenance** — every answer built from documents ends with a deterministic `Sources:` section distinguishing local corpus documents (by title or URL) from the web-search supplement. Web provenance is **page-level**: each relevant result's title and URL are preserved and cited (`Web search: <title> — <url>`), falling back to the query-level citation when Tavily returns no URLs. Formatting is metadata-only after the graph finishes — no LLM-generated citations, no prompt changes, no document content exposed.
 * **Side-effect-free imports** — external clients and model objects are constructed lazily, with process-level caching only where lifetime reuse is intentional. Importing any module requires no API keys and no network, which makes the graph testable with plain `monkeypatch`.
 * **Layered test suite** — keys-free Python and frontend tests run in CI, while the separately collected chain integration suite calls the real model only when explicitly requested.
+
+## Engineering Highlights
+
+This project implements several engineering patterns for production-oriented LLM applications:
+
+* **Agentic RAG workflow design** — a CRAG-style LangGraph workflow with conditional routing, document relevance grading, answer grounding checks, usefulness checks, and bounded self-correction loops.
+
+* **Controlled dependency boundaries** — external clients such as OpenAI, Chroma, and Tavily are constructed behind lazy factories, with caching only where reuse is intentional, keeping imports side-effect-free and making the graph testable without API keys, network access, or runtime cost.
+
+* **Deterministic orchestration testing** — the orchestration layer is covered by fast, fully mocked unit tests, while prompt and model behavior are isolated in clearly labeled integration tests that require explicit API access.
+
+* **Structured LLM outputs for control flow** — Pydantic schemas such as `RouteQuery`, `RetrievalGrade`, `GradeHallucination`, and `GradeAnswer` convert model judgments into typed routing decisions instead of relying on free-text parsing.
+
+* **Explicit reliability boundaries** — privacy mode, retry limits, budget caps, graceful degradation, `stop_reason` values, and deterministic source formatting make failure modes visible instead of silently presenting unverified answers as successful.
+
+* **Decisions and rules kept under version control** — 17 [ADRs](docs/adr/README.md) record the context and rejected alternatives behind each major decision, while the invariants that matter most are enforced as tests rather than prose: importing the project constructs no external client and needs no API keys, and the web layer's import boundary is asserted, not just documented. See [AI-assisted development](#ai-assisted-development).
 
 ## Architecture
 
@@ -841,6 +863,20 @@ accepted, and the alternatives deliberately not chosen. Start with the
 
 This split is enabled by the lazy-factory pattern: because no client is constructed at import time, every external dependency has a clean, patchable seam.
 
+## AI-assisted development
+
+This project was built with two AI coding agents — [Codex](https://openai.com/codex/) and [Claude Code](https://claude.com/claude-code) — against a spec-driven workflow that is itself committed to this repository. Architectural decisions and reviews were made by a human; the agents worked inside explicit, version-controlled rules.
+
+The workflow exists twice on purpose. Each platform auto-loads its own rules file ([`AGENTS.md`](AGENTS.md) for Codex, [`CLAUDE.md`](CLAUDE.md) for Claude Code) and expresses commands in its own format, so the same taxonomy is implemented as 13 [Claude Code slash commands](.claude/commands/README.md) and 13 [Codex Skills](.agents/skills/) — ten shared workflows plus three platform-specific mirrors that maintain each platform's own artifacts. In practice Codex was used mainly on the React/TypeScript frontend and Claude Code on the Python graph, server, and audit passes.
+
+Three properties are worth calling out:
+
+* **Rules are executable, not prose.** The invariants that matter most are enforced as tests, so a violation fails CI: importing the project must construct no external client and need no API keys, and the `server/` import boundary is asserted rather than merely documented.
+* **Permissions are narrow.** Every command declares an explicit `allowed-tools` allowlist — no command gets unrestricted `Bash`, and [`.claude/settings.json`](.claude/settings.json) denies reading `.env` outright.
+* **Methods are published; findings are not.** Specs, plans, and review reports are written under `docs/roadmap/` and gitignored. A security-review report is a findings list about this repository's own code; issues that matter are resolved and then recorded in an ADR, a test, or [Current Limitations](#current-limitations).
+
+Full detail: [`docs/ai-workflow.md`](docs/ai-workflow.md).
+
 ## Current Limitations
 
 * **Single-turn** — no conversation memory; each question is independent, in the CLI and in the web app alike.
@@ -858,16 +894,9 @@ This split is enabled by the lazy-factory pattern: because no client is construc
 * Rationale-bearing grounding feedback that identifies unsupported claims.
 * Batched relevance grading.
 
-## Engineering Highlights
+## License
 
-This project implements several engineering patterns for production-oriented LLM applications:
-
-* **Agentic RAG workflow design** — a CRAG-style LangGraph workflow with conditional routing, document relevance grading, answer grounding checks, usefulness checks, and bounded self-correction loops.
-
-* **Controlled dependency boundaries** — external clients such as OpenAI, Chroma, and Tavily are constructed behind lazy factories, with caching only where reuse is intentional, keeping imports side-effect-free and making the graph testable without API keys, network access, or runtime cost.
-
-* **Deterministic orchestration testing** — the orchestration layer is covered by fast, fully mocked unit tests, while prompt and model behavior are isolated in clearly labeled integration tests that require explicit API access.
-
-* **Structured LLM outputs for control flow** — Pydantic schemas such as `RouteQuery`, `RetrievalGrade`, `GradeHallucination`, and `GradeAnswer` convert model judgments into typed routing decisions instead of relying on free-text parsing.
-
-* **Explicit reliability boundaries** — privacy mode, retry limits, budget caps, graceful degradation, `stop_reason` values, and deterministic source formatting make failure modes visible instead of silently presenting unverified answers as successful.
+Released under the [MIT License](LICENSE). The synthetic AcmeCorp corpus under
+[`data/acmecorp_internal_docs/`](data/acmecorp_internal_docs/) is fictional and
+covered by the same license. Security policy and trust boundaries:
+[SECURITY.md](SECURITY.md).
