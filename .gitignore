@@ -89,7 +89,8 @@ traces/
 #local result
 /evals/local-smoke-results.md
 
-#codex
+# ---- Local working notes ----
+# Scratch documents and reference material kept outside version control.
 Doc/
 
 # ---- Node / frontend ----

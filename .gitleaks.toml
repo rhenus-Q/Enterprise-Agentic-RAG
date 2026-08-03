@@ -1,0 +1,45 @@
+title = "Agentic RAG Assistant — gitleaks configuration"
+
+# Scan the full history before publishing or cutting a release:
+#
+#   gitleaks git --log-opts="--all" --verbose
+#
+# Real credentials live in `.env`, which is gitignored; only `.env.example`
+# (placeholders only) is committed. See SECURITY.md for the full secret-handling
+# policy.
+
+[extend]
+useDefault = true
+
+# The engine redacts secret-shaped values out of a question before it reaches
+# run history or trace output (graph/engine.py). The tests for that feature need
+# inputs that genuinely look like credentials, so `tests/graph/test_observability.py`
+# contains deliberately secret-shaped literals — several of which are also
+# asserted *absent* from the redacted output.
+#
+# These are synthetic fixtures, never real credentials. They are allowlisted by
+# exact value AND by path, so an unrelated secret in the same file, or the same
+# literal appearing elsewhere, is still reported.
+[[allowlists]]
+description = "Synthetic secret-shaped fixtures for the engine's redaction tests"
+condition = "AND"
+paths = ['''tests/graph/test_observability\.py''']
+regexes = [
+    '''AbCd1234EfGh5678IjKl''',
+    '''ghp_0123456789abcdefABCDEF''',
+    '''0123456789abcdef''',
+    '''sk-WEBSECRET-123''',
+]
+
+# Vendored dependency trees, so that a working-directory scan (`gitleaks dir .`)
+# reports only this repository's own code. Neither directory is ever committed.
+#
+# `.env` is deliberately NOT allowlisted here. It is gitignored, so it cannot
+# reach history, and a directory scan *should* keep reporting it — that hit is
+# the check working, not a false positive.
+[[allowlists]]
+description = "Vendored dependencies (never committed)"
+paths = [
+    '''^\.venv/''',
+    '''^frontend/node_modules/''',
+]
