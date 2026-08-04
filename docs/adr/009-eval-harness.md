@@ -9,6 +9,14 @@ Date: 2026-06-11
 > metadata-only history/delta tracking — is documented in
 > [ADR 013](013-eval-harness-v2-expansion.md). This ADR is preserved as the
 > original decision and is intentionally not rewritten.
+>
+> One mechanical detail has since changed: the harness no longer builds graph
+> state itself. It calls `graph.engine.answer_question()` with per-row
+> `AnswerOptions` ([ADR 018](018-engine-api.md)), which owns seeding and
+> per-run resolution for every caller. The property this ADR relies on is
+> unchanged — per-row configuration travels through state, never through
+> `.env` — and startup preflight now runs after the `--validate-only` early
+> return, which keeps that path keys-free (ADR 014, ADR 015).
 
 ## Context
 
@@ -34,7 +42,7 @@ A small harness under `evals/`:
   baits, 2 privacy-mode guarantees. Rows carry optional expectations:
   `expected_stop_reason`, `expected_source_type`, `expected_contains`.
 - **`run_eval.py`** — runs each row through the real compiled graph (seeding
-  `web_search_enabled` per row through graph state, exactly as `main.py`
+  `web_search_enabled` per row through graph state, exactly as the CLI
   does — `.env` is never modified), then applies **deterministic checks
   only**: stop-reason match, source-type match from document metadata,
   case-insensitive expected substrings against the formatted answer, an

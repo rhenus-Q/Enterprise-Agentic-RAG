@@ -107,8 +107,11 @@ environment variables for three reasons:
 - **Priority.** `tracing_context` outranks both `ls.configure()` and the
   environment variables, so the guarantee does not depend on which of the
   legacy `LANGCHAIN_*` or current `LANGSMITH_*` names an operator used to
-  enable tracing — a detail the repo's own docs are inconsistent about
-  (`.env.example` documents the legacy names, `README.md` the current ones).
+  enable tracing — the SDK honors both, and an operator's `.env` is not
+  something this repository controls. (At the time of writing the repo's own
+  docs were themselves inconsistent about which family to use; they have
+  since been aligned on the `LANGSMITH_*` names, which does not weaken the
+  argument: the guarantee never depended on that consistency.)
 - **Scope.** It is execution-scoped, not process-global, which preserves the
   per-run privacy resolution this ADR already relies on: the eval harness
   keeps running private and web-enabled rows in the same process, each with

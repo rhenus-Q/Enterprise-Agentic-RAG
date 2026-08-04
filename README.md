@@ -92,7 +92,7 @@ This project implements several engineering patterns for production-oriented LLM
 
 * **Explicit reliability boundaries** — privacy mode, retry limits, budget caps, graceful degradation, `stop_reason` values, and deterministic source formatting make failure modes visible instead of silently presenting unverified answers as successful.
 
-* **Decisions and rules kept under version control** — 17 [ADRs](docs/adr/README.md) record the context and rejected alternatives behind each major decision, while the invariants that matter most are enforced as tests rather than prose: importing the project constructs no external client and needs no API keys, and the web layer's import boundary is asserted, not just documented. See [AI-assisted development](#ai-assisted-development).
+* **Decisions and rules kept under version control** — 18 [ADRs](docs/adr/README.md) record the context and rejected alternatives behind each major decision, while the invariants that matter most are enforced as tests rather than prose: importing the project constructs no external client and needs no API keys, and the web layer's import boundary is asserted, not just documented. See [AI-assisted development](#ai-assisted-development).
 
 ## Architecture
 
@@ -845,9 +845,9 @@ meaningful retries, the web-result relevance gate, run budgets, graceful
 degradation, deterministic provenance, the synthetic corpus, the eval
 harness, the prompt-injection defense, the web-fallback policy, the
 prompt-injection hardening, the eval-harness v2 expansion, the local
-provider and deployment-mode flags, cooperative run cancellation, and the
-thin web application layer — are
-documented as short ADRs (001–017) in [`docs/adr/`](docs/adr/), each
+provider and deployment-mode flags, cooperative run cancellation, the
+thin web application layer, and the engine API — are
+documented as short ADRs (001–018) in [`docs/adr/`](docs/adr/), each
 covering the context, the decision, its consequences, the trade-offs
 accepted, and the alternatives deliberately not chosen. Start with the
 [index](docs/adr/README.md).

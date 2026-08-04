@@ -20,17 +20,25 @@ metadata.
 
 ## Decision
 
-Provenance is **pure post-run formatting of `Document` metadata**, done in
-`main.py` after the graph finishes — the LLM is never asked to cite.
+Provenance is **pure post-run formatting of `Document` metadata**, done
+outside the graph after it finishes — the LLM is never asked to cite.
 `format_sources(result["documents"])` builds a `Sources:` section:
+
+> **Note (2026-08-04):** the formatting functions originally lived in
+> `main.py`, the only caller at the time. They now live in
+> `graph/formatting.py` — a pure module with no clients and no env reads —
+> shared by the CLI, the engine API, the web API (ADR 016), and the eval
+> harness; `main.py` re-exports them. The decision is unchanged: provenance is
+> still post-run presentation built from metadata, still outside the graph,
+> and the LLM is still never asked to cite.
 
 - **Local corpus documents** are cited by their ingestion metadata: the H1
   `title` (e.g. "AcmeCorp VPN Access Policy"), falling back to the `source`
   path, then to the safe label `Local corpus document`.
 - **The web supplement** is detected by the shared `WEB_SEARCH_SOURCE`
   metadata marker (a constant in `graph/consts.py` used by both the
-  `websearch` node that writes it and `main.py` that reads it, so they cannot
-  drift). Citation is **page-level** when result URLs are known: the node
+  `websearch` node that writes it and the formatting layer that reads it, so
+  they cannot drift). Citation is **page-level** when result URLs are known: the node
   records `web_sources` (one `{"title", "url"}` entry per relevant result
   with a usable URL, deduplicated by URL), and each page is cited as
   `Web search: <title> — <url>` (bare URL when the title is missing). Only
@@ -84,4 +92,5 @@ Provenance is **pure post-run formatting of `Document` metadata**, done in
   output (a leak surface in shared terminals/logs) and bloats the answer.
 - **Putting sources into graph state during the run**: rejected — provenance
   is presentation, and the project's design grammar keeps user-facing
-  formatting in `main.py`, leaving orchestration output machine-readable.
+  formatting outside the graph, leaving orchestration output
+  machine-readable.

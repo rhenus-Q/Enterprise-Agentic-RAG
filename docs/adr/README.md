@@ -32,6 +32,7 @@ architecture.
 | [015](015-mode-flags.md) | `PRIVACY_MODE` / `FULLY_LOCAL_MODE` flags | Extends 002 and 014: intention-named deployment flags where `PRIVACY_MODE=true` is an absolute lock no per-run option can reopen, `WEB_SEARCH_ENABLED` stays a default, and `FULLY_LOCAL_MODE=false` defers to `LLM_PROVIDER`. |
 | [016](016-thin-web-application-layer.md) | Thin web application layer | `server/` is an adapter over `graph.engine` — it reports the run's resolved values instead of recomputing them, keeps history metadata-only and in-memory, serializes asks behind one lock, sanitizes every payload, and the frontend renders only what the API reported. |
 | [017](017-cooperative-run-cancellation.md) | Cooperative run cancellation | An optional `AnswerOptions.cancel_event` stops a run at the next node boundary with `RunCancelled` — no `stop_reason`, no history record; `POST /api/ask/cancel` waits for the slot to free and the cancelled ask returns HTTP 499. |
+| [018](018-engine-api.md) | The engine API | `graph/engine.py` is the one entry point every caller runs through: it seeds state and resolves per-run config once, redacts secrets out of the question before it reaches the graph, and collects metadata-only run observability. Recorded retroactively. |
 
 ## Conventions
 

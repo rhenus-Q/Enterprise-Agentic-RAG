@@ -26,15 +26,30 @@ non-clean endings record a machine-readable value defined in
 `max_retries_not_useful`, `budget_exhausted`, `retrieval_error`,
 `web_search_error`, `generation_error`, and `tool_error`.
 
+> **Note:** a ninth value, `web_fallback_disabled`, was added later by
+> [ADR 011](011-web-fallback-policy.md) following the recipe below. The eight
+> above are the ones this decision introduced; `graph/consts.py` is the
+> authoritative list, and a parametrized test in
+> `tests/server/test_ask_endpoint.py` iterates every `STOP_REASON_*` constant
+> defined there, so a new value cannot be added without a caveat and an HTTP
+> classification.
+
 Because conditional edges in this design are pure (read-only), terminal
 outcomes that need a state write go through small **notice nodes**
 (`web_search_disabled_notice`, `max_retries_*_notice`,
 `budget_exhausted_notice`, `tool_error_notice`) whose only job is one
 `stop_reason` write. Mid-run degradations (e.g. a failed Tavily call) are
 written directly by the node that caught the failure. Presentation is fully
-separated: `main.py` maps each reason to a caveat string
-(`STOP_REASON_NOTES`) appended after the answer; the graph never formats
+separated: a caveat map (`STOP_REASON_NOTES`) turns each reason into a
+user-facing string appended after the answer; the graph never formats
 user-facing text.
+
+> **Note (2026-08-04):** the caveat map originally lived in `main.py`, which
+> was then the only caller. It now lives in `graph/formatting.py`, shared by
+> the CLI, the engine API, the web API (ADR 016), and the eval harness;
+> `main.py` re-exports the names so existing imports keep working. The
+> separation this decision requires — presentation outside the graph — is
+> unchanged; only the module holding it moved.
 
 Nodes only write `stop_reason` on failure, so a successful step never
 clobbers a reason recorded earlier in the run. One deliberate exception keeps
@@ -51,7 +66,8 @@ degradations (`retrieval_error`, `web_search_error`) persist even then.
 - The CLI can warn users precisely ("did not pass the anti-hallucination
   check" vs. "web search is disabled") rather than generically.
 - New failure modes follow a known recipe: add a constant, record it at the
-  failure site (node or notice node), add one caveat string in `main.py`.
+  failure site (node or notice node), add one caveat string to
+  `STOP_REASON_NOTES`.
 - The eval harness (`evals/run_eval.py`) reuses the same field for
   deterministic behavioral checks.
 

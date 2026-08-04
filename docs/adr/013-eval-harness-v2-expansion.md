@@ -106,6 +106,16 @@ previous run" section in the report:
 - **Row transitions** — the delta classifies rows into **newly passing**,
   **newly failing**, **still failing**, **added**, and **removed**, alongside
   per-category and per-check baseline/current/delta tables.
+- **Only a full run is a baseline.** "Append-only" is a rule about which runs
+  may *enter* the history at all, not just about never rewriting it — a
+  partial run silently recorded as a baseline would make every later delta
+  compare a subset against the whole dataset and report invented regressions.
+  So `--limit N` (a focused smoke run over the first N rows) is never written
+  to history and is excluded from baseline auto-discovery; passing an explicit
+  `--baseline` alongside it opts into a one-off comparison for reading, but
+  still writes nothing. `--no-history` renders the delta and skips the write
+  for a full run. `--history-dir` relocates the store, which is what lets the
+  helper tests exercise all of this against a temporary directory.
 
 ### 4. Reporting improvements
 
