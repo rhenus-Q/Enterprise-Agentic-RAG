@@ -30,8 +30,8 @@ vulnerabilities**:
   domain allowlisting. Generation has no tools to call, which limits — but does
   not eliminate — the impact of injected instructions.
 
-Reports that a stronger boundary *should* exist are welcome as regular issues
-or discussions; they are roadmap items rather than vulnerability reports.
+Reports that a stronger boundary *should* exist are welcome as regular issues;
+they are roadmap items rather than vulnerability reports.
 
 ## Trust boundaries and data egress
 
