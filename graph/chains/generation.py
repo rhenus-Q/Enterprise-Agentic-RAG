@@ -29,6 +29,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
 from graph.chains._llm import get_chat_model
+from graph.chains.model_tasks import ModelTask, bind_model_task
 
 INSUFFICIENT_CONTEXT_ANSWER = "I do not have enough information in the provided documents."
 
@@ -120,7 +121,7 @@ def get_generation_chain():
 
     llm = get_chat_model()
 
-    return (
+    chain = (
         {
             "context": lambda x: format_documents(x["documents"]),
             "question": lambda x: x["question"],
@@ -129,6 +130,7 @@ def get_generation_chain():
         | llm
         | StrOutputParser()
     )
+    return bind_model_task(chain, ModelTask.GENERATION)
 
 
 def generate_answer(question: str, documents: list[Document], retry_feedback: str = "") -> str:

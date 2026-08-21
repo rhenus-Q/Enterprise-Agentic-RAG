@@ -37,6 +37,7 @@ needs no API keys and no network.
 """
 
 import hashlib
+import inspect
 import json
 import re
 import threading
@@ -48,12 +49,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from langchain_core.runnables import RunnableConfig
 from langsmith import tracing_context
 
 import graph.graph as graph_runtime
 from graph import config
 from graph.config import normalize_web_fallback_policy
 from graph.formatting import source_lines
+from graph.model_usage import ModelUsageCollector
 from graph.state import GraphState
 
 
@@ -127,6 +130,12 @@ class AnswerResult:
     adjacent step (approximate by design). Both are empty when the graph
     object does not support streaming. `total_duration_ms` covers the whole
     graph run.
+
+    `model_usage` is the metadata-only provider-attempt aggregate collected
+    independently from GraphState and the legacy operational counter. It may
+    contain model/task identities, timings, token counts, and exception class
+    names, but never prompts, document bodies, raw responses, or exception
+    messages.
     """
 
     question: str
@@ -146,6 +155,7 @@ class AnswerResult:
     total_duration_ms: float = 0.0
     question_sha256: str = ""
     input_redacted: bool = False
+    model_usage: dict[str, Any] = field(default_factory=dict)
 
 
 def seed_state(
@@ -211,6 +221,7 @@ def _run_graph_with_trace(
     app: Any,
     initial_state: GraphState,
     cancel_event: threading.Event | None = None,
+    config: RunnableConfig | None = None,
 ) -> tuple[dict[str, Any], list[str], list[dict[str, Any]]]:
     """
     Execute the compiled graph, collecting the node path and per-step
@@ -232,14 +243,20 @@ def _run_graph_with_trace(
 
     stream = getattr(app, "stream", None)
     if stream is None:
-        return app.invoke(initial_state), [], []
+        invoke = app.invoke
+        if _accepts_config(invoke):
+            return invoke(initial_state, config=config), [], []
+        return invoke(initial_state), [], []
 
     final_state: dict[str, Any] = dict(initial_state)
     node_path: list[str] = []
     node_timings: list[dict[str, Any]] = []
 
     previous = time.perf_counter()
-    for chunk in stream(initial_state, stream_mode="updates"):
+    stream_kwargs: dict[str, Any] = {"stream_mode": "updates"}
+    if _accepts_config(stream):
+        stream_kwargs["config"] = config
+    for chunk in stream(initial_state, **stream_kwargs):
         # Checked before the chunk is merged: the run is being discarded, so
         # the completed node's update has no reader. Leaving the loop closes
         # the stream, which is what releases the caller's single-flight slot.
@@ -257,6 +274,19 @@ def _run_graph_with_trace(
         previous = now
 
     return final_state, node_path, node_timings
+
+
+def _accepts_config(callable_object: Any) -> bool:
+    """Whether a real runnable or minimal test fake accepts RunnableConfig."""
+
+    try:
+        parameters = inspect.signature(callable_object).parameters.values()
+    except (TypeError, ValueError):
+        return True
+    return any(
+        parameter.name == "config" or parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters
+    )
 
 
 # Maximum length of the redacted question preview stored in trace output.
@@ -343,6 +373,7 @@ def build_trace(result: AnswerResult) -> dict[str, Any]:
         "web_search_enabled": result.web_search_enabled,
         "web_fallback_policy": result.web_fallback_policy,
         "sources": list(result.sources),
+        "model_usage": dict(result.model_usage),
     }
 
 
@@ -394,7 +425,9 @@ def answer_question(
 
     Observability: a missing run_id is generated, the executed node path and
     timings are collected, and when options.trace_path is set a
-    metadata-only trace JSON is written after the run (see build_trace).
+    metadata-only trace JSON is written after the run (see build_trace). One
+    run-scoped callback collector records actual chat-model attempts without
+    entering GraphState or changing `llm_call_count`.
 
     Cancellation: when options.cancel_event is set from another thread, the
     run stops at the next node boundary and raises RunCancelled instead of
@@ -448,10 +481,15 @@ def answer_question(
     )
 
     # Resolved via the module attribute so tests can monkeypatch graph.graph.app.
+    usage_collector = ModelUsageCollector()
+    runnable_config: RunnableConfig = {"callbacks": [usage_collector]}
     started = time.perf_counter()
     with tracing_guard:
         result, node_path, node_timings = _run_graph_with_trace(
-            graph_runtime.app, initial_state, options.cancel_event
+            graph_runtime.app,
+            initial_state,
+            options.cancel_event,
+            runnable_config,
         )
     total_duration_ms = round((time.perf_counter() - started) * 1000.0, 2)
 
@@ -473,6 +511,7 @@ def answer_question(
         total_duration_ms=total_duration_ms,
         question_sha256=question_sha256,
         input_redacted=input_redacted,
+        model_usage=usage_collector.aggregate().to_dict(),
     )
 
     if options.trace_path is not None:

@@ -23,6 +23,7 @@ from graph.config import (
 from graph.consts import GENERATE, RETRIEVE, WEBSEARCH
 from graph.engine import AnswerOptions, AnswerResult, answer_question, seed_state
 from graph.graph import decide_to_generate, grade_generation
+from graph.model_usage import ModelUsageCollector
 from graph.state import GraphState
 
 # ---------------------------------------------------------------------------
@@ -171,6 +172,7 @@ def test_answer_question_returns_structured_answer_result(monkeypatch):
     assert result.web_search_enabled is True
     assert result.web_fallback_policy == WEB_FALLBACK_CONSERVATIVE
     assert result.run_id == "run-1"
+    assert result.model_usage["attempt_count"] == 0
     # Raw final state stays available for internal callers/tests.
     assert result.raw_state["generation"] == "The answer."
     assert result.raw_state["question"] == "Q"
@@ -208,6 +210,44 @@ def test_answer_question_without_options_uses_environment_defaults(monkeypatch):
     assert result.web_fallback_policy == WEB_FALLBACK_DISABLED
     # No caller-provided run_id: the engine generates one (observability).
     assert isinstance(result.run_id, str) and result.run_id
+
+
+def test_answer_question_propagates_run_scoped_collector_to_stream(monkeypatch):
+    class ConfigAwareApp:
+        def __init__(self):
+            self.config = None
+
+        def stream(self, state, *, stream_mode, config=None):
+            self.config = config
+            yield {"generate": {"generation": "A"}}
+
+    fake = ConfigAwareApp()
+    monkeypatch.setattr(graph_module, "app", fake)
+
+    answer_question("Q")
+
+    assert fake.config is not None
+    callbacks = fake.config["callbacks"]
+    assert len(callbacks) == 1
+    assert isinstance(callbacks[0], ModelUsageCollector)
+
+
+def test_answer_question_propagates_collector_to_invoke_only_fake(monkeypatch):
+    class ConfigAwareInvokeOnlyApp:
+        def __init__(self):
+            self.config = None
+
+        def invoke(self, state, config=None):
+            self.config = config
+            return {**state, "generation": "A"}
+
+    fake = ConfigAwareInvokeOnlyApp()
+    monkeypatch.setattr(graph_module, "app", fake)
+
+    answer_question("Q")
+
+    assert fake.config is not None
+    assert isinstance(fake.config["callbacks"][0], ModelUsageCollector)
 
 
 # ---------------------------------------------------------------------------

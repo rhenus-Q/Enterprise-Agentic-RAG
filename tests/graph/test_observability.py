@@ -226,6 +226,8 @@ def test_trace_json_contains_the_expected_metadata(monkeypatch, tmp_path):
     assert payload["web_search_enabled"] is True
     assert payload["web_fallback_policy"] == result.web_fallback_policy
     assert payload["sources"] == ["- Local corpus: VPN Policy"]
+    assert payload["model_usage"]["attempt_count"] == 0
+    assert payload["model_usage"]["attempts"] == []
     assert "generated_at" in payload
 
 
@@ -241,6 +243,8 @@ def test_trace_json_never_contains_document_content_or_raw_state(monkeypatch, tm
     assert _DOC_MARKER not in text  # no raw page_content
     assert "raw_state" not in payload
     assert "documents" not in payload
+    assert "prompts" not in text
+    assert "raw_response" not in text
 
 
 def test_build_trace_matches_answer_result(monkeypatch):

@@ -23,6 +23,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
 from graph.chains._llm import get_chat_model
+from graph.chains.model_tasks import ModelTask, bind_model_task
 
 
 class RouteQuery(BaseModel):
@@ -89,7 +90,7 @@ def get_question_router():
 
     llm = get_chat_model()
     structured_llm = llm.with_structured_output(RouteQuery)
-    return prompt | structured_llm
+    return bind_model_task(prompt | structured_llm, ModelTask.QUESTION_ROUTER)
 
 
 def __getattr__(name):

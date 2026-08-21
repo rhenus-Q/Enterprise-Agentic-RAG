@@ -121,6 +121,9 @@ uv run python evals/run_eval.py --baseline evals/history/<file>.json
 
 # Use a custom history directory
 uv run python evals/run_eval.py --history-dir /path/to/history/
+
+# Use an explicitly reviewed, dated provider/model price snapshot
+uv run python evals/run_eval.py --price-snapshot evals/prices/legacy-YYYY-MM-DD.json
 ```
 
 ## History and delta reporting
@@ -152,16 +155,33 @@ sort.
 
 | Field | Description |
 |---|---|
-| `schema_version` | Always `1`. Used to detect incompatible records. |
+| `schema_version` | New records use `2`; the loader remains backward-compatible with version `1`. |
 | `run_id` | UUID generated at eval start. |
 | `generated` | ISO-8601 UTC timestamp of the run. |
 | `dataset` | Path to the dataset file used. |
 | `dataset_fingerprint` | `row_count`, ordered `ids`, and `dataset_sha256` (SHA-256 of raw file bytes). |
-| `metrics` | Full `compute_metrics` output (overall, per-category, per-check, averages). |
-| `rows` | Per-row list of `{id, category, passed, failed_checks, stop_reason, retries, llm_call_count, web_search_count}`. |
+| `metrics` | Full `compute_metrics` output, including actual model attempts, provider token usage completeness, latency samples/percentiles, and optional cost. |
+| `run_metadata` | Legacy profile/model/request settings, active index identity and embedding fingerprints, and the price-snapshot id when supplied. |
+| `rows` | Per-row metadata including checks/counters plus sanitized model-usage attempts. |
 
 Records are **metadata-only**: they never store answer text, `page_content`,
 prompts, or raw graph state.
+
+Actual model attempts are collected independently from the existing
+`llm_call_count`, whose operational-budget behavior is unchanged. Missing
+provider token fields are recorded as incomplete, never converted to zero.
+Provider failures and structured-output failures store only exception class
+names, not exception messages or raw responses.
+
+### Price snapshots
+
+Cost calculation is opt-in and purely local. `--price-snapshot` reads a JSON
+object with a snapshot id, ISO date, currency, authoritative source URL, and a
+`prices` list keyed by the exact `(provider, model)` pair. Each price supplies
+`uncached_input_per_million` and `output_per_million`; cached-input and
+cache-write rates are optional but become required for a complete estimate
+when the corresponding usage is present. The harness never fetches or guesses
+prices. A run without a reviewed snapshot reports cost as `unavailable`.
 
 ### Delta section
 
@@ -192,6 +212,7 @@ On the first-ever run (no prior record) the section renders a single line:
 | `--no-history` | Render the delta section against any existing baseline but **do not write** the current record. Status: `skipped_by_no_history`. |
 | `--baseline PATH` | Compare against a specific record instead of auto-discovering the latest. A missing, invalid-JSON, or schema-incompatible file **fails fast** with a clear error. |
 | `--history-dir PATH` | Directory for history records (default: `evals/history/`). |
+| `--price-snapshot PATH` | Use one explicitly dated provider/model-specific JSON snapshot for pure cost calculation; no implicit network lookup. |
 
 ### History write status
 

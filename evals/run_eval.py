@@ -17,6 +17,7 @@ Usage:
     uv run python evals/run_eval.py --validate-only  # dataset checks, no API calls
     uv run python evals/run_eval.py --no-history      # skip writing history record
     uv run python evals/run_eval.py --baseline evals/history/<file>.json
+    uv run python evals/run_eval.py --price-snapshot path.json
 
 NOT part of CI: the full run drives the real router/graders/generation
 (OpenAI) and possibly Tavily, so it needs API keys, costs money, and is
@@ -26,6 +27,7 @@ nondeterministic. Run it deliberately. --validate-only is always safe.
 import argparse
 import hashlib
 import json
+import math
 import sys
 import unicodedata
 import uuid
@@ -47,6 +49,8 @@ from graph.consts import WEB_SEARCH_SOURCE
 DEFAULT_DATASET = Path(__file__).parent / "questions.jsonl"
 DEFAULT_OUTPUT = Path(__file__).parent / "results.md"
 DEFAULT_HISTORY_DIR = Path(__file__).parent / "history"
+HISTORY_SCHEMA_VERSION = 2
+SUPPORTED_HISTORY_SCHEMA_VERSIONS = (1, HISTORY_SCHEMA_VERSION)
 
 CATEGORIES = (
     "local_corpus",
@@ -258,7 +262,13 @@ def _valid_web_search_count_expectation(value):
 # ---------------------------------------------------------------------------
 
 
-def summarize_result(result, formatted_answer):
+def summarize_result(
+    result,
+    formatted_answer,
+    model_usage=None,
+    *,
+    total_duration_ms=None,
+):
     """Reduce a final graph state to the fields the checks need."""
 
     documents = result.get("documents") or []
@@ -295,6 +305,8 @@ def summarize_result(result, formatted_answer):
         "web_source_used": web_source_used,
         "local_source_titles": local_source_titles,
         "web_fallback_policy": result.get("web_fallback_policy", ""),
+        "model_usage": dict(model_usage or {}),
+        "total_duration_ms": total_duration_ms,
     }
 
 
@@ -397,6 +409,21 @@ def compute_metrics(evaluated):
 
     retries = [e["summary"]["retries"] for e in evaluated]
     llm_calls = [e["summary"]["llm_call_count"] for e in evaluated]
+    end_to_end_durations = [
+        float(duration)
+        for entry in evaluated
+        if isinstance(
+            (duration := entry["summary"].get("total_duration_ms")),
+            (int, float),
+        )
+        and not isinstance(duration, bool)
+        and duration >= 0
+    ]
+    model_attempts = [
+        attempt
+        for entry in evaluated
+        for attempt in entry["summary"].get("model_usage", {}).get("attempts", [])
+    ]
 
     metrics = {
         "total": total,
@@ -412,11 +439,42 @@ def compute_metrics(evaluated):
         "average_retries": round(sum(retries) / total, 2) if total else 0.0,
         "average_llm_calls": round(sum(llm_calls) / total, 2) if total else 0.0,
         "total_web_searches": sum(e["summary"]["web_search_count"] for e in evaluated),
+        "end_to_end_duration_ms": {
+            "p50": _percentile(end_to_end_durations, 0.50),
+            "p95": _percentile(end_to_end_durations, 0.95),
+            "samples": end_to_end_durations,
+        },
     }
+    if model_attempts:
+        from graph.model_usage import aggregate_attempt_dicts
+
+        metrics["model_usage"] = aggregate_attempt_dicts(model_attempts).to_dict()
+    else:
+        metrics["model_usage"] = {
+            "schema_version": 1,
+            "attempt_count": 0,
+            "status_counts": {},
+            "usage_complete_attempts": 0,
+            "usage_incomplete_attempts": 0,
+            "tokens": {},
+            "duration_ms": {"total": 0.0, "p50": None, "p95": None, "samples": []},
+            "groups": [],
+            "attempts": [],
+        }
     for category, metric_key in CATEGORY_METRIC_KEYS.items():
         metrics[metric_key] = category_counts(category)
 
     return metrics
+
+
+def _percentile(samples, percentile):
+    """Nearest-rank percentile over non-negative duration samples."""
+
+    if not samples:
+        return None
+    ordered = sorted(samples)
+    index = max(0, math.ceil(percentile * len(ordered)) - 1)
+    return round(ordered[index], 2)
 
 
 # ---------------------------------------------------------------------------
@@ -440,7 +498,16 @@ def dataset_fingerprint(rows, dataset_content):
     return {"row_count": len(rows), "ids": ids, "dataset_sha256": sha}
 
 
-def build_history_record(evaluated, metrics, dataset_path, fingerprint, *, timestamp, run_id):
+def build_history_record(
+    evaluated,
+    metrics,
+    dataset_path,
+    fingerprint,
+    *,
+    timestamp,
+    run_id,
+    run_metadata=None,
+):
     """Pure: build a metadata-only, JSON-serializable history record.
 
     Never stores answer text, page_content, prompts, or raw graph state.
@@ -462,15 +529,18 @@ def build_history_record(evaluated, metrics, dataset_path, fingerprint, *, times
                 "retries": summary.get("retries", 0),
                 "llm_call_count": summary.get("llm_call_count", 0),
                 "web_search_count": summary.get("web_search_count", 0),
+                "total_duration_ms": summary.get("total_duration_ms"),
+                "model_usage": dict(summary.get("model_usage") or {}),
             }
         )
     return {
-        "schema_version": 1,
+        "schema_version": HISTORY_SCHEMA_VERSION,
         "run_id": run_id,
         "generated": timestamp,
         "dataset": str(dataset_path),
         "dataset_fingerprint": fingerprint,
         "metrics": metrics,
+        "run_metadata": dict(run_metadata or {}),
         "rows": rows,
     }
 
@@ -657,9 +727,9 @@ def write_history_record(record, history_dir):
 
 
 def load_history_record(path):
-    """Load and return a history record dict. Raises on missing/invalid/incompatible."""
+    """Load schema-v1/v2 history; new writes use v2."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
-    if data.get("schema_version") != 1:
+    if data.get("schema_version") not in SUPPORTED_HISTORY_SCHEMA_VERSIONS:
         raise ValueError(f"Incompatible schema_version {data.get('schema_version')!r} in {path}")
     return data
 
@@ -703,11 +773,21 @@ def render_markdown(evaluated, metrics, dataset_path, *, delta_lines=None):
     """Render the full eval report as Markdown.
 
     When delta_lines is provided (a list of strings from render_delta_section),
-    the delta section is inserted after the Metrics section. When None, the
-    output is byte-identical to the pre-history format.
+    the delta section is inserted after the Metrics section. When None, no
+    delta section is inserted.
     """
 
     timestamp = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    model_usage = metrics.get("model_usage") or {}
+    model_cost = metrics.get("model_cost") or {}
+    usage_attempts = model_usage.get("attempt_count", 0)
+    usage_complete = model_usage.get("usage_complete_attempts", 0)
+    usage_duration = model_usage.get("duration_ms") or {}
+    end_to_end_duration = metrics.get("end_to_end_duration_ms") or {}
+    tokens = model_usage.get("tokens") or {}
+    cost_display = model_cost.get("estimated_cost")
+    if cost_display is None:
+        cost_display = "unavailable"
     lines = [
         "# Eval results",
         "",
@@ -737,11 +817,19 @@ def render_markdown(evaluated, metrics, dataset_path, *, delta_lines=None):
         f"| Average retries | {metrics['average_retries']} |",
         f"| Average tracked LLM calls | {metrics['average_llm_calls']} |",
         f"| Total web searches | {metrics['total_web_searches']} |",
+        f"| Actual model attempts | {usage_attempts} |",
+        f"| Usage-complete model attempts | {usage_complete} / {usage_attempts} |",
+        f"| Input / cached / output / reasoning tokens | {tokens.get('input_tokens')} / {tokens.get('cached_input_tokens')} / {tokens.get('output_tokens')} / {tokens.get('reasoning_tokens')} |",
+        f"| Model-call latency p50 / p95 (ms) | {usage_duration.get('p50')} / {usage_duration.get('p95')} |",
+        f"| End-to-end latency p50 / p95 (ms) | {end_to_end_duration.get('p50')} / {end_to_end_duration.get('p95')} |",
+        f"| Estimated model cost | {cost_display} {model_cost.get('currency') or ''} |",
+        f"| Price snapshot | {model_cost.get('price_snapshot_id') or 'none'} |",
         "",
         "Tracked LLM calls are the graph's budgeted operational counter "
-        "(generations, query rewrites, web-result grades). Router and grader "
-        "calls are not individually tracked, so this is not total LLM usage "
-        "and not billing-accurate cost accounting.",
+        "(generations, query rewrites, web-result grades) and retain their "
+        "original budget semantics. Actual model attempts are recorded "
+        "separately from provider callbacks. Missing usage is incomplete, "
+        "never zero.",
         "",
     ]
 
@@ -784,13 +872,30 @@ def render_markdown(evaluated, metrics, dataset_path, *, delta_lines=None):
 # ---------------------------------------------------------------------------
 
 
-def run_eval(rows, output_path, dataset_path, *, history_dir=None, baseline=None, no_history=False):
+def run_eval(
+    rows,
+    output_path,
+    dataset_path,
+    *,
+    history_dir=None,
+    baseline=None,
+    no_history=False,
+    price_snapshot=None,
+):
     """Run rows through the real graph (REAL API calls) and write the report.
 
     history_dir: if set, reads/writes history records and renders a delta section.
     baseline: explicit path to a baseline record (overrides auto-discovery).
     no_history: if True, renders the delta section but skips writing the record.
+    price_snapshot: optional reviewed provider/model snapshot for local cost estimation.
     """
+
+    from evals.model_pricing import estimate_model_usage_cost, load_price_snapshot
+
+    # Validate the local snapshot before any model/API call. A typo or stale
+    # file must fail without spending an eval run that cannot produce a costed
+    # report or history record.
+    snapshot = load_price_snapshot(price_snapshot) if price_snapshot is not None else None
 
     # Imported here so --validate-only never touches the graph. State seeding
     # and per-run config resolution live in the engine (graph/engine.py) —
@@ -810,7 +915,12 @@ def run_eval(rows, output_path, dataset_path, *, history_dir=None, baseline=None
                 ),
             )
             result = answer.raw_state
-            summary = summarize_result(result, format_answer(result))
+            summary = summarize_result(
+                result,
+                format_answer(result),
+                answer.model_usage,
+                total_duration_ms=answer.total_duration_ms,
+            )
             entry = {"row": row, "summary": summary, **evaluate_row(row, summary)}
         except Exception as exc:
             # One broken row must not kill the eval; record it as a failure.
@@ -825,6 +935,7 @@ def run_eval(rows, output_path, dataset_path, *, history_dir=None, baseline=None
         evaluated.append(entry)
 
     metrics = compute_metrics(evaluated)
+    metrics["model_cost"] = estimate_model_usage_cost(metrics["model_usage"], snapshot)
 
     # --- History and delta ---
     delta = None
@@ -846,6 +957,40 @@ def run_eval(rows, output_path, dataset_path, *, history_dir=None, baseline=None
                 "dataset_sha256": "",
             }
 
+        from graph import config as graph_config
+        from ingestion import (
+            active_embedding_fingerprint,
+            active_index_config,
+            index_exists,
+            read_index_fingerprint,
+        )
+
+        persist_directory, collection_name = active_index_config()
+        has_index = index_exists(persist_directory)
+        run_metadata = {
+            "model_profile": "legacy",
+            "provider": graph_config.llm_provider(),
+            "chat_model": (
+                graph_config.local_chat_model()
+                if graph_config.local_mode_enabled()
+                else graph_config.OPENAI_CHAT_MODEL
+            ),
+            "request_settings": {
+                "temperature": 0,
+                "timeout_seconds": graph_config.llm_request_timeout_seconds(),
+            },
+            "index": {
+                "persist_directory": persist_directory,
+                "collection_name": collection_name,
+                "exists": has_index,
+                "expected_fingerprint": active_embedding_fingerprint(),
+                "stored_fingerprint": (
+                    read_index_fingerprint(persist_directory) if has_index else None
+                ),
+            },
+            "price_snapshot_id": metrics["model_cost"].get("price_snapshot_id"),
+        }
+
         current_record = build_history_record(
             evaluated,
             metrics,
@@ -853,6 +998,7 @@ def run_eval(rows, output_path, dataset_path, *, history_dir=None, baseline=None
             fingerprint,
             timestamp=timestamp,
             run_id=run_id,
+            run_metadata=run_metadata,
         )
 
         # Select baseline BEFORE writing so the new record is never its own baseline.
@@ -934,6 +1080,12 @@ def main(argv=None):
         metavar="PATH",
         help="Directory for history records (default: evals/history/).",
     )
+    parser.add_argument(
+        "--price-snapshot",
+        default=None,
+        metavar="PATH",
+        help="Explicit dated provider/model price snapshot JSON used for cost estimates.",
+    )
     args = parser.parse_args(argv)
 
     rows = load_dataset(args.dataset)
@@ -983,6 +1135,7 @@ def main(argv=None):
             history_dir=history_dir,
             baseline=args.baseline,
             no_history=effective_no_history,
+            price_snapshot=args.price_snapshot,
         )
     except HistoryBaselineError as exc:
         print(f"ERROR: {exc}")

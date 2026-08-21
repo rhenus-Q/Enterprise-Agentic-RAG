@@ -9,6 +9,7 @@ a malformed row fails fast in CI-safe tests rather than mid-eval.
 
 from langchain_core.documents import Document
 
+from evals.model_pricing import PriceSnapshot, estimate_model_usage_cost
 from evals.run_eval import (
     CATEGORIES,
     DEFAULT_DATASET,
@@ -49,6 +50,7 @@ def _summary(**overrides):
         "web_source_used": False,
         "local_source_titles": ["AcmeCorp Employee Onboarding Guide"],
         "web_fallback_policy": "conservative",
+        "total_duration_ms": 10.0,
     }
     summary.update(overrides)
     return summary
@@ -300,6 +302,21 @@ def test_summarize_handles_empty_result_safely():
     assert summary["stop_reason"] == ""
     assert summary["web_search_count"] == 0
     assert summary["local_source_titles"] == []
+
+
+def test_summarize_keeps_model_usage_separate_from_legacy_counter():
+    usage = {
+        "attempt_count": 2,
+        "attempts": [
+            {"task": "question_router"},
+            {"task": "generation"},
+        ],
+    }
+    summary = summarize_result({"llm_call_count": 1}, "", usage, total_duration_ms=42.5)
+
+    assert summary["llm_call_count"] == 1
+    assert summary["model_usage"] == usage
+    assert summary["total_duration_ms"] == 42.5
     assert summary["web_fallback_policy"] == ""
 
 
@@ -667,6 +684,11 @@ def test_compute_metrics_aggregates_categories_checks_and_counters():
     assert metrics["average_retries"] == round(9 / 6, 2)
     assert metrics["average_llm_calls"] == round(10 / 6, 2)
     assert metrics["total_web_searches"] == 2
+    assert metrics["end_to_end_duration_ms"] == {
+        "p50": 10.0,
+        "p95": 10.0,
+        "samples": [10.0] * 6,
+    }
 
 
 def test_render_markdown_includes_metrics_and_every_row():
@@ -702,8 +724,169 @@ def test_render_markdown_includes_partial_counter_note():
 
     report = render_markdown(evaluated, metrics, "evals/questions.jsonl")
 
-    assert "Router and grader calls are not individually tracked" in report
-    assert "not billing-accurate" in report
+    assert "retain their original budget semantics" in report
+    assert "Actual model attempts are recorded separately" in report
+    assert "Missing usage is incomplete, never zero" in report
+    assert "End-to-end latency p50 / p95 (ms)" in report
+
+
+def test_compute_metrics_aggregates_actual_attempts_without_changing_old_counter():
+    evaluated = _evaluated_fixture()
+    evaluated[0]["summary"]["model_usage"] = {
+        "attempts": [
+            {
+                "sequence": 1,
+                "task": "question_router",
+                "requested_profile": "legacy",
+                "effective_profile": "legacy",
+                "tier": "cheap",
+                "provider": "openai",
+                "requested_model": "gpt-5-mini",
+                "reported_model": "gpt-5-mini-2026-01-01",
+                "status": "success",
+                "error_type": None,
+                "duration_ms": 12,
+                "input_tokens": 8,
+                "output_tokens": 2,
+                "total_tokens": 10,
+            },
+            {
+                "sequence": 2,
+                "task": "retrieval_grader",
+                "requested_profile": "legacy",
+                "effective_profile": "legacy",
+                "tier": "cheap",
+                "provider": "openai",
+                "requested_model": "gpt-5-mini",
+                "reported_model": None,
+                "status": "provider_error",
+                "error_type": "TimeoutError",
+                "duration_ms": 60,
+            },
+        ]
+    }
+
+    metrics = compute_metrics(evaluated)
+
+    assert metrics["average_llm_calls"] == round(10 / 6, 2)
+    assert metrics["model_usage"]["attempt_count"] == 2
+    assert metrics["model_usage"]["usage_complete_attempts"] == 1
+    assert metrics["model_usage"]["usage_incomplete_attempts"] == 1
+
+
+def test_pricing_uses_provider_and_model_key_and_all_attempts():
+    snapshot = PriceSnapshot.from_dict(
+        {
+            "snapshot_id": "reviewed-2026-08-13",
+            "effective_date": "2026-08-13",
+            "currency": "USD",
+            "source_url": "https://provider.example/pricing",
+            "prices": [
+                {
+                    "provider": "openai",
+                    "model": "gpt-5-mini",
+                    "uncached_input_per_million": "1.00",
+                    "cached_input_per_million": "0.50",
+                    "output_per_million": "2.00",
+                },
+                {
+                    "provider": "together",
+                    "model": "gpt-5-mini",
+                    "uncached_input_per_million": "99.00",
+                    "cached_input_per_million": "99.00",
+                    "output_per_million": "99.00",
+                },
+            ],
+        }
+    )
+    usage = {
+        "attempts": [
+            {
+                "provider": "openai",
+                "requested_model": "gpt-5-mini",
+                "input_tokens": 1_000_000,
+                "cached_input_tokens": 250_000,
+                "output_tokens": 100_000,
+            },
+            {
+                "provider": "openai",
+                "requested_model": "gpt-5-mini",
+                "input_tokens": 100_000,
+                "cached_input_tokens": 0,
+                "output_tokens": 50_000,
+                "status": "provider_error",
+            },
+        ]
+    }
+
+    cost = estimate_model_usage_cost(usage, snapshot)
+
+    assert cost["status"] == "complete"
+    assert cost["complete_attempts"] == 2
+    assert cost["estimated_cost"] == "1.275"
+    assert cost["price_snapshot_id"] == "reviewed-2026-08-13"
+
+
+def test_pricing_marks_missing_usage_or_snapshot_incomplete_not_zero():
+    snapshot = PriceSnapshot.from_dict(
+        {
+            "snapshot_id": "reviewed",
+            "effective_date": "2026-08-13",
+            "currency": "USD",
+            "source_url": "https://provider.example/pricing",
+            "prices": [
+                {
+                    "provider": "openai",
+                    "model": "gpt-5-mini",
+                    "uncached_input_per_million": "1",
+                    "output_per_million": "2",
+                }
+            ],
+        }
+    )
+    usage = {
+        "attempts": [
+            {
+                "provider": "openai",
+                "requested_model": "gpt-5-mini",
+                "input_tokens": None,
+                "output_tokens": None,
+            }
+        ]
+    }
+
+    incomplete = estimate_model_usage_cost(usage, snapshot)
+    unavailable = estimate_model_usage_cost(usage, None)
+
+    assert incomplete["status"] == "incomplete"
+    assert incomplete["estimated_cost"] is None
+    assert incomplete["incomplete_attempts"] == 1
+    assert unavailable["status"] == "unavailable"
+    assert unavailable["estimated_cost"] is None
+
+
+def test_pricing_reports_true_zero_when_there_were_no_model_attempts():
+    snapshot = PriceSnapshot.from_dict(
+        {
+            "snapshot_id": "reviewed",
+            "effective_date": "2026-08-13",
+            "currency": "USD",
+            "source_url": "https://provider.example/pricing",
+            "prices": [
+                {
+                    "provider": "openai",
+                    "model": "gpt-5-mini",
+                    "uncached_input_per_million": "1",
+                    "output_per_million": "2",
+                }
+            ],
+        }
+    )
+
+    cost = estimate_model_usage_cost({"attempts": []}, snapshot)
+
+    assert cost["status"] == "complete"
+    assert cost["estimated_cost"] == "0"
 
 
 # ---------------------------------------------------------------------------

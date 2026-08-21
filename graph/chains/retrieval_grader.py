@@ -4,6 +4,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
 from graph.chains._llm import get_chat_model
+from graph.chains.model_tasks import ModelTask, bind_model_task
 
 
 class RetrievalGrade(BaseModel):
@@ -81,7 +82,7 @@ def get_retrieval_grader():
 
     llm = get_chat_model()
     structured_llm = llm.with_structured_output(RetrievalGrade)
-    return prompt | structured_llm
+    return bind_model_task(prompt | structured_llm, ModelTask.RETRIEVAL_GRADER)
 
 
 def __getattr__(name):

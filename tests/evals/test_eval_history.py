@@ -116,6 +116,7 @@ def _minimal_evaluated(ids=("r1", "r2"), all_passing=True):
             "web_source_used": False,
             "local_source_titles": [],
             "web_fallback_policy": "conservative",
+            "total_duration_ms": 12.5,
         }
         result.append(
             {
@@ -202,7 +203,7 @@ def test_build_history_record_shape():
         run_id="test-run-001",
     )
 
-    assert record["schema_version"] == 1
+    assert record["schema_version"] == 2
     assert record["run_id"] == "test-run-001"
     assert record["generated"] == "2026-06-13T10:00:00Z"
     assert record["dataset"] == "evals/questions.jsonl"
@@ -210,6 +211,7 @@ def test_build_history_record_shape():
     assert record["metrics"] is m
     assert len(record["rows"]) == 1
     assert record["rows"][0]["id"] == "r1"
+    assert record["rows"][0]["total_duration_ms"] == 12.5
 
 
 def test_build_history_record_is_metadata_only():
@@ -231,6 +233,48 @@ def test_build_history_record_is_metadata_only():
     assert "formatted_answer" not in row_entry
     serialized = json.dumps(record)
     assert "page_content" not in serialized
+
+
+def test_build_history_record_v2_keeps_sanitized_model_usage_and_run_metadata():
+    evaluated = _minimal_evaluated(ids=("r1",))
+    evaluated[0]["summary"]["model_usage"] = {
+        "attempt_count": 1,
+        "attempts": [
+            {
+                "sequence": 1,
+                "task": "generation",
+                "provider": "openai",
+                "requested_model": "gpt-5-mini",
+                "status": "provider_error",
+                "error_type": "TimeoutError",
+                "duration_ms": 50,
+            }
+        ],
+    }
+    fp = dataset_fingerprint([{"id": "r1"}], b"content")
+
+    record = build_history_record(
+        evaluated,
+        _metrics(1, 1),
+        "evals/questions.jsonl",
+        fp,
+        timestamp="2026-08-13T01:00:00Z",
+        run_id="usage-run",
+        run_metadata={
+            "model_profile": "legacy",
+            "chat_model": "gpt-5-mini",
+            "price_snapshot_id": None,
+        },
+    )
+
+    assert record["schema_version"] == 2
+    assert record["rows"][0]["model_usage"]["attempt_count"] == 1
+    assert record["run_metadata"]["model_profile"] == "legacy"
+    serialized = json.dumps(record)
+    assert "TimeoutError" in serialized
+    assert "prompt" not in serialized.lower()
+    assert "page_content" not in serialized
+    assert "raw_response" not in serialized
 
 
 def test_build_history_record_failed_row_has_run_completed_in_failed_checks():
@@ -719,6 +763,16 @@ def test_load_history_record_incompatible_schema_version_raises(tmp_path):
         load_history_record(bad)
 
 
+def test_load_history_record_reads_schema_version_1_for_backward_compatibility(tmp_path):
+    path = tmp_path / "legacy-v1.json"
+    path.write_text(json.dumps(_record()), encoding="utf-8")
+
+    loaded = load_history_record(path)
+
+    assert loaded["schema_version"] == 1
+    assert "model_usage" not in loaded["rows"][0]
+
+
 def test_load_latest_skips_invalid_and_uses_next_valid(tmp_path, capsys):
     rec_good = _record(run_id="run-a", generated="2026-06-13T09:00:00Z")
     write_history_record(rec_good, tmp_path)
@@ -765,6 +819,8 @@ def _mock_graph_modules(monkeypatch):
 
     mock_answer = MagicMock()
     mock_answer.raw_state = mock_state
+    mock_answer.model_usage = {}
+    mock_answer.total_duration_ms = 10.0
 
     mock_engine = MagicMock()
     mock_engine.answer_question.return_value = mock_answer
@@ -835,6 +891,22 @@ def test_no_history_skips_write_but_renders_delta(tmp_path, monkeypatch):
     assert "Baseline: `baseline`" in report
 
 
+def test_invalid_price_snapshot_fails_before_any_graph_call(tmp_path, monkeypatch):
+    mock_engine = _mock_graph_modules(monkeypatch)
+    bad_snapshot = tmp_path / "bad-prices.json"
+    bad_snapshot.write_text("not json", encoding="utf-8")
+
+    with pytest.raises(json.JSONDecodeError):
+        run_eval(
+            _minimal_rows(),
+            str(tmp_path / "report.md"),
+            "evals/questions.jsonl",
+            price_snapshot=bad_snapshot,
+        )
+
+    mock_engine.answer_question.assert_not_called()
+
+
 def test_no_history_no_baseline_renders_no_previous_run(tmp_path, monkeypatch):
     _mock_graph_modules(monkeypatch)
     output_path = tmp_path / "report.md"
@@ -894,7 +966,7 @@ def test_history_written_on_normal_run(tmp_path, monkeypatch):
     written = list(history_dir.glob("*.json"))
     assert len(written) == 1
     rec = json.loads(written[0].read_text(encoding="utf-8"))
-    assert rec["schema_version"] == 1
+    assert rec["schema_version"] == 2
     assert "answer" not in rec["rows"][0]
     assert "formatted_answer" not in rec["rows"][0]
 

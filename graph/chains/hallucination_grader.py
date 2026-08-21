@@ -23,6 +23,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
 from graph.chains._llm import get_chat_model
+from graph.chains.model_tasks import ModelTask, bind_model_task
 
 
 class GradeHallucination(BaseModel):
@@ -132,7 +133,7 @@ def get_hallucination_grader():
 
     llm = get_chat_model()
     structured_llm = llm.with_structured_output(GradeHallucination)
-    return (
+    chain = (
         {
             "documents": lambda x: format_documents(x["documents"]),
             "generation": lambda x: x["generation"],
@@ -140,6 +141,7 @@ def get_hallucination_grader():
         | prompt
         | structured_llm
     )
+    return bind_model_task(chain, ModelTask.HALLUCINATION_GRADER)
 
 
 def __getattr__(name):

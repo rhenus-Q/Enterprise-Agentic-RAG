@@ -22,6 +22,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 
 from graph.chains._llm import get_chat_model
+from graph.chains.model_tasks import ModelTask, bind_model_task
 
 system_prompt = """
 You are a web search query rewriter for an enterprise RAG system.
@@ -74,4 +75,4 @@ def get_query_rewriter():
     """
 
     llm = get_chat_model()
-    return prompt | llm | StrOutputParser()
+    return bind_model_task(prompt | llm | StrOutputParser(), ModelTask.QUERY_REWRITER)
