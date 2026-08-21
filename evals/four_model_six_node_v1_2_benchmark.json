@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "protocol_id": "four-model-six-node-v1.2-three-rep-v1",
+  "benchmark_kind": "task-only",
+  "generation_scorer": {
+    "protocol_id": "generation-lexical-v1.2",
+    "spec_path": "evals/generation_lexical_v1_2.py",
+    "spec_sha256": "a5ca40916411f2ca2b77d722169e50c2cb60820862afa319a51fdcae0c62ff87"
+  },
+  "task_dataset": {
+    "path": "evals/model_optimization_cases_v1_1.jsonl",
+    "sha256": "7ef6c68cc6d99fdba87a137238ca2d75564e6581906d270707e8b803502530eb",
+    "cases_per_task": 10
+  },
+  "price_snapshot": {
+    "path": "evals/four_model_six_node_v1_2_price_snapshot.json",
+    "sha256": "29a0209fcb1a3d20bfc01d7d044079e5bc332dc8acfd6056880677fe9d9707ca"
+  },
+  "tasks": [
+    "question_router",
+    "retrieval_grader",
+    "answer_grader",
+    "generation",
+    "hallucination_grader",
+    "query_rewriter"
+  ],
+  "profiles": {
+    "flash_all": {
+      "label": "Flash",
+      "provider": "together",
+      "model": "deepseek-ai/DeepSeek-V4-Flash-0731"
+    },
+    "luna_all": {
+      "label": "Luna",
+      "provider": "openai",
+      "model": "gpt-5.6-luna"
+    },
+    "legacy": {
+      "label": "GPT-5 mini",
+      "provider": "openai",
+      "model": "gpt-5-mini"
+    },
+    "pro_all": {
+      "label": "Pro",
+      "provider": "together",
+      "model": "deepseek-ai/DeepSeek-V4-Pro-0813"
+    }
+  },
+  "repetitions": 3,
+  "expected_observations": 720,
+  "schedule": [
+    {"execution_order": 1, "repetition": 1, "profile": "flash_all"},
+    {"execution_order": 2, "repetition": 1, "profile": "luna_all"},
+    {"execution_order": 3, "repetition": 1, "profile": "legacy"},
+    {"execution_order": 4, "repetition": 1, "profile": "pro_all"},
+    {"execution_order": 5, "repetition": 2, "profile": "luna_all"},
+    {"execution_order": 6, "repetition": 2, "profile": "legacy"},
+    {"execution_order": 7, "repetition": 2, "profile": "pro_all"},
+    {"execution_order": 8, "repetition": 2, "profile": "flash_all"},
+    {"execution_order": 9, "repetition": 3, "profile": "legacy"},
+    {"execution_order": 10, "repetition": 3, "profile": "pro_all"},
+    {"execution_order": 11, "repetition": 3, "profile": "flash_all"},
+    {"execution_order": 12, "repetition": 3, "profile": "luna_all"}
+  ],
+  "runtime": {
+    "fresh_process_per_profile_repetition": true,
+    "temperature": 0,
+    "request_timeout_seconds": 60,
+    "worker_observations": 60,
+    "benchmark_level_case_retries": 0,
+    "provider_client_retry_policy": "production client default; provider-internal retries are not exposed and observation retry_count remains null",
+    "llm_provider": "openai",
+    "privacy_mode": false,
+    "fully_local_mode": false,
+    "web_search_enabled": true,
+    "web_fallback_policy": "conservative",
+    "max_llm_calls_per_run": 30,
+    "max_web_searches_per_run": 5,
+    "max_web_results_to_grade": 15,
+    "langchain_tracing": false
+  },
+  "prohibitions": {
+    "generation_compatibility_v2": true,
+    "llm_judge": true,
+    "terra": true,
+    "sol": true,
+    "mixed_profiles": true,
+    "single_case_manual_reruns": true
+  },
+  "artifacts": {
+    "observations_jsonl": "artifacts/four-model-six-node-v1.2-three-rep-observations.jsonl",
+    "summary_json": "artifacts/four-model-six-node-v1.2-three-rep-summary.json",
+    "markdown_report": "Doc/four-model-six-node-v1.2-three-rep-benchmark.md"
+  }
+}

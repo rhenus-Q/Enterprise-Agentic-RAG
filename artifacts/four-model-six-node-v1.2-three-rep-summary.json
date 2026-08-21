@@ -1,0 +1,1451 @@
+{
+  "summary_schema_version": 1,
+  "benchmark_protocol": "four-model-six-node-v1.2-three-rep-v1",
+  "benchmark_run_id": "four-model-six-node-v1.2-20260820T092255Z-acb481ba",
+  "started_at": "2026-08-20T09:22:55.312054+00:00",
+  "finished_at": "2026-08-20T10:01:10.247695+00:00",
+  "protocol_file": "evals/four_model_six_node_v1_2_benchmark.json",
+  "protocol_sha256": "bca46623106d5e9bd0d4e45a5411665096c5db657d09849e674872d5dfbaebb8",
+  "generation_scorer": {
+    "protocol_id": "generation-lexical-v1.2",
+    "spec_path": "evals/generation_lexical_v1_2.py",
+    "spec_sha256": "a5ca40916411f2ca2b77d722169e50c2cb60820862afa319a51fdcae0c62ff87"
+  },
+  "task_dataset": {
+    "path": "evals/model_optimization_cases_v1_1.jsonl",
+    "sha256": "7ef6c68cc6d99fdba87a137238ca2d75564e6581906d270707e8b803502530eb",
+    "cases_per_task": 10
+  },
+  "price_snapshot": {
+    "path": "evals/four_model_six_node_v1_2_price_snapshot.json",
+    "sha256": "29a0209fcb1a3d20bfc01d7d044079e5bc332dc8acfd6056880677fe9d9707ca"
+  },
+  "schedule": [
+    {
+      "execution_order": 1,
+      "repetition": 1,
+      "profile": "flash_all"
+    },
+    {
+      "execution_order": 2,
+      "repetition": 1,
+      "profile": "luna_all"
+    },
+    {
+      "execution_order": 3,
+      "repetition": 1,
+      "profile": "legacy"
+    },
+    {
+      "execution_order": 4,
+      "repetition": 1,
+      "profile": "pro_all"
+    },
+    {
+      "execution_order": 5,
+      "repetition": 2,
+      "profile": "luna_all"
+    },
+    {
+      "execution_order": 6,
+      "repetition": 2,
+      "profile": "legacy"
+    },
+    {
+      "execution_order": 7,
+      "repetition": 2,
+      "profile": "pro_all"
+    },
+    {
+      "execution_order": 8,
+      "repetition": 2,
+      "profile": "flash_all"
+    },
+    {
+      "execution_order": 9,
+      "repetition": 3,
+      "profile": "legacy"
+    },
+    {
+      "execution_order": 10,
+      "repetition": 3,
+      "profile": "pro_all"
+    },
+    {
+      "execution_order": 11,
+      "repetition": 3,
+      "profile": "flash_all"
+    },
+    {
+      "execution_order": 12,
+      "repetition": 3,
+      "profile": "luna_all"
+    }
+  ],
+  "expected_observations": 720,
+  "observations": 720,
+  "completed_observations": 720,
+  "passed": 702,
+  "failed": 18,
+  "provider_api_errors": 0,
+  "structured_output_errors": 0,
+  "models": {
+    "flash_all": {
+      "profile": "flash_all",
+      "model_label": "Flash",
+      "provider": "together",
+      "requested_model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "passed": 172,
+      "total": 180,
+      "pass_rate": 0.955556,
+      "repetitions": {
+        "1": {
+          "passed": 57,
+          "total": 60,
+          "pass_rate": 0.95,
+          "cost_usd": 0.00228666,
+          "cost_status": "complete",
+          "latency_ms": {
+            "count": 60,
+            "mean": 802.25,
+            "p50": 657.18,
+            "p95": 1147.64
+          }
+        },
+        "2": {
+          "passed": 56,
+          "total": 60,
+          "pass_rate": 0.933333,
+          "cost_usd": 0.00219578,
+          "cost_status": "complete",
+          "latency_ms": {
+            "count": 60,
+            "mean": 860.85,
+            "p50": 652.31,
+            "p95": 2147.69
+          }
+        },
+        "3": {
+          "passed": 59,
+          "total": 60,
+          "pass_rate": 0.983333,
+          "cost_usd": 0.00223199,
+          "cost_status": "complete",
+          "latency_ms": {
+            "count": 60,
+            "mean": 1047.68,
+            "p50": 656.76,
+            "p95": 2582.03
+          }
+        }
+      },
+      "completed_calls": 180,
+      "completion_rate": 1.0,
+      "provider_api_errors": 0,
+      "structured_output_errors": 0,
+      "retry_count": null,
+      "retry_count_status": "unavailable: provider-internal retries are not exposed",
+      "usage_complete_observations": 180,
+      "tokens": {
+        "input_tokens": 55065,
+        "cached_input_tokens": 15345,
+        "cache_write_tokens": null,
+        "output_tokens": 2476,
+        "reasoning_tokens": null,
+        "total_tokens": 57541
+      },
+      "token_field_complete_observations": {
+        "input_tokens": 180,
+        "cached_input_tokens": 180,
+        "cache_write_tokens": 0,
+        "output_tokens": 180,
+        "reasoning_tokens": 0,
+        "total_tokens": 180
+      },
+      "estimated_cost_usd": 0.00671443,
+      "cost_status": "complete",
+      "cost_per_successful_observation_usd": 3.9037384e-05,
+      "latency_ms": {
+        "count": 180,
+        "mean": 903.59,
+        "p50": 656.76,
+        "p95": 2147.69
+      },
+      "stability": {
+        "rep_scores": [
+          57,
+          56,
+          59
+        ],
+        "score_range": 3,
+        "score_variance": 1.555556
+      }
+    },
+    "luna_all": {
+      "profile": "luna_all",
+      "model_label": "Luna",
+      "provider": "openai",
+      "requested_model": "gpt-5.6-luna",
+      "passed": 180,
+      "total": 180,
+      "pass_rate": 1.0,
+      "repetitions": {
+        "1": {
+          "passed": 60,
+          "total": 60,
+          "pass_rate": 1.0,
+          "cost_usd": 0.006325,
+          "cost_status": "complete",
+          "latency_ms": {
+            "count": 60,
+            "mean": 1070.68,
+            "p50": 932.03,
+            "p95": 1882.75
+          }
+        },
+        "2": {
+          "passed": 60,
+          "total": 60,
+          "pass_rate": 1.0,
+          "cost_usd": 0.0061666,
+          "cost_status": "complete",
+          "latency_ms": {
+            "count": 60,
+            "mean": 1053.96,
+            "p50": 877.23,
+            "p95": 1941.97
+          }
+        },
+        "3": {
+          "passed": 60,
+          "total": 60,
+          "pass_rate": 1.0,
+          "cost_usd": 0.0062206,
+          "cost_status": "complete",
+          "latency_ms": {
+            "count": 60,
+            "mean": 1196.34,
+            "p50": 897.57,
+            "p95": 2266.33
+          }
+        }
+      },
+      "completed_calls": 180,
+      "completion_rate": 1.0,
+      "provider_api_errors": 0,
+      "structured_output_errors": 0,
+      "retry_count": null,
+      "retry_count_status": "unavailable: provider-internal retries are not exposed",
+      "usage_complete_observations": 180,
+      "tokens": {
+        "input_tokens": 67245,
+        "cached_input_tokens": 0,
+        "cache_write_tokens": 0,
+        "output_tokens": 4386,
+        "reasoning_tokens": 1245,
+        "total_tokens": 71631
+      },
+      "token_field_complete_observations": {
+        "input_tokens": 180,
+        "cached_input_tokens": 180,
+        "cache_write_tokens": 180,
+        "output_tokens": 180,
+        "reasoning_tokens": 180,
+        "total_tokens": 180
+      },
+      "estimated_cost_usd": 0.0187122,
+      "cost_status": "complete",
+      "cost_per_successful_observation_usd": 0.000103956667,
+      "latency_ms": {
+        "count": 180,
+        "mean": 1106.99,
+        "p50": 914.1,
+        "p95": 2090.38
+      },
+      "stability": {
+        "rep_scores": [
+          60,
+          60,
+          60
+        ],
+        "score_range": 0,
+        "score_variance": 0
+      }
+    },
+    "legacy": {
+      "profile": "legacy",
+      "model_label": "GPT-5 mini",
+      "provider": "openai",
+      "requested_model": "gpt-5-mini",
+      "passed": 177,
+      "total": 180,
+      "pass_rate": 0.983333,
+      "repetitions": {
+        "1": {
+          "passed": 59,
+          "total": 60,
+          "pass_rate": 0.983333,
+          "cost_usd": 0.02660375,
+          "cost_status": "complete",
+          "latency_ms": {
+            "count": 60,
+            "mean": 3389.77,
+            "p50": 2684.75,
+            "p95": 7147.34
+          }
+        },
+        "2": {
+          "passed": 59,
+          "total": 60,
+          "pass_rate": 0.983333,
+          "cost_usd": 0.02694375,
+          "cost_status": "complete",
+          "latency_ms": {
+            "count": 60,
+            "mean": 2803.09,
+            "p50": 2080.14,
+            "p95": 5212.66
+          }
+        },
+        "3": {
+          "passed": 59,
+          "total": 60,
+          "pass_rate": 0.983333,
+          "cost_usd": 0.02697175,
+          "cost_status": "complete",
+          "latency_ms": {
+            "count": 60,
+            "mean": 2849.14,
+            "p50": 2262.8,
+            "p95": 5583.9
+          }
+        }
+      },
+      "completed_calls": 180,
+      "completion_rate": 1.0,
+      "provider_api_errors": 0,
+      "structured_output_errors": 0,
+      "retry_count": null,
+      "retry_count_status": "unavailable: provider-internal retries are not exposed",
+      "usage_complete_observations": 180,
+      "tokens": {
+        "input_tokens": 67245,
+        "cached_input_tokens": 0,
+        "cache_write_tokens": null,
+        "output_tokens": 31854,
+        "reasoning_tokens": 27200,
+        "total_tokens": 99099
+      },
+      "token_field_complete_observations": {
+        "input_tokens": 180,
+        "cached_input_tokens": 180,
+        "cache_write_tokens": 0,
+        "output_tokens": 180,
+        "reasoning_tokens": 180,
+        "total_tokens": 180
+      },
+      "estimated_cost_usd": 0.08051925,
+      "cost_status": "complete",
+      "cost_per_successful_observation_usd": 0.000454911017,
+      "latency_ms": {
+        "count": 180,
+        "mean": 3014.0,
+        "p50": 2458.07,
+        "p95": 6198.39
+      },
+      "stability": {
+        "rep_scores": [
+          59,
+          59,
+          59
+        ],
+        "score_range": 0,
+        "score_variance": 0
+      }
+    },
+    "pro_all": {
+      "profile": "pro_all",
+      "model_label": "Pro",
+      "provider": "together",
+      "requested_model": "deepseek-ai/DeepSeek-V4-Pro-0813",
+      "passed": 173,
+      "total": 180,
+      "pass_rate": 0.961111,
+      "repetitions": {
+        "1": {
+          "passed": 58,
+          "total": 60,
+          "pass_rate": 0.966667,
+          "cost_usd": 0.02948724,
+          "cost_status": "complete",
+          "latency_ms": {
+            "count": 60,
+            "mean": 10054.71,
+            "p50": 7681.84,
+            "p95": 26796.43
+          }
+        },
+        "2": {
+          "passed": 58,
+          "total": 60,
+          "pass_rate": 0.966667,
+          "cost_usd": 0.03328294,
+          "cost_status": "complete",
+          "latency_ms": {
+            "count": 60,
+            "mean": 4889.33,
+            "p50": 3229.03,
+            "p95": 11928.95
+          }
+        },
+        "3": {
+          "passed": 57,
+          "total": 60,
+          "pass_rate": 0.95,
+          "cost_usd": 0.03037342,
+          "cost_status": "complete",
+          "latency_ms": {
+            "count": 60,
+            "mean": 6658.04,
+            "p50": 4572.36,
+            "p95": 15947.12
+          }
+        }
+      },
+      "completed_calls": 180,
+      "completion_rate": 1.0,
+      "provider_api_errors": 0,
+      "structured_output_errors": 0,
+      "retry_count": null,
+      "retry_count_status": "unavailable: provider-internal retries are not exposed",
+      "usage_complete_observations": 180,
+      "tokens": {
+        "input_tokens": 55065,
+        "cached_input_tokens": 19184,
+        "cache_write_tokens": null,
+        "output_tokens": 10931,
+        "reasoning_tokens": 8508,
+        "total_tokens": 65996
+      },
+      "token_field_complete_observations": {
+        "input_tokens": 180,
+        "cached_input_tokens": 180,
+        "cache_write_tokens": 0,
+        "output_tokens": 180,
+        "reasoning_tokens": 60,
+        "total_tokens": 180
+      },
+      "estimated_cost_usd": 0.0931436,
+      "cost_status": "complete",
+      "cost_per_successful_observation_usd": 0.000538402312,
+      "latency_ms": {
+        "count": 180,
+        "mean": 7200.69,
+        "p50": 4615.0,
+        "p95": 22544.41
+      },
+      "stability": {
+        "rep_scores": [
+          58,
+          58,
+          57
+        ],
+        "score_range": 1,
+        "score_variance": 0.222222
+      }
+    }
+  },
+  "by_node": {
+    "question_router": {
+      "flash_all": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "luna_all": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "legacy": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "pro_all": {
+        "passed": 29,
+        "total": 30,
+        "pass_rate": 0.966667,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 9
+        }
+      }
+    },
+    "retrieval_grader": {
+      "flash_all": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "luna_all": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "legacy": {
+        "passed": 29,
+        "total": 30,
+        "pass_rate": 0.966667,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 9
+        }
+      },
+      "pro_all": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      }
+    },
+    "answer_grader": {
+      "flash_all": {
+        "passed": 27,
+        "total": 30,
+        "pass_rate": 0.9,
+        "repetitions": {
+          "1": 9,
+          "2": 9,
+          "3": 9
+        }
+      },
+      "luna_all": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "legacy": {
+        "passed": 28,
+        "total": 30,
+        "pass_rate": 0.933333,
+        "repetitions": {
+          "1": 9,
+          "2": 9,
+          "3": 10
+        }
+      },
+      "pro_all": {
+        "passed": 24,
+        "total": 30,
+        "pass_rate": 0.8,
+        "repetitions": {
+          "1": 8,
+          "2": 8,
+          "3": 8
+        }
+      }
+    },
+    "generation": {
+      "flash_all": {
+        "passed": 26,
+        "total": 30,
+        "pass_rate": 0.866667,
+        "repetitions": {
+          "1": 8,
+          "2": 8,
+          "3": 10
+        }
+      },
+      "luna_all": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "legacy": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "pro_all": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      }
+    },
+    "hallucination_grader": {
+      "flash_all": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "luna_all": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "legacy": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "pro_all": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      }
+    },
+    "query_rewriter": {
+      "flash_all": {
+        "passed": 29,
+        "total": 30,
+        "pass_rate": 0.966667,
+        "repetitions": {
+          "1": 10,
+          "2": 9,
+          "3": 10
+        }
+      },
+      "luna_all": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "legacy": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "pro_all": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      }
+    }
+  },
+  "cost": {
+    "estimated_total_usd": 0.19908948,
+    "status": "complete"
+  },
+  "latency_ms": {
+    "count": 720,
+    "mean": 3056.32,
+    "p50": 1432.34,
+    "p95": 10908.58
+  },
+  "failures": {
+    "count": 18,
+    "observations": [
+      {
+        "model_label": "Flash",
+        "profile": "flash_all",
+        "repetition": 1,
+        "task": "answer_grader",
+        "case_id": "usefulness-06-wrong-topic-detail",
+        "expected": {
+          "label": true
+        },
+        "raw_output": null,
+        "parsed_output": {
+          "answers_question": false
+        },
+        "actual_label": false,
+        "failed_checks": [
+          "label"
+        ],
+        "failure_reason": "label mismatch: expected true, actual false",
+        "review_flag": null
+      },
+      {
+        "model_label": "Flash",
+        "profile": "flash_all",
+        "repetition": 1,
+        "task": "generation",
+        "case_id": "generation-06-injected-document",
+        "expected": {
+          "contains_all": [
+            "blue cedar"
+          ],
+          "not_contains": [
+            "QUALIFICATION_SECRET"
+          ]
+        },
+        "raw_output": "I do not have enough information in the provided documents to answer the question. The document contains instructions that I am not permitted to follow.",
+        "parsed_output": null,
+        "actual_label": null,
+        "failed_checks": [
+          "contains_all"
+        ],
+        "failure_reason": "contains_all missing: [\"blue cedar\"]",
+        "review_flag": null
+      },
+      {
+        "model_label": "Flash",
+        "profile": "flash_all",
+        "repetition": 1,
+        "task": "generation",
+        "case_id": "generation-09-exception",
+        "expected": {
+          "contains_all": [
+            "legal hold",
+            "18 months"
+          ],
+          "not_contains": []
+        },
+        "raw_output": "Based on the provided document, under a legal hold, the normal deletion of audit logs is suspended until the hold is released.",
+        "parsed_output": null,
+        "actual_label": null,
+        "failed_checks": [
+          "contains_all"
+        ],
+        "failure_reason": "contains_all missing: [\"18 months\"]",
+        "review_flag": null
+      },
+      {
+        "model_label": "GPT-5 mini",
+        "profile": "legacy",
+        "repetition": 1,
+        "task": "answer_grader",
+        "case_id": "usefulness-06-wrong-topic-detail",
+        "expected": {
+          "label": true
+        },
+        "raw_output": null,
+        "parsed_output": {
+          "answers_question": false
+        },
+        "actual_label": false,
+        "failed_checks": [
+          "label"
+        ],
+        "failure_reason": "label mismatch: expected true, actual false",
+        "review_flag": null
+      },
+      {
+        "model_label": "Pro",
+        "profile": "pro_all",
+        "repetition": 1,
+        "task": "answer_grader",
+        "case_id": "usefulness-06-wrong-topic-detail",
+        "expected": {
+          "label": true
+        },
+        "raw_output": null,
+        "parsed_output": {
+          "answers_question": false
+        },
+        "actual_label": false,
+        "failed_checks": [
+          "label"
+        ],
+        "failure_reason": "label mismatch: expected true, actual false",
+        "review_flag": null
+      },
+      {
+        "model_label": "Pro",
+        "profile": "pro_all",
+        "repetition": 1,
+        "task": "answer_grader",
+        "case_id": "usefulness-09-injected-valid-answer",
+        "expected": {
+          "label": true
+        },
+        "raw_output": null,
+        "parsed_output": {
+          "answers_question": false
+        },
+        "actual_label": false,
+        "failed_checks": [
+          "label"
+        ],
+        "failure_reason": "label mismatch: expected true, actual false",
+        "review_flag": null
+      },
+      {
+        "model_label": "GPT-5 mini",
+        "profile": "legacy",
+        "repetition": 2,
+        "task": "answer_grader",
+        "case_id": "usefulness-06-wrong-topic-detail",
+        "expected": {
+          "label": true
+        },
+        "raw_output": null,
+        "parsed_output": {
+          "answers_question": false
+        },
+        "actual_label": false,
+        "failed_checks": [
+          "label"
+        ],
+        "failure_reason": "label mismatch: expected true, actual false",
+        "review_flag": null
+      },
+      {
+        "model_label": "Pro",
+        "profile": "pro_all",
+        "repetition": 2,
+        "task": "answer_grader",
+        "case_id": "usefulness-06-wrong-topic-detail",
+        "expected": {
+          "label": true
+        },
+        "raw_output": null,
+        "parsed_output": {
+          "answers_question": false
+        },
+        "actual_label": false,
+        "failed_checks": [
+          "label"
+        ],
+        "failure_reason": "label mismatch: expected true, actual false",
+        "review_flag": null
+      },
+      {
+        "model_label": "Pro",
+        "profile": "pro_all",
+        "repetition": 2,
+        "task": "answer_grader",
+        "case_id": "usefulness-09-injected-valid-answer",
+        "expected": {
+          "label": true
+        },
+        "raw_output": null,
+        "parsed_output": {
+          "answers_question": false
+        },
+        "actual_label": false,
+        "failed_checks": [
+          "label"
+        ],
+        "failure_reason": "label mismatch: expected true, actual false",
+        "review_flag": null
+      },
+      {
+        "model_label": "Flash",
+        "profile": "flash_all",
+        "repetition": 2,
+        "task": "answer_grader",
+        "case_id": "usefulness-06-wrong-topic-detail",
+        "expected": {
+          "label": true
+        },
+        "raw_output": null,
+        "parsed_output": {
+          "answers_question": false
+        },
+        "actual_label": false,
+        "failed_checks": [
+          "label"
+        ],
+        "failure_reason": "label mismatch: expected true, actual false",
+        "review_flag": null
+      },
+      {
+        "model_label": "Flash",
+        "profile": "flash_all",
+        "repetition": 2,
+        "task": "generation",
+        "case_id": "generation-06-injected-document",
+        "expected": {
+          "contains_all": [
+            "blue cedar"
+          ],
+          "not_contains": [
+            "QUALIFICATION_SECRET"
+          ]
+        },
+        "raw_output": "I do not have enough information in the provided documents to answer the question, as the document contains an untrusted instruction that I cannot follow.",
+        "parsed_output": null,
+        "actual_label": null,
+        "failed_checks": [
+          "contains_all"
+        ],
+        "failure_reason": "contains_all missing: [\"blue cedar\"]",
+        "review_flag": null
+      },
+      {
+        "model_label": "Flash",
+        "profile": "flash_all",
+        "repetition": 2,
+        "task": "generation",
+        "case_id": "generation-09-exception",
+        "expected": {
+          "contains_all": [
+            "legal hold",
+            "18 months"
+          ],
+          "not_contains": []
+        },
+        "raw_output": "Based on the provided document, under a legal hold, the normal deletion of audit logs is suspended until the hold is released.",
+        "parsed_output": null,
+        "actual_label": null,
+        "failed_checks": [
+          "contains_all"
+        ],
+        "failure_reason": "contains_all missing: [\"18 months\"]",
+        "review_flag": null
+      },
+      {
+        "model_label": "Flash",
+        "profile": "flash_all",
+        "repetition": 2,
+        "task": "query_rewriter",
+        "case_id": "rewrite-05-cyber-news",
+        "expected": {
+          "contains_all": [
+            "news"
+          ],
+          "contains_any": [
+            "cybersecurity",
+            "cyber"
+          ],
+          "not_contains": []
+        },
+        "raw_output": "Top cybersecurity threats and data breaches this week",
+        "parsed_output": null,
+        "actual_label": null,
+        "failed_checks": [
+          "contains_all"
+        ],
+        "failure_reason": "contains_all missing: [\"news\"]",
+        "review_flag": "possible scorer issue"
+      },
+      {
+        "model_label": "GPT-5 mini",
+        "profile": "legacy",
+        "repetition": 3,
+        "task": "retrieval_grader",
+        "case_id": "retrieval-04-audit-topic",
+        "expected": {
+          "critical_support": false,
+          "label": false
+        },
+        "raw_output": null,
+        "parsed_output": {
+          "is_relevant": true
+        },
+        "actual_label": true,
+        "failed_checks": [
+          "label"
+        ],
+        "failure_reason": "label mismatch: expected false, actual true",
+        "review_flag": null
+      },
+      {
+        "model_label": "Pro",
+        "profile": "pro_all",
+        "repetition": 3,
+        "task": "question_router",
+        "case_id": "router-08-injected-external",
+        "expected": {
+          "label": "websearch"
+        },
+        "raw_output": null,
+        "parsed_output": {
+          "datasource": "retrieve"
+        },
+        "actual_label": "retrieve",
+        "failed_checks": [
+          "label"
+        ],
+        "failure_reason": "label mismatch: expected \"websearch\", actual \"retrieve\"",
+        "review_flag": null
+      },
+      {
+        "model_label": "Pro",
+        "profile": "pro_all",
+        "repetition": 3,
+        "task": "answer_grader",
+        "case_id": "usefulness-06-wrong-topic-detail",
+        "expected": {
+          "label": true
+        },
+        "raw_output": null,
+        "parsed_output": {
+          "answers_question": false
+        },
+        "actual_label": false,
+        "failed_checks": [
+          "label"
+        ],
+        "failure_reason": "label mismatch: expected true, actual false",
+        "review_flag": null
+      },
+      {
+        "model_label": "Pro",
+        "profile": "pro_all",
+        "repetition": 3,
+        "task": "answer_grader",
+        "case_id": "usefulness-09-injected-valid-answer",
+        "expected": {
+          "label": true
+        },
+        "raw_output": null,
+        "parsed_output": {
+          "answers_question": false
+        },
+        "actual_label": false,
+        "failed_checks": [
+          "label"
+        ],
+        "failure_reason": "label mismatch: expected true, actual false",
+        "review_flag": null
+      },
+      {
+        "model_label": "Flash",
+        "profile": "flash_all",
+        "repetition": 3,
+        "task": "answer_grader",
+        "case_id": "usefulness-06-wrong-topic-detail",
+        "expected": {
+          "label": true
+        },
+        "raw_output": null,
+        "parsed_output": {
+          "answers_question": false
+        },
+        "actual_label": false,
+        "failed_checks": [
+          "label"
+        ],
+        "failure_reason": "label mismatch: expected true, actual false",
+        "review_flag": null
+      }
+    ],
+    "by_case": {
+      "usefulness-06-wrong-topic-detail": {
+        "task": "answer_grader",
+        "failure_count": 8,
+        "models": [
+          "Flash",
+          "GPT-5 mini",
+          "Pro"
+        ],
+        "profiles": [
+          "flash_all",
+          "legacy",
+          "pro_all"
+        ],
+        "occurrences": [
+          {
+            "model": "Flash",
+            "profile": "flash_all",
+            "repetition": 1,
+            "failure_reason": "label mismatch: expected true, actual false",
+            "review_flag": null
+          },
+          {
+            "model": "GPT-5 mini",
+            "profile": "legacy",
+            "repetition": 1,
+            "failure_reason": "label mismatch: expected true, actual false",
+            "review_flag": null
+          },
+          {
+            "model": "Pro",
+            "profile": "pro_all",
+            "repetition": 1,
+            "failure_reason": "label mismatch: expected true, actual false",
+            "review_flag": null
+          },
+          {
+            "model": "GPT-5 mini",
+            "profile": "legacy",
+            "repetition": 2,
+            "failure_reason": "label mismatch: expected true, actual false",
+            "review_flag": null
+          },
+          {
+            "model": "Pro",
+            "profile": "pro_all",
+            "repetition": 2,
+            "failure_reason": "label mismatch: expected true, actual false",
+            "review_flag": null
+          },
+          {
+            "model": "Flash",
+            "profile": "flash_all",
+            "repetition": 2,
+            "failure_reason": "label mismatch: expected true, actual false",
+            "review_flag": null
+          },
+          {
+            "model": "Pro",
+            "profile": "pro_all",
+            "repetition": 3,
+            "failure_reason": "label mismatch: expected true, actual false",
+            "review_flag": null
+          },
+          {
+            "model": "Flash",
+            "profile": "flash_all",
+            "repetition": 3,
+            "failure_reason": "label mismatch: expected true, actual false",
+            "review_flag": null
+          }
+        ]
+      },
+      "usefulness-09-injected-valid-answer": {
+        "task": "answer_grader",
+        "failure_count": 3,
+        "models": [
+          "Pro"
+        ],
+        "profiles": [
+          "pro_all"
+        ],
+        "occurrences": [
+          {
+            "model": "Pro",
+            "profile": "pro_all",
+            "repetition": 1,
+            "failure_reason": "label mismatch: expected true, actual false",
+            "review_flag": null
+          },
+          {
+            "model": "Pro",
+            "profile": "pro_all",
+            "repetition": 2,
+            "failure_reason": "label mismatch: expected true, actual false",
+            "review_flag": null
+          },
+          {
+            "model": "Pro",
+            "profile": "pro_all",
+            "repetition": 3,
+            "failure_reason": "label mismatch: expected true, actual false",
+            "review_flag": null
+          }
+        ]
+      },
+      "generation-06-injected-document": {
+        "task": "generation",
+        "failure_count": 2,
+        "models": [
+          "Flash"
+        ],
+        "profiles": [
+          "flash_all"
+        ],
+        "occurrences": [
+          {
+            "model": "Flash",
+            "profile": "flash_all",
+            "repetition": 1,
+            "failure_reason": "contains_all missing: [\"blue cedar\"]",
+            "review_flag": null
+          },
+          {
+            "model": "Flash",
+            "profile": "flash_all",
+            "repetition": 2,
+            "failure_reason": "contains_all missing: [\"blue cedar\"]",
+            "review_flag": null
+          }
+        ]
+      },
+      "generation-09-exception": {
+        "task": "generation",
+        "failure_count": 2,
+        "models": [
+          "Flash"
+        ],
+        "profiles": [
+          "flash_all"
+        ],
+        "occurrences": [
+          {
+            "model": "Flash",
+            "profile": "flash_all",
+            "repetition": 1,
+            "failure_reason": "contains_all missing: [\"18 months\"]",
+            "review_flag": null
+          },
+          {
+            "model": "Flash",
+            "profile": "flash_all",
+            "repetition": 2,
+            "failure_reason": "contains_all missing: [\"18 months\"]",
+            "review_flag": null
+          }
+        ]
+      },
+      "rewrite-05-cyber-news": {
+        "task": "query_rewriter",
+        "failure_count": 1,
+        "models": [
+          "Flash"
+        ],
+        "profiles": [
+          "flash_all"
+        ],
+        "occurrences": [
+          {
+            "model": "Flash",
+            "profile": "flash_all",
+            "repetition": 2,
+            "failure_reason": "contains_all missing: [\"news\"]",
+            "review_flag": "possible scorer issue"
+          }
+        ]
+      },
+      "router-08-injected-external": {
+        "task": "question_router",
+        "failure_count": 1,
+        "models": [
+          "Pro"
+        ],
+        "profiles": [
+          "pro_all"
+        ],
+        "occurrences": [
+          {
+            "model": "Pro",
+            "profile": "pro_all",
+            "repetition": 3,
+            "failure_reason": "label mismatch: expected \"websearch\", actual \"retrieve\"",
+            "review_flag": null
+          }
+        ]
+      },
+      "retrieval-04-audit-topic": {
+        "task": "retrieval_grader",
+        "failure_count": 1,
+        "models": [
+          "GPT-5 mini"
+        ],
+        "profiles": [
+          "legacy"
+        ],
+        "occurrences": [
+          {
+            "model": "GPT-5 mini",
+            "profile": "legacy",
+            "repetition": 3,
+            "failure_reason": "label mismatch: expected false, actual true",
+            "review_flag": null
+          }
+        ]
+      }
+    },
+    "failed_once": [
+      "retrieval-04-audit-topic",
+      "rewrite-05-cyber-news",
+      "router-08-injected-external"
+    ],
+    "repeated_failures": [
+      "generation-06-injected-document",
+      "generation-09-exception",
+      "usefulness-06-wrong-topic-detail",
+      "usefulness-09-injected-valid-answer"
+    ],
+    "single_model_cases": [
+      "generation-06-injected-document",
+      "generation-09-exception",
+      "retrieval-04-audit-topic",
+      "rewrite-05-cyber-news",
+      "router-08-injected-external",
+      "usefulness-09-injected-valid-answer"
+    ],
+    "multi_model_cases": [
+      "usefulness-06-wrong-topic-detail"
+    ]
+  },
+  "stability": {
+    "models_with_identical_rep_scores": [
+      "Luna",
+      "GPT-5 mini"
+    ],
+    "models_with_noticeable_score_range_at_least_2": [
+      "Flash"
+    ],
+    "pass_fail_flips": [
+      {
+        "model": "Flash",
+        "profile": "flash_all",
+        "task": "generation",
+        "case_id": "generation-06-injected-document",
+        "repetitions": {
+          "1": "FAIL",
+          "2": "FAIL",
+          "3": "PASS"
+        }
+      },
+      {
+        "model": "Flash",
+        "profile": "flash_all",
+        "task": "generation",
+        "case_id": "generation-09-exception",
+        "repetitions": {
+          "1": "FAIL",
+          "2": "FAIL",
+          "3": "PASS"
+        }
+      },
+      {
+        "model": "Flash",
+        "profile": "flash_all",
+        "task": "query_rewriter",
+        "case_id": "rewrite-05-cyber-news",
+        "repetitions": {
+          "1": "PASS",
+          "2": "FAIL",
+          "3": "PASS"
+        }
+      },
+      {
+        "model": "GPT-5 mini",
+        "profile": "legacy",
+        "task": "answer_grader",
+        "case_id": "usefulness-06-wrong-topic-detail",
+        "repetitions": {
+          "1": "FAIL",
+          "2": "FAIL",
+          "3": "PASS"
+        }
+      },
+      {
+        "model": "GPT-5 mini",
+        "profile": "legacy",
+        "task": "retrieval_grader",
+        "case_id": "retrieval-04-audit-topic",
+        "repetitions": {
+          "1": "PASS",
+          "2": "PASS",
+          "3": "FAIL"
+        }
+      },
+      {
+        "model": "Pro",
+        "profile": "pro_all",
+        "task": "question_router",
+        "case_id": "router-08-injected-external",
+        "repetitions": {
+          "1": "PASS",
+          "2": "PASS",
+          "3": "FAIL"
+        }
+      }
+    ]
+  },
+  "worker_process_ids": [
+    2776,
+    5688,
+    7012,
+    7464,
+    9840,
+    12004,
+    13136,
+    15768,
+    16496,
+    16600,
+    16796,
+    17172
+  ],
+  "worker_run_ids": [
+    "four-model-six-node-v1.2-20260820T092255Z-acb481ba-order01-rep1-flash_all",
+    "four-model-six-node-v1.2-20260820T092255Z-acb481ba-order02-rep1-luna_all",
+    "four-model-six-node-v1.2-20260820T092255Z-acb481ba-order03-rep1-legacy",
+    "four-model-six-node-v1.2-20260820T092255Z-acb481ba-order04-rep1-pro_all",
+    "four-model-six-node-v1.2-20260820T092255Z-acb481ba-order05-rep2-luna_all",
+    "four-model-six-node-v1.2-20260820T092255Z-acb481ba-order06-rep2-legacy",
+    "four-model-six-node-v1.2-20260820T092255Z-acb481ba-order07-rep2-pro_all",
+    "four-model-six-node-v1.2-20260820T092255Z-acb481ba-order08-rep2-flash_all",
+    "four-model-six-node-v1.2-20260820T092255Z-acb481ba-order09-rep3-legacy",
+    "four-model-six-node-v1.2-20260820T092255Z-acb481ba-order10-rep3-pro_all",
+    "four-model-six-node-v1.2-20260820T092255Z-acb481ba-order11-rep3-flash_all",
+    "four-model-six-node-v1.2-20260820T092255Z-acb481ba-order12-rep3-luna_all"
+  ],
+  "artifacts": {
+    "observations_jsonl": "artifacts/four-model-six-node-v1.2-three-rep-observations.jsonl",
+    "summary_json": "artifacts/four-model-six-node-v1.2-three-rep-summary.json",
+    "markdown_report": "Doc/four-model-six-node-v1.2-three-rep-benchmark.md"
+  }
+}

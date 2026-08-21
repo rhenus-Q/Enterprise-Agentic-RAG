@@ -1,0 +1,345 @@
+{
+  "summary_schema_version": 1,
+  "benchmark_protocol": "flash-luna-v1.2-three-rep-v1",
+  "benchmark_run_id": "flash-luna-v1.2-20260820T103530Z-03dcbe34",
+  "started_at": "2026-08-20T10:35:30.874536+00:00",
+  "finished_at": "2026-08-20T10:39:46.850841+00:00",
+  "protocol_file": "evals/flash_luna_v1_2_benchmark.json",
+  "protocol_sha256": "656659f22d14d0fcf26b4cf7e428a7f3846046e0be099e992e8fbc7d15c15e54",
+  "generation_scorer": {
+    "protocol_id": "generation-lexical-v1.2",
+    "spec_path": "evals/generation_lexical_v1_2.py",
+    "spec_sha256": "a5ca40916411f2ca2b77d722169e50c2cb60820862afa319a51fdcae0c62ff87"
+  },
+  "task_dataset": {
+    "path": "evals/model_optimization_cases_v1_1.jsonl",
+    "sha256": "7ef6c68cc6d99fdba87a137238ca2d75564e6581906d270707e8b803502530eb",
+    "cases_per_task": 10
+  },
+  "price_snapshot": {
+    "path": "evals/four_model_six_node_v1_2_price_snapshot.json",
+    "sha256": "29a0209fcb1a3d20bfc01d7d044079e5bc332dc8acfd6056880677fe9d9707ca"
+  },
+  "schedule": [
+    {
+      "execution_order": 1,
+      "repetition": 1,
+      "profile": "flash_luna"
+    },
+    {
+      "execution_order": 2,
+      "repetition": 2,
+      "profile": "flash_luna"
+    },
+    {
+      "execution_order": 3,
+      "repetition": 3,
+      "profile": "flash_luna"
+    }
+  ],
+  "expected_observations": 180,
+  "observations": 180,
+  "completed_observations": 180,
+  "passed": 180,
+  "failed": 0,
+  "pass_rate": 1.0,
+  "provider_api_errors": 0,
+  "structured_output_errors": 0,
+  "retry_count": null,
+  "retry_count_status": "unavailable: provider-internal retries are not exposed",
+  "repetitions": {
+    "1": {
+      "passed": 60,
+      "total": 60,
+      "pass_rate": 1.0,
+      "estimated_cost_usd": 0.00442171,
+      "cost_status": "complete",
+      "latency_ms": {
+        "count": 60,
+        "mean": 1131.11,
+        "p50": 871.98,
+        "p95": 2327.69
+      }
+    },
+    "2": {
+      "passed": 60,
+      "total": 60,
+      "pass_rate": 1.0,
+      "estimated_cost_usd": 0.00409731,
+      "cost_status": "complete",
+      "latency_ms": {
+        "count": 60,
+        "mean": 1063.49,
+        "p50": 896.69,
+        "p95": 1925.24
+      }
+    },
+    "3": {
+      "passed": 60,
+      "total": 60,
+      "pass_rate": 1.0,
+      "estimated_cost_usd": 0.00393654,
+      "cost_status": "complete",
+      "latency_ms": {
+        "count": 60,
+        "mean": 1700.39,
+        "p50": 934.84,
+        "p95": 6288.52
+      }
+    }
+  },
+  "by_node": {
+    "question_router": {
+      "provider": "together",
+      "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "passed": 30,
+      "total": 30,
+      "pass_rate": 1.0,
+      "repetitions": {
+        "1": 10,
+        "2": 10,
+        "3": 10
+      }
+    },
+    "retrieval_grader": {
+      "provider": "together",
+      "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "passed": 30,
+      "total": 30,
+      "pass_rate": 1.0,
+      "repetitions": {
+        "1": 10,
+        "2": 10,
+        "3": 10
+      }
+    },
+    "answer_grader": {
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "passed": 30,
+      "total": 30,
+      "pass_rate": 1.0,
+      "repetitions": {
+        "1": 10,
+        "2": 10,
+        "3": 10
+      }
+    },
+    "generation": {
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "passed": 30,
+      "total": 30,
+      "pass_rate": 1.0,
+      "repetitions": {
+        "1": 10,
+        "2": 10,
+        "3": 10
+      }
+    },
+    "hallucination_grader": {
+      "provider": "together",
+      "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "passed": 30,
+      "total": 30,
+      "pass_rate": 1.0,
+      "repetitions": {
+        "1": 10,
+        "2": 10,
+        "3": 10
+      }
+    },
+    "query_rewriter": {
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "passed": 30,
+      "total": 30,
+      "pass_rate": 1.0,
+      "repetitions": {
+        "1": 10,
+        "2": 10,
+        "3": 10
+      }
+    }
+  },
+  "by_provider_model": {
+    "openai/gpt-5.6-luna": {
+      "provider": "openai",
+      "model": "gpt-5.6-luna",
+      "observations": 90,
+      "passed": 90,
+      "usage_complete_observations": 90,
+      "tokens": {
+        "input_tokens": 27477,
+        "cached_input_tokens": 0,
+        "cache_write_tokens": 0,
+        "output_tokens": 2916,
+        "reasoning_tokens": 1117,
+        "total_tokens": 30393
+      },
+      "estimated_cost_usd": 0.0089946,
+      "cost_status": "complete",
+      "latency_ms": {
+        "count": 90,
+        "mean": 1119.76,
+        "p50": 1006.22,
+        "p95": 1955.0
+      }
+    },
+    "together/deepseek-ai/DeepSeek-V4-Flash-0731": {
+      "provider": "together",
+      "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "observations": 90,
+      "passed": 90,
+      "usage_complete_observations": 90,
+      "tokens": {
+        "input_tokens": 30396,
+        "cached_input_tokens": 9880,
+        "cache_write_tokens": null,
+        "output_tokens": 1044,
+        "reasoning_tokens": null,
+        "total_tokens": 31440
+      },
+      "estimated_cost_usd": 0.00346096,
+      "cost_status": "complete",
+      "latency_ms": {
+        "count": 90,
+        "mean": 1476.9,
+        "p50": 736.0,
+        "p95": 6260.95
+      }
+    }
+  },
+  "cost": {
+    "estimated_total_usd": 0.01245556,
+    "status": "complete"
+  },
+  "latency_ms": {
+    "count": 180,
+    "mean": 1298.33,
+    "p50": 908.37,
+    "p95": 3263.97
+  },
+  "stability": {
+    "rep_scores": [
+      60,
+      60,
+      60
+    ],
+    "score_range": 0,
+    "score_variance": 0,
+    "pass_fail_flips": []
+  },
+  "failures": {
+    "count": 0,
+    "observations": []
+  },
+  "luna_all_comparison": {
+    "source": {
+      "path": "artifacts/four-model-six-node-v1.2-three-rep-summary.json",
+      "sha256": "75852f2a3c280f11a62bd2d9f34cb32838733ad1e0d9a07fcf00e34d75a172c4",
+      "benchmark_protocol": "four-model-six-node-v1.2-three-rep-v1",
+      "profile": "luna_all"
+    },
+    "benchmark_run_id": "four-model-six-node-v1.2-20260820T092255Z-acb481ba",
+    "passed": 180,
+    "total": 180,
+    "pass_rate": 1.0,
+    "provider_api_errors": 0,
+    "structured_output_errors": 0,
+    "estimated_cost_usd": 0.0187122,
+    "latency_ms": {
+      "count": 180,
+      "mean": 1106.99,
+      "p50": 914.1,
+      "p95": 2090.38
+    },
+    "stability": {
+      "rep_scores": [
+        60,
+        60,
+        60
+      ],
+      "score_range": 0,
+      "score_variance": 0
+    },
+    "by_node": {
+      "question_router": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "retrieval_grader": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "answer_grader": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "generation": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "hallucination_grader": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      },
+      "query_rewriter": {
+        "passed": 30,
+        "total": 30,
+        "pass_rate": 1.0,
+        "repetitions": {
+          "1": 10,
+          "2": 10,
+          "3": 10
+        }
+      }
+    },
+    "hybrid_cost_reduction_percent": 33.436154
+  },
+  "worker_process_ids": [
+    2220,
+    2880,
+    7768
+  ],
+  "worker_run_ids": [
+    "flash-luna-v1.2-20260820T103530Z-03dcbe34-order01-rep1-flash_luna",
+    "flash-luna-v1.2-20260820T103530Z-03dcbe34-order02-rep2-flash_luna",
+    "flash-luna-v1.2-20260820T103530Z-03dcbe34-order03-rep3-flash_luna"
+  ],
+  "artifacts": {
+    "observations_jsonl": "artifacts/flash-luna-v1.2-three-rep-observations.jsonl",
+    "summary_json": "artifacts/flash-luna-v1.2-three-rep-summary.json",
+    "markdown_report": "Doc/flash-luna-v1.2-three-rep-benchmark.md"
+  }
+}

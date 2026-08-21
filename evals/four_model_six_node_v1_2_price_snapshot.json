@@ -1,0 +1,82 @@
+{
+  "snapshot_id": "four-model-six-node-v1.2-standard-2026-08-17",
+  "effective_date": "2026-08-17",
+  "retrieval_date": "2026-08-17",
+  "currency": "USD",
+  "units": "USD per 1,000,000 text tokens",
+  "pricing_tier": "Standard",
+  "source_url": "https://www.together.ai/models",
+  "source_urls": [
+    "https://www.together.ai/models",
+    "https://developers.openai.com/api/docs/models/gpt-5-mini",
+    "https://developers.openai.com/api/docs/pricing",
+    "https://developers.openai.com/api/docs/models/gpt-5.6-luna"
+  ],
+  "prices": [
+    {
+      "provider": "together",
+      "billing_provider": "Together AI",
+      "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "reported_model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+      "effective_date": "2026-08-17",
+      "retrieval_date": "2026-08-17",
+      "source_url": "https://www.together.ai/models",
+      "uncached_input_per_million": "0.14",
+      "cached_input_per_million": "0.03",
+      "output_per_million": "0.28",
+      "cache_write_rule": "unavailable",
+      "long_context_rule": "No separate rule applied to this experiment.",
+      "account_terms": "Exact authenticated inference was available; no account-specific discount was applied."
+    },
+    {
+      "provider": "openai",
+      "billing_provider": "OpenAI",
+      "model": "gpt-5.6-luna",
+      "reported_model": "gpt-5.6-luna",
+      "effective_date": "2026-08-17",
+      "retrieval_date": "2026-08-17",
+      "source_url": "https://developers.openai.com/api/docs/pricing",
+      "uncached_input_per_million": "0.20",
+      "cached_input_per_million": "0.02",
+      "cache_write_per_million": "0.25",
+      "output_per_million": "1.20",
+      "long_context_threshold_tokens": 272000,
+      "long_context_uncached_input_per_million": "0.40",
+      "long_context_cached_input_per_million": "0.04",
+      "long_context_cache_write_per_million": "0.50",
+      "long_context_output_per_million": "1.80",
+      "long_context_rule": "Requests with more than 272,000 input tokens use long-context rates for the full request.",
+      "account_terms": "Standard pricing; no account-specific discount was applied."
+    },
+    {
+      "provider": "openai",
+      "billing_provider": "OpenAI",
+      "model": "gpt-5-mini",
+      "reported_model": "gpt-5-mini-2025-08-07",
+      "effective_date": "2026-08-17",
+      "retrieval_date": "2026-08-17",
+      "source_url": "https://developers.openai.com/api/docs/models/gpt-5-mini",
+      "uncached_input_per_million": "0.25",
+      "cached_input_per_million": "0.025",
+      "output_per_million": "2.00",
+      "cache_write_rule": "unavailable",
+      "long_context_rule": "No separate long-context tier is listed for this model in the frozen source.",
+      "account_terms": "Standard pricing; no account-specific discount was applied."
+    },
+    {
+      "provider": "together",
+      "billing_provider": "Together AI",
+      "model": "deepseek-ai/DeepSeek-V4-Pro-0813",
+      "reported_model": "deepseek-ai/DeepSeek-V4-Pro-0813",
+      "effective_date": "2026-08-17",
+      "retrieval_date": "2026-08-17",
+      "source_url": "https://www.together.ai/models",
+      "uncached_input_per_million": "1.32",
+      "cached_input_per_million": "0.13",
+      "output_per_million": "3.96",
+      "cache_write_rule": "unavailable",
+      "long_context_rule": "No separate rule applied to this experiment.",
+      "account_terms": "Exact authenticated inference was available; no account-specific discount was applied."
+    }
+  ]
+}

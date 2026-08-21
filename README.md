@@ -167,12 +167,14 @@ State is a `TypedDict` defined in `graph/state.py` with fourteen fields: the wor
 ├── structure.md             # Architecture deep-dive: full workflow, state machine, design decisions
 ├── server/                  # FastAPI adapter over graph.engine (app, schemas, run store, status, documents)
 ├── frontend/                # Vite + React + TypeScript UI: Ask / Documents / Runs
+├── artifacts/               # Git-managed observations + summaries from the final two formal benchmarks
 ├── docs/
 │   └── adr/                 # Architecture Decision Records 001–017 (with index in README.md)
 ├── evals/
 │   ├── questions.jsonl      # Behavioral eval dataset (24 rows, 6 categories)
 │   ├── run_eval.py          # Eval runner: real graph runs + deterministic checks (not in CI)
 │   ├── model_pricing.py     # Pure exact-provider/model cost calculation from explicit snapshots
+│   ├── *_v1_2_benchmark.json # Frozen protocols for the final two formal benchmarks
 │   └── results.md           # Generated eval report
 ├── .github/
 │   └── workflows/ci.yml     # CI: aggregate keys-free Python tests, lint/type checks, and frontend validation
@@ -199,7 +201,7 @@ State is a `TypedDict` defined in `graph/state.py` with fourteen fields: the wor
     ├── node/                # Unit tests — includes test_generation_context_delimiters.py and
     │                        #   test_generation_short_circuit.py; no API keys
     ├── graph/               # Routing / privacy-toggle / compiled-graph tests — fully mocked
-    ├── evals/               # Pure eval and exact-model cost helpers — fully mocked
+    ├── evals/               # Pure eval/cost helpers + retained benchmark integrity contracts
     ├── server/              # FastAPI endpoint tests — engine monkeypatched, no keys, no network
     ├── test_env_isolation.py # Root-level regression for deployment/provider env isolation
     └── chains/              # Five real-model chain modules; no query-rewriter live integration coverage
