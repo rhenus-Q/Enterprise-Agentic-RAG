@@ -29,7 +29,7 @@ GENERATION_LEXICAL_V1_1 = {
     "sha256": "c9d60a8550eb59095fd435ab44216c76db93004947b295574f80fd0e3cdaf27b",
 }
 
-HISTORICAL_LUNA_ALL_SOURCE = {
+FROZEN_FLASH_LUNA_SUMMARY_SOURCE = {
     "path": "artifacts/four-model-six-node-v1.2-three-rep-summary.json",
     "sha256": "75852f2a3c280f11a62bd2d9f34cb32838733ad1e0d9a07fcf00e34d75a172c4",
     "benchmark_protocol": "four-model-six-node-v1.2-three-rep-v1",
@@ -39,6 +39,8 @@ HISTORICAL_LUNA_ALL_SOURCE = {
 RETAINED_FOUR_MODEL_SUMMARY = {
     "path": "artifacts/four-model-six-node-v1.2-three-rep-summary.json",
     "sha256": "3991ab6dc25d9193cd237cb0cce00e993a0968907f16dc11f54d5a3e75893aed",
+    "benchmark_protocol": "four-model-six-node-v1.2-three-rep-v1",
+    "profile": "luna_all",
 }
 
 TOKEN_FIELDS = (
@@ -79,6 +81,8 @@ BENCHMARKS = (
         "observations_count": 180,
         "passed": 180,
         "failed": 0,
+        "current_protocol_sha256": "7dde6a54f57c1bcad0a8629253b1f9283cd7d312b338673cc249d118bcde0218",
+        "frozen_summary_protocol_sha256": "656659f22d14d0fcf26b4cf7e428a7f3846046e0be099e992e8fbc7d15c15e54",
     },
 )
 
@@ -157,7 +161,12 @@ def test_retained_protocol_and_summary_references_are_hash_pinned(benchmark):
     assert summary["summary_schema_version"] == 1
     assert summary["benchmark_protocol"] == benchmark["protocol_id"]
     assert summary["protocol_file"] == benchmark["protocol"]
-    assert summary["protocol_sha256"] == _sha256(benchmark["protocol"])
+    current_protocol_sha256 = _sha256(benchmark["protocol"])
+    if expected_sha256 := benchmark.get("current_protocol_sha256"):
+        assert current_protocol_sha256 == expected_sha256
+    assert summary["protocol_sha256"] == benchmark.get(
+        "frozen_summary_protocol_sha256", current_protocol_sha256
+    )
     assert summary["expected_observations"] == benchmark["observations_count"]
     assert summary["observations"] == benchmark["observations_count"]
     assert summary["completed_observations"] == benchmark["observations_count"]
@@ -170,14 +179,13 @@ def test_retained_protocol_and_summary_references_are_hash_pinned(benchmark):
     assert protocol["artifacts"]["summary_json"] == benchmark["summary"]
 
 
-def test_luna_all_historical_pin_and_retained_source_are_distinct():
+def test_luna_all_protocol_uses_retained_source_and_summary_preserves_run_metadata():
     protocol = _load_json("evals/flash_luna_v1_2_benchmark.json")
     flash_summary = _load_json("artifacts/flash-luna-v1.2-three-rep-summary.json")
 
-    assert protocol["luna_all_comparison"] == HISTORICAL_LUNA_ALL_SOURCE
-    assert flash_summary["luna_all_comparison"]["source"] == HISTORICAL_LUNA_ALL_SOURCE
+    assert protocol["luna_all_comparison"] == RETAINED_FOUR_MODEL_SUMMARY
+    assert flash_summary["luna_all_comparison"]["source"] == FROZEN_FLASH_LUNA_SUMMARY_SOURCE
     assert _sha256(RETAINED_FOUR_MODEL_SUMMARY["path"]) == RETAINED_FOUR_MODEL_SUMMARY["sha256"]
-    assert HISTORICAL_LUNA_ALL_SOURCE["sha256"] != RETAINED_FOUR_MODEL_SUMMARY["sha256"]
 
 
 @pytest.mark.parametrize("benchmark", BENCHMARKS, ids=lambda item: item["protocol_id"])
@@ -344,7 +352,7 @@ def test_flash_luna_protocol_observations_and_summary_pin_the_exact_six_node_map
     luna = four_model_summary["models"]["luna_all"]
     comparison = summary["luna_all_comparison"]
     assert comparison == {
-        "source": HISTORICAL_LUNA_ALL_SOURCE,
+        "source": FROZEN_FLASH_LUNA_SUMMARY_SOURCE,
         "benchmark_run_id": four_model_summary["benchmark_run_id"],
         "passed": luna["passed"],
         "total": luna["total"],

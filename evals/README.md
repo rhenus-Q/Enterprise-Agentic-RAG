@@ -134,12 +134,6 @@ Git-managed evidence:
 - `../artifacts/flash-luna-v1.2-three-rep-observations.jsonl`
 - `../artifacts/flash-luna-v1.2-three-rep-summary.json`
 
-The Flash + Luna protocol contains a stale source SHA for the four-model
-summary (`sha256:75852f2a...`). The retained summary has
-`sha256:3991ab6d...` and is deterministically reconstructible from the frozen
-720 observations. This metadata/provenance mismatch does not change the
-benchmark metrics or conclusions.
-
 The protocol files also name ignored local Markdown reports under `Doc/`.
 Those ignored files are outside Git evidence and are not read, modified,
 deleted, or added by repository cleanup or validation.

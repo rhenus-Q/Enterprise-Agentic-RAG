@@ -13,7 +13,7 @@
 ## Product Tour
 
 The web workspace exposes the same Agentic RAG graph through three focused views:
-**Ask**, **Documents**, and **Runs**. OpenAI mode supports policy-controlled web
+**Ask**, **Documents**, and **Runs**. Cloud mode supports policy-controlled web
 fallback, while Ollama mode keeps model inference, embeddings, and retrieval on the
 configured local-provider boundary.
 
@@ -69,7 +69,7 @@ The knowledge base is a **synthetic enterprise corpus**: six fictional AcmeCorp 
   2. **Answer grounding (anti-hallucination)** — answers not supported by the documents are regenerated.
   3. **Answer usefulness** — grounded but off-target answers trigger a web-search supplement.
 * **Web search fallback** via Tavily when the local knowledge base isn't sufficient.
-* **Web-search privacy controls** — `WEB_SEARCH_ENABLED=false` disables Tavily and LangSmith export by default but can be overridden per run; `PRIVACY_MODE=true` is the non-overridable web/tracing lock. OpenAI model calls remain in either case unless local-provider mode is selected.
+* **Web-search privacy controls** — `WEB_SEARCH_ENABLED=false` disables Tavily and LangSmith export by default but can be overridden per run; `PRIVACY_MODE=true` is the non-overridable web/tracing lock. Cloud model calls remain in either case unless local-provider mode is selected.
 * **Bounded self-correction with honest failure reporting** — a `retries` counter in graph state caps the regenerate/web-search loop (`MAX_RETRIES = 5`), the final allowed generation is still fully graded before the protective stop, and if it still fails a gate the answer is delivered with an explicit warning instead of being presented as successful.
 * **Meaningful retries** — each retry changes the input instead of replaying it at `temperature=0`: a failed grounding check injects a corrective instruction into the next generation, and a failed usefulness check rewrites the web-search query (with the fresh web supplement *replacing* the stale one, not stacking duplicates).
 * **Per-run cost budget** — counted LLM calls, web searches, and web-result grades are tracked in state and capped by env-configurable budgets; an exhausted budget stops the run safely with an explicit caveat instead of spending indefinitely.
@@ -92,7 +92,32 @@ This project implements several engineering patterns for production-oriented LLM
 
 * **Explicit reliability boundaries** — privacy mode, retry limits, budget caps, graceful degradation, `stop_reason` values, and deterministic source formatting make failure modes visible instead of silently presenting unverified answers as successful.
 
-* **Decisions and rules kept under version control** — 18 [ADRs](docs/adr/README.md) record the context and rejected alternatives behind each major decision, while the invariants that matter most are enforced as tests rather than prose: importing the project constructs no external client and needs no API keys, and the web layer's import boundary is asserted, not just documented. See [AI-assisted development](#ai-assisted-development).
+* **Decisions and rules kept under version control** — 19 [ADRs](docs/adr/README.md) record the context and rejected alternatives behind each major decision, while the invariants that matter most are enforced as tests rather than prose: importing the project constructs no external client and needs no API keys, and the web layer's import boundary is asserted, not just documented. See [AI-assisted development](#ai-assisted-development).
+
+## Model Optimization Benchmark
+
+The bounded v1.2 benchmark compares the legacy all-node baseline with two optimized
+static cloud profiles across the same six tasks.
+
+| Profile | Model strategy | Score | Pass rate | Measured benchmark inference cost |
+| ------- | -------------- | ----: | --------: | --------------------------------: |
+| `legacy` | GPT-5 mini on all six tasks | 177/180 | 98.33% | $0.08051925 |
+| `luna_all` | GPT-5.6 Luna on all six tasks | 180/180 | 100% | $0.01871220 |
+| `flash_luna` | Flash on Router / Retrieval / Hallucination; Luna on Answer / Generation / Rewrite | 180/180 | 100% | $0.01245556 |
+
+- **`luna_all`** improved the score from 177/180 to 180/180 while reducing measured
+  benchmark inference cost by approximately **76.8%** versus legacy GPT-5 mini.
+- **`flash_luna`** preserved 180/180 through task-level model routing while reducing
+  measured benchmark inference cost by approximately **84.5%** versus legacy and
+  **33.4%** versus `luna_all`.
+
+Task-level model selection preserved a 100% benchmark pass rate while reducing
+measured benchmark inference cost by 84.5% versus the legacy GPT-5 mini baseline. These are
+bounded benchmark results, not a production SLA or production cost forecast; the
+hybrid also recorded a higher observed p95 latency than `luna_all`.
+
+Detailed evidence: [four-model v1.2 benchmark](docs/benchmarks/four-model-v1.2.md) and
+[Flash + Luna v1.2 benchmark](docs/benchmarks/flash-luna-v1.2.md).
 
 ## Architecture
 
@@ -104,7 +129,7 @@ flowchart TD
     ROUTE -- "retrieve" --> RET[retrieve<br/>Chroma, k=3]
 
     RET --> GD[grade_documents<br/>relevance gate]
-    GD -- "relevant docs remain" --> GEN[generate<br/>gpt-5-mini]
+    GD -- "relevant docs remain" --> GEN[generate]
     GD -- "no relevant docs<br/>(policy-dependent)" --> WS
     WS --> GEN
 
@@ -146,7 +171,7 @@ State is a `TypedDict` defined in `graph/state.py` with fourteen fields: the wor
 | Layer              | Technology                                                                             |
 | ------------------ | -------------------------------------------------------------------------------------- |
 | Orchestration      | LangGraph (`StateGraph`, conditional edges)                                            |
-| LLM                | OpenAI `gpt-5-mini`; router and grader decisions use Pydantic structured output, while generation and query rewriting return strings |
+| LLM                | OpenAI `gpt-5-mini` / `gpt-5.6-luna` and Together `deepseek-ai/DeepSeek-V4-Flash-0731`, selected by static cloud profile; Ollama-compatible chat model in local mode |
 | Embeddings         | `OpenAIEmbeddings`                                                                     |
 | Vector store       | Chroma (local persistence)                                                             |
 | Web search         | `tavily.TavilyClient` (`tavily-python`)                                               |
@@ -169,7 +194,7 @@ State is a `TypedDict` defined in `graph/state.py` with fourteen fields: the wor
 ├── frontend/                # Vite + React + TypeScript UI: Ask / Documents / Runs
 ├── artifacts/               # Git-managed observations + summaries from the final two formal benchmarks
 ├── docs/
-│   └── adr/                 # Architecture Decision Records 001–017 (with index in README.md)
+│   └── adr/                 # Architecture Decision Records 001–019 (with index in README.md)
 ├── evals/
 │   ├── questions.jsonl      # Behavioral eval dataset (24 rows, 6 categories)
 │   ├── run_eval.py          # Eval runner: real graph runs + deterministic checks (not in CI)
@@ -234,7 +259,7 @@ See [`.env.example`](.env.example) for the full template:
 | `TAVILY_API_KEY`                                                                    | When the effective run can use web search | Tavily web-search paths; not needed under `PRIVACY_MODE=true`, local-provider mode, or an unoverridden `WEB_SEARCH_ENABLED=false` default                                  |
 | `PRIVACY_MODE`                                                                      | Optional (default `false`)            | Absolute privacy lock: disables all external web search *and* LangSmith trace export, and a per-run option cannot reopen either (see below)                                     |
 | `FULLY_LOCAL_MODE`                                                                  | Optional (default `false`)            | Route every LLM and embedding call to the local endpoint and apply the same lock; equivalent to `LLM_PROVIDER=ollama`                                                           |
-| `WEB_SEARCH_ENABLED`                                                                | Optional (default `true`)             | Web-search and trace-export default: set to `false` to disable both for the run unless a per-run option overrides it; this does not disable OpenAI model calls                |
+| `WEB_SEARCH_ENABLED`                                                                | Optional (default `true`)             | Web-search and trace-export default: set to `false` to disable both for the run unless a per-run option overrides it; this does not disable cloud model calls                 |
 | `WEB_FALLBACK_POLICY`                                                               | Optional (default `conservative`)     | `conservative` / `aggressive` / `disabled` — when document grading falls back to web search (see below)                                                                        |
 | `MAX_LLM_CALLS_PER_RUN`, `MAX_WEB_SEARCHES_PER_RUN`, `MAX_WEB_RESULTS_TO_GRADE`     | Optional (defaults `30` / `5` / `15`) | Per-run cost/latency budgets (see below)                                                                                                                                       |
 | `LLM_REQUEST_TIMEOUT_SECONDS`                                                       | Optional (default `60`)               | Per-request timeout for a single LLM call, applied to all six chains; a timeout is handled by the existing failure paths and surfaces as the matching `*_error` stop reason     |
@@ -891,7 +916,7 @@ harness, the prompt-injection defense, the web-fallback policy, the
 prompt-injection hardening, the eval-harness v2 expansion, the local
 provider and deployment-mode flags, cooperative run cancellation, the
 thin web application layer, and the engine API — are
-documented as short ADRs (001–018) in [`docs/adr/`](docs/adr/), each
+documented as short ADRs (001–019) in [`docs/adr/`](docs/adr/), each
 covering the context, the decision, its consequences, the trade-offs
 accepted, and the alternatives deliberately not chosen. Start with the
 [index](docs/adr/README.md).

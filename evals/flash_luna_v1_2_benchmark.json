@@ -18,7 +18,7 @@
   },
   "luna_all_comparison": {
     "path": "artifacts/four-model-six-node-v1.2-three-rep-summary.json",
-    "sha256": "75852f2a3c280f11a62bd2d9f34cb32838733ad1e0d9a07fcf00e34d75a172c4",
+    "sha256": "3991ab6dc25d9193cd237cb0cce00e993a0968907f16dc11f54d5a3e75893aed",
     "benchmark_protocol": "four-model-six-node-v1.2-three-rep-v1",
     "profile": "luna_all"
   },
