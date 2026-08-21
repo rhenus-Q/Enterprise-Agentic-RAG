@@ -18,9 +18,12 @@ Usage:
     uv run python evals/run_eval.py --no-history      # skip writing history record
     uv run python evals/run_eval.py --baseline evals/history/<file>.json
     uv run python evals/run_eval.py --price-snapshot path.json
+    uv run python evals/run_eval.py --metadata-only      # omit questions/answers
 
-NOT part of CI: the full run drives the real router/graders/generation
-(OpenAI) and possibly Tavily, so it needs API keys, costs money, and is
+NOT part of CI: the full run drives the real router/graders/generation through
+the configured model provider(s), and may call Tavily when web search is
+enabled. Cloud credentials depend on the selected model profile; local mode
+uses the configured Ollama-compatible endpoint. The run can cost money and is
 nondeterministic. Run it deliberately. --validate-only is always safe.
 """
 
@@ -49,8 +52,8 @@ from graph.consts import WEB_SEARCH_SOURCE
 DEFAULT_DATASET = Path(__file__).parent / "questions.jsonl"
 DEFAULT_OUTPUT = Path(__file__).parent / "results.md"
 DEFAULT_HISTORY_DIR = Path(__file__).parent / "history"
-HISTORY_SCHEMA_VERSION = 2
-SUPPORTED_HISTORY_SCHEMA_VERSIONS = (1, HISTORY_SCHEMA_VERSION)
+HISTORY_SCHEMA_VERSION = 3
+SUPPORTED_HISTORY_SCHEMA_VERSIONS = (1, 2, HISTORY_SCHEMA_VERSION)
 
 CATEGORIES = (
     "local_corpus",
@@ -408,6 +411,7 @@ def compute_metrics(evaluated):
         return sum(1 for e in rows if e["checks"][check_name]), len(rows)
 
     retries = [e["summary"]["retries"] for e in evaluated]
+    web_searches = [e["summary"]["web_search_count"] for e in evaluated]
     llm_calls = [e["summary"]["llm_call_count"] for e in evaluated]
     end_to_end_durations = [
         float(duration)
@@ -425,9 +429,23 @@ def compute_metrics(evaluated):
         for attempt in entry["summary"].get("model_usage", {}).get("attempts", [])
     ]
 
+    completed = sum(
+        1 for entry in evaluated if entry.get("checks", {}).get("run_completed") is not False
+    )
+    stop_reasons = {}
+    for entry in evaluated:
+        stop_reason = str(entry["summary"].get("stop_reason") or "completed")
+        stop_reasons[stop_reason] = stop_reasons.get(stop_reason, 0) + 1
+
+    web_enabled = [entry for entry in evaluated if entry["row"].get("web_search_enabled")]
+    web_disabled = [entry for entry in evaluated if not entry["row"].get("web_search_enabled")]
+
     metrics = {
         "total": total,
         "passed": sum(1 for e in evaluated if e["passed"]),
+        "completed": completed,
+        "completion_rate": round(completed / total, 6) if total else 0.0,
+        "stop_reason_counts": dict(sorted(stop_reasons.items())),
         "stop_reason_matches": check_counts("stop_reason"),
         "source_type_matches": check_counts("source_type"),
         "expected_contains_matches": check_counts("expected_contains"),
@@ -437,8 +455,27 @@ def compute_metrics(evaluated):
         "web_search_count_matches": check_counts("web_search_count"),
         "policy_applied_matches": check_counts("policy_applied"),
         "average_retries": round(sum(retries) / total, 2) if total else 0.0,
+        "retry_distribution": {
+            "p50": _percentile(retries, 0.50),
+            "p95": _percentile(retries, 0.95),
+            "samples": retries,
+        },
         "average_llm_calls": round(sum(llm_calls) / total, 2) if total else 0.0,
         "total_web_searches": sum(e["summary"]["web_search_count"] for e in evaluated),
+        "average_web_searches": round(sum(web_searches) / total, 4) if total else 0.0,
+        "web_search_distribution": {
+            "p50": _percentile(web_searches, 0.50),
+            "p95": _percentile(web_searches, 0.95),
+            "samples": web_searches,
+        },
+        "web_enabled_passed": (
+            sum(1 for entry in web_enabled if entry["passed"]),
+            len(web_enabled),
+        ),
+        "web_disabled_passed": (
+            sum(1 for entry in web_disabled if entry["passed"]),
+            len(web_disabled),
+        ),
         "end_to_end_duration_ms": {
             "p50": _percentile(end_to_end_durations, 0.50),
             "p95": _percentile(end_to_end_durations, 0.95),
@@ -468,7 +505,7 @@ def compute_metrics(evaluated):
 
 
 def _percentile(samples, percentile):
-    """Nearest-rank percentile over non-negative duration samples."""
+    """Nearest-rank percentile over non-negative numeric samples."""
 
     if not samples:
         return None
@@ -727,7 +764,7 @@ def write_history_record(record, history_dir):
 
 
 def load_history_record(path):
-    """Load schema-v1/v2 history; new writes use v2."""
+    """Load supported history schemas; new writes use the current schema version."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     if data.get("schema_version") not in SUPPORTED_HISTORY_SCHEMA_VERSIONS:
         raise ValueError(f"Incompatible schema_version {data.get('schema_version')!r} in {path}")
@@ -769,7 +806,14 @@ def _table_cell(text, limit=200):
     return flattened[:limit] + ("…" if len(flattened) > limit else "")
 
 
-def render_markdown(evaluated, metrics, dataset_path, *, delta_lines=None):
+def render_markdown(
+    evaluated,
+    metrics,
+    dataset_path,
+    *,
+    delta_lines=None,
+    include_content=True,
+):
     """Render the full eval report as Markdown.
 
     When delta_lines is provided (a list of strings from render_delta_section),
@@ -852,15 +896,22 @@ def render_markdown(evaluated, metrics, dataset_path, *, delta_lines=None):
             f"| {summary['llm_call_count']} | {summary['web_search_count']} | {failed} |"
         )
 
-    lines += ["", "## Answers (truncated)", ""]
-    for entry in evaluated:
-        row, summary = entry["row"], entry["summary"]
+    if include_content:
+        lines += ["", "## Answers (truncated)", ""]
+        for entry in evaluated:
+            row, summary = entry["row"], entry["summary"]
+            lines += [
+                f"### {row['id']}",
+                "",
+                f"**Q:** {_table_cell(row['question'])}",
+                "",
+                f"**A:** {_table_cell(summary['formatted_answer'], limit=400)}",
+                "",
+            ]
+    else:
         lines += [
-            f"### {row['id']}",
             "",
-            f"**Q:** {_table_cell(row['question'])}",
-            "",
-            f"**A:** {_table_cell(summary['formatted_answer'], limit=400)}",
+            "Content omitted: this metadata-only report does not persist questions or answers.",
             "",
         ]
 
@@ -881,13 +932,15 @@ def run_eval(
     baseline=None,
     no_history=False,
     price_snapshot=None,
+    metadata_only=False,
 ):
-    """Run rows through the real graph (REAL API calls) and write the report.
+    """Run rows through the real graph (REAL provider calls) and write the report.
 
     history_dir: if set, reads/writes history records and renders a delta section.
     baseline: explicit path to a baseline record (overrides auto-discovery).
     no_history: if True, renders the delta section but skips writing the record.
     price_snapshot: optional reviewed provider/model snapshot for local cost estimation.
+    metadata_only: if True, omits question and answer text from the Markdown report.
     """
 
     from evals.model_pricing import estimate_model_usage_cost, load_price_snapshot
@@ -958,6 +1011,8 @@ def run_eval(
             }
 
         from graph import config as graph_config
+        from graph.chains.model_policy import get_model_policy
+        from graph.chains.model_tasks import ModelTask
         from ingestion import (
             active_embedding_fingerprint,
             active_index_config,
@@ -967,14 +1022,27 @@ def run_eval(
 
         persist_directory, collection_name = active_index_config()
         has_index = index_exists(persist_directory)
+        policy = get_model_policy()
+        target_rows = [
+            {
+                "task": task.value,
+                "tier": (target := policy.target_for(task)).tier.value,
+                "provider": target.provider,
+                "requested_model": target.model,
+                "request_settings": target.request_settings_dict(),
+            }
+            for task in ModelTask
+        ]
+        providers = sorted({target["provider"] for target in target_rows})
+        models = sorted({target["requested_model"] for target in target_rows})
         run_metadata = {
-            "model_profile": "legacy",
+            "model_profile": policy.requested_profile.value,
+            "requested_model_profile": policy.requested_profile.value,
+            "effective_model_profile": policy.effective_profile,
             "provider": graph_config.llm_provider(),
-            "chat_model": (
-                graph_config.local_chat_model()
-                if graph_config.local_mode_enabled()
-                else graph_config.OPENAI_CHAT_MODEL
-            ),
+            "inference_providers": providers,
+            "chat_model": models[0] if len(models) == 1 else None,
+            "target_models": target_rows,
             "request_settings": {
                 "temperature": 0,
                 "timeout_seconds": graph_config.llm_request_timeout_seconds(),
@@ -1028,7 +1096,13 @@ def run_eval(
     # Render report (with delta section when history is enabled).
     delta_lines = render_delta_section(delta) if history_dir is not None else None
     Path(output_path).write_text(
-        render_markdown(evaluated, metrics, dataset_path, delta_lines=delta_lines),
+        render_markdown(
+            evaluated,
+            metrics,
+            dataset_path,
+            delta_lines=delta_lines,
+            include_content=not metadata_only,
+        ),
         encoding="utf-8",
     )
 
@@ -1086,6 +1160,11 @@ def main(argv=None):
         metavar="PATH",
         help="Explicit dated provider/model price snapshot JSON used for cost estimates.",
     )
+    parser.add_argument(
+        "--metadata-only",
+        action="store_true",
+        help="Omit question and answer text from the Markdown report.",
+    )
     args = parser.parse_args(argv)
 
     rows = load_dataset(args.dataset)
@@ -1136,6 +1215,7 @@ def main(argv=None):
             baseline=args.baseline,
             no_history=effective_no_history,
             price_snapshot=args.price_snapshot,
+            metadata_only=args.metadata_only,
         )
     except HistoryBaselineError as exc:
         print(f"ERROR: {exc}")

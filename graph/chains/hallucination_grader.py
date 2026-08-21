@@ -131,7 +131,7 @@ def get_hallucination_grader():
     so the chain can be called directly with GraphState's documents (List[Document]).
     """
 
-    llm = get_chat_model()
+    llm = get_chat_model(ModelTask.HALLUCINATION_GRADER)
     structured_llm = llm.with_structured_output(GradeHallucination)
     chain = (
         {

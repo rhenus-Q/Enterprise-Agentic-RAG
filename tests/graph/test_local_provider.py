@@ -15,8 +15,8 @@ model server, no ingestion:
 3. main.run_startup_preflight() -- every failure branch, plus the
    --validate-only bypass.
 4. Composition with privacy mode, plus egress tripwires: local mode must never
-   construct an OpenAI client, never invoke Tavily, never export a LangSmith
-   trace, and never fall back to any of them when the local model fails.
+   construct an OpenAI/Together client, read either cloud credential, invoke
+   Tavily, export a LangSmith trace, or fall back when the local model fails.
 
 These are WIRING tests. They assert where a model comes from and what is never
 contacted -- never what a model outputs. Answer quality is explicitly not a
@@ -39,6 +39,7 @@ import graph.engine as engine_module
 import graph.graph as graph_module
 import ingestion as ingestion_module
 import main as main_module
+from graph.chains.model_tasks import ModelTask
 from graph.config import (
     DEFAULT_LOCAL_CHAT_MODEL,
     DEFAULT_LOCAL_EMBEDDING_MODEL,
@@ -76,7 +77,7 @@ BASE_URL = "http://localhost:11434"
 
 
 @pytest.fixture(autouse=True)
-def _clear_provider_caches():
+def _clear_provider_caches(monkeypatch):
     """
     Every factory involved here is @lru_cache'd, so a test that changes
     LLM_PROVIDER would otherwise observe a client built under the previous
@@ -85,11 +86,10 @@ def _clear_provider_caches():
     """
 
     def clear():
-        llm_module.get_chat_model.cache_clear()
+        llm_module.clear_model_caches()
         ingestion_module.get_retriever.cache_clear()
-        for module_name, factory_name in CHAIN_FACTORIES:
-            getattr(importlib.import_module(module_name), factory_name).cache_clear()
 
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
     clear()
     yield
     clear()
@@ -226,8 +226,17 @@ def test_every_chain_obtains_its_model_from_the_shared_factory(
     sentinel = _SentinelChatModel()
     calls = []
 
-    def fake_get_chat_model():
-        calls.append(sentinel)
+    expected_task = {
+        "graph.chains.generation": ModelTask.GENERATION,
+        "graph.chains.retrieval_grader": ModelTask.RETRIEVAL_GRADER,
+        "graph.chains.question_router": ModelTask.QUESTION_ROUTER,
+        "graph.chains.hallucination_grader": ModelTask.HALLUCINATION_GRADER,
+        "graph.chains.answer_grader": ModelTask.ANSWER_GRADER,
+        "graph.chains.query_rewriter": ModelTask.QUERY_REWRITER,
+    }[module_name]
+
+    def fake_get_chat_model(task):
+        calls.append(task)
         return sentinel
 
     monkeypatch.setattr(module, "get_chat_model", fake_get_chat_model)
@@ -236,7 +245,9 @@ def test_every_chain_obtains_its_model_from_the_shared_factory(
 
     chain = factory()
 
-    assert calls == [sentinel], f"{module_name} did not build its model via get_chat_model()"
+    assert calls == [expected_task], (
+        f"{module_name} did not request its static task through get_chat_model()"
+    )
     assert chain is not None
 
 
@@ -283,7 +294,7 @@ def test_importing_the_project_constructs_no_external_client():
     # strategy rests on. The API-key variables are stripped from the child
     # environment as well, so CI additionally proves the imports need no keys.
     factories = list(CHAIN_FACTORIES) + [
-        ("graph.chains._llm", "get_chat_model"),
+        ("graph.chains._llm", "_get_chat_model_for_target"),
         ("ingestion", "get_retriever"),
     ]
     environment = {key: value for key, value in os.environ.items() if not key.endswith("_API_KEY")}
@@ -313,9 +324,9 @@ def test_get_chat_model_returns_the_openai_client_by_default(monkeypatch):
 
     monkeypatch.setattr(llm_module, "ChatOpenAI", FakeChatOpenAI)
     monkeypatch.setattr(llm_module, "_chat_ollama_class", _tripwire("ChatOllama"))
-    llm_module.get_chat_model.cache_clear()
+    llm_module.clear_model_caches()
 
-    model = llm_module.get_chat_model()
+    model = llm_module.get_chat_model(ModelTask.GENERATION)
 
     assert isinstance(model, FakeChatOpenAI)
     assert captured == {"model": "gpt-5-mini", "temperature": 0, "timeout": 45}
@@ -334,9 +345,14 @@ def test_get_chat_model_returns_the_local_client_in_local_mode(monkeypatch):
 
     monkeypatch.setattr(llm_module, "_chat_ollama_class", lambda: FakeChatOllama)
     monkeypatch.setattr(llm_module, "ChatOpenAI", _tripwire("ChatOpenAI"))
-    llm_module.get_chat_model.cache_clear()
+    monkeypatch.setattr(
+        llm_module,
+        "_required_credential",
+        _tripwire("cloud credential"),
+    )
+    llm_module.clear_model_caches()
 
-    model = llm_module.get_chat_model()
+    model = llm_module.get_chat_model(ModelTask.GENERATION)
 
     assert isinstance(model, FakeChatOllama)
     assert captured["model"] == CHAT_MODEL
@@ -354,9 +370,9 @@ def test_local_mode_builds_a_real_chat_ollama_without_touching_the_network(monke
     monkeypatch.setenv("LOCAL_CHAT_MODEL", CHAT_MODEL)
     monkeypatch.setenv("OLLAMA_BASE_URL", BASE_URL)
     monkeypatch.setattr(llm_module, "ChatOpenAI", _tripwire("ChatOpenAI"))
-    llm_module.get_chat_model.cache_clear()
+    llm_module.clear_model_caches()
 
-    model = llm_module.get_chat_model()
+    model = llm_module.get_chat_model(ModelTask.GENERATION)
 
     assert isinstance(model, chat_ollama_module.ChatOllama)
     assert model.model == CHAT_MODEL
@@ -618,6 +634,7 @@ def test_preflight_passes_and_reports_the_mode_when_everything_matches(monkeypat
     assert CHAT_MODEL in banner
     assert EMBED_MODEL in banner
     assert BASE_URL in banner
+    assert "Together" in banner
     # The boundary must be stated accurately: the endpoint may be remote.
     assert "nothing leaves the machine" not in banner.lower()
 

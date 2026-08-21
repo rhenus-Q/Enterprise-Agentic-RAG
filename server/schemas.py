@@ -85,12 +85,25 @@ class PreflightStatus(BaseModel):
     message: str | None
 
 
+class RuntimeModelTarget(BaseModel):
+    task: str
+    tier: str
+    provider: str
+    model: str
+    request_settings: dict[str, str | int | float | bool]
+
+
 class RuntimeStatus(BaseModel):
     # `local_mode` is the EFFECTIVE resolved runtime mode (config.local_mode_enabled()),
     # not the literal FULLY_LOCAL_MODE environment variable: LLM_PROVIDER=ollama alone
     # produces a fully local deployment with FULLY_LOCAL_MODE unset.
     provider: str | None
     chat_model: str | None
+    requested_model_profile: str | None
+    effective_model_profile: str | None
+    model_profile_override_reason: str | None
+    model_profile_operational: bool | None
+    model_targets: list[RuntimeModelTarget] | None
     embedding_provider: str | None
     embedding_model: str | None
     privacy_mode: bool | None

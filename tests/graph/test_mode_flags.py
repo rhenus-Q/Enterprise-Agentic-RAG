@@ -45,6 +45,12 @@ FALSY = ["false", "0", "no", "off", "FALSE", "  No  ", "OFF"]
 INVALID = ["maybe", "perhaps", "enabled", "2", "y"]
 
 
+@pytest.fixture(autouse=True)
+def _configured_cloud_credentials(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("TOGETHER_API_KEY", "test-together-key")
+
+
 # ---------------------------------------------------------------------------
 # Value parsing
 # ---------------------------------------------------------------------------
@@ -440,6 +446,65 @@ def test_preflight_reports_the_provider_contradiction(monkeypatch):
     message = str(excinfo.value)
     assert "FULLY_LOCAL_MODE" in message
     assert "LLM_PROVIDER" in message
+
+
+def test_preflight_reports_an_invalid_model_profile_before_graph_execution(monkeypatch):
+    monkeypatch.setenv("MODEL_OPTIMIZATION_PROFILE", "unknown-profile-SENTINEL")
+    monkeypatch.setattr(main_module, "installed_ollama_models", _endpoint_tripwire)
+
+    with pytest.raises(main_module.PreflightError) as excinfo:
+        main_module.run_startup_preflight()
+
+    message = str(excinfo.value)
+    assert "MODEL_OPTIMIZATION_PROFILE" in message
+    assert "SENTINEL" in message
+
+
+@pytest.mark.parametrize(
+    ("profile", "privacy", "expected"),
+    [
+        ("legacy", "false", {"OPENAI_API_KEY"}),
+        ("luna_all", "false", {"OPENAI_API_KEY"}),
+        ("flash_luna", "false", {"OPENAI_API_KEY", "TOGETHER_API_KEY"}),
+        ("flash_luna", "true", {"OPENAI_API_KEY"}),
+    ],
+)
+def test_preflight_credential_requirements_follow_effective_runtime_dependencies(
+    monkeypatch, profile, privacy, expected
+):
+    monkeypatch.setenv("MODEL_OPTIMIZATION_PROFILE", profile)
+    monkeypatch.setenv("PRIVACY_MODE", privacy)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("TOGETHER_API_KEY", raising=False)
+
+    missing = set(main_module._missing_cloud_credentials(main_module.model_policy_status()))
+
+    assert missing == expected
+
+
+def test_preflight_reports_only_the_missing_effective_credentials(monkeypatch):
+    monkeypatch.setenv("MODEL_OPTIMIZATION_PROFILE", "flash_luna")
+    monkeypatch.setenv("OPENAI_API_KEY", "embedding-key")
+    monkeypatch.delenv("TOGETHER_API_KEY", raising=False)
+    monkeypatch.setattr(main_module, "installed_ollama_models", _endpoint_tripwire)
+    monkeypatch.setattr(main_module, "index_exists", lambda _directory: True)
+
+    with pytest.raises(main_module.PreflightError) as excinfo:
+        main_module.run_startup_preflight()
+
+    message = str(excinfo.value)
+    assert "flash_luna" in message
+    assert "TOGETHER_API_KEY" in message
+    assert "OPENAI_API_KEY" not in message
+
+
+def test_privacy_override_keeps_candidate_request_operational_as_legacy(monkeypatch):
+    monkeypatch.setenv("PRIVACY_MODE", "true")
+    monkeypatch.setenv("MODEL_OPTIMIZATION_PROFILE", "flash_luna")
+    monkeypatch.setattr(main_module, "installed_ollama_models", _endpoint_tripwire)
+    monkeypatch.setattr(main_module, "index_exists", lambda _directory: True)
+
+    assert main_module.run_startup_preflight() is None
 
 
 def test_preflight_runs_no_local_checks_for_a_valid_openai_configuration(monkeypatch):

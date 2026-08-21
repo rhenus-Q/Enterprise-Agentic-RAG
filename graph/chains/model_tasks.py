@@ -19,9 +19,14 @@ class ModelTask(StrEnum):
 
 
 def bind_model_task(runnable: Any, task: ModelTask) -> Any:
-    """Attach inherited task metadata and a searchable tag to an LCEL runnable."""
+    """Attach inherited task/policy metadata and a searchable task tag."""
+
+    from graph.chains.model_policy import get_model_policy
 
     return runnable.with_config(
         tags=[f"{MODEL_TASK_TAG_PREFIX}{task.value}"],
-        metadata={MODEL_TASK_METADATA_KEY: task.value},
+        metadata={
+            MODEL_TASK_METADATA_KEY: task.value,
+            **get_model_policy().metadata_for(task),
+        },
     )

@@ -7,6 +7,7 @@ aggregation, and report rendering. The real dataset file is validated here so
 a malformed row fails fast in CI-safe tests rather than mid-eval.
 """
 
+import pytest
 from langchain_core.documents import Document
 
 from evals.model_pricing import PriceSnapshot, estimate_model_usage_cost
@@ -705,6 +706,24 @@ def test_render_markdown_includes_metrics_and_every_row():
         assert entry["row"]["id"] in report
 
 
+def test_render_markdown_metadata_only_omits_questions_and_answers():
+    evaluated = _evaluated_fixture()
+    evaluated[0]["row"]["question"] = "SENSITIVE-QUESTION-SENTINEL"
+    evaluated[0]["summary"]["formatted_answer"] = "SENSITIVE-ANSWER-SENTINEL"
+    metrics = compute_metrics(evaluated)
+
+    report = render_markdown(
+        evaluated,
+        metrics,
+        "evals/questions.jsonl",
+        include_content=False,
+    )
+
+    assert "SENSITIVE-QUESTION-SENTINEL" not in report
+    assert "SENSITIVE-ANSWER-SENTINEL" not in report
+    assert "metadata-only" in report
+
+
 def test_render_markdown_labels_llm_calls_as_tracked():
     # The counter is a budgeted operational counter, not total LLM usage;
     # the report label must not overstate it.
@@ -827,6 +846,36 @@ def test_pricing_uses_provider_and_model_key_and_all_attempts():
     assert cost["price_snapshot_id"] == "reviewed-2026-08-13"
 
 
+def test_pricing_preserves_multiple_official_source_urls():
+    snapshot = PriceSnapshot.from_dict(
+        {
+            "snapshot_id": "multi-source",
+            "effective_date": "2026-08-17",
+            "currency": "USD",
+            "source_urls": [
+                "https://provider-a.example/pricing",
+                "https://provider-b.example/pricing",
+            ],
+            "prices": [
+                {
+                    "provider": "openai",
+                    "model": "gpt-5-mini",
+                    "uncached_input_per_million": "1",
+                    "output_per_million": "2",
+                }
+            ],
+        }
+    )
+
+    cost = estimate_model_usage_cost({"attempts": []}, snapshot)
+
+    assert snapshot.source_url == "https://provider-a.example/pricing"
+    assert cost["source_urls"] == [
+        "https://provider-a.example/pricing",
+        "https://provider-b.example/pricing",
+    ]
+
+
 def test_pricing_marks_missing_usage_or_snapshot_incomplete_not_zero():
     snapshot = PriceSnapshot.from_dict(
         {
@@ -887,6 +936,222 @@ def test_pricing_reports_true_zero_when_there_were_no_model_attempts():
 
     assert cost["status"] == "complete"
     assert cost["estimated_cost"] == "0"
+
+
+def test_pricing_selects_each_supported_target_by_billing_provider_and_exact_model():
+    snapshot = PriceSnapshot.from_dict(
+        {
+            "snapshot_id": "final-profile-exact-targets",
+            "effective_date": "2026-08-17",
+            "currency": "USD",
+            "source_url": "https://provider.example/final-profile-pricing",
+            "prices": [
+                {
+                    "provider": "together",
+                    "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+                    "uncached_input_per_million": "0.10",
+                    "output_per_million": "0.20",
+                },
+                {
+                    "provider": "openai",
+                    "model": "gpt-5-mini",
+                    "uncached_input_per_million": "0.25",
+                    "output_per_million": "2.00",
+                },
+                {
+                    "provider": "openai",
+                    "model": "gpt-5.6-luna",
+                    "uncached_input_per_million": "0.20",
+                    "output_per_million": "1.20",
+                },
+                {
+                    "provider": "deepseek",
+                    "model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+                    "uncached_input_per_million": "99.00",
+                    "output_per_million": "99.00",
+                },
+            ],
+        }
+    )
+    usage = {
+        "attempts": [
+            {
+                "provider": provider,
+                "requested_model": model,
+                "input_tokens": 1_000_000,
+                "output_tokens": 1_000_000,
+            }
+            for provider, model in [
+                ("together", "deepseek-ai/DeepSeek-V4-Flash-0731"),
+                ("openai", "gpt-5-mini"),
+                ("openai", "gpt-5.6-luna"),
+            ]
+        ]
+    }
+
+    cost = estimate_model_usage_cost(usage, snapshot)
+
+    assert cost["status"] == "complete"
+    assert cost["complete_attempts"] == 3
+    assert cost["incomplete_attempts"] == 0
+    assert cost["estimated_cost"] == "3.95"
+
+
+def test_pricing_applies_long_context_rates_to_the_full_request():
+    snapshot = PriceSnapshot.from_dict(
+        {
+            "snapshot_id": "luna-standard",
+            "effective_date": "2026-08-17",
+            "currency": "USD",
+            "source_url": "https://developers.openai.com/api/docs/pricing",
+            "prices": [
+                {
+                    "provider": "openai",
+                    "model": "gpt-5.6-luna",
+                    "uncached_input_per_million": "0.20",
+                    "cached_input_per_million": "0.02",
+                    "cache_write_per_million": "0.25",
+                    "output_per_million": "1.20",
+                    "long_context_threshold_tokens": 272000,
+                    "long_context_uncached_input_per_million": "0.40",
+                    "long_context_cached_input_per_million": "0.04",
+                    "long_context_cache_write_per_million": "0.50",
+                    "long_context_output_per_million": "1.80",
+                }
+            ],
+        }
+    )
+    usage = {
+        "attempts": [
+            {
+                "provider": "openai",
+                "requested_model": "gpt-5.6-luna",
+                "input_tokens": 100_000,
+                "cached_input_tokens": 20_000,
+                "cache_write_tokens": 10_000,
+                "output_tokens": 10_000,
+            },
+            {
+                "provider": "openai",
+                "requested_model": "gpt-5.6-luna",
+                "input_tokens": 300_000,
+                "cached_input_tokens": 50_000,
+                "cache_write_tokens": 20_000,
+                "output_tokens": 20_000,
+            },
+        ]
+    }
+
+    cost = estimate_model_usage_cost(usage, snapshot)
+
+    assert cost["status"] == "complete"
+    assert cost["long_context_attempts"] == 1
+    assert cost["estimated_cost"] == "0.1689"
+
+
+def test_pricing_keeps_the_exact_long_context_threshold_on_short_rates():
+    snapshot = PriceSnapshot.from_dict(
+        {
+            "snapshot_id": "luna-standard-boundary",
+            "effective_date": "2026-08-17",
+            "currency": "USD",
+            "source_url": "https://developers.openai.com/api/docs/pricing",
+            "prices": [
+                {
+                    "provider": "openai",
+                    "model": "gpt-5.6-luna",
+                    "uncached_input_per_million": "0.20",
+                    "cached_input_per_million": "0.02",
+                    "cache_write_per_million": "0.25",
+                    "output_per_million": "1.20",
+                    "long_context_threshold_tokens": 272000,
+                    "long_context_uncached_input_per_million": "0.40",
+                    "long_context_cached_input_per_million": "0.04",
+                    "long_context_cache_write_per_million": "0.50",
+                    "long_context_output_per_million": "1.80",
+                }
+            ],
+        }
+    )
+    usage = {
+        "attempts": [
+            {
+                "provider": "openai",
+                "requested_model": "gpt-5.6-luna",
+                "input_tokens": 272_000,
+                "cached_input_tokens": 0,
+                "cache_write_tokens": 0,
+                "output_tokens": 1_000,
+            }
+        ]
+    }
+
+    cost = estimate_model_usage_cost(usage, snapshot)
+
+    assert cost["long_context_attempts"] == 0
+    assert cost["estimated_cost"] == "0.0556"
+
+
+def test_pricing_rejects_partial_long_context_rates():
+    with pytest.raises(ValueError, match="all four token rates"):
+        PriceSnapshot.from_dict(
+            {
+                "snapshot_id": "invalid-long-context",
+                "effective_date": "2026-08-17",
+                "currency": "USD",
+                "source_url": "https://developers.openai.com/api/docs/pricing",
+                "prices": [
+                    {
+                        "provider": "openai",
+                        "model": "gpt-5.6-luna",
+                        "uncached_input_per_million": "0.20",
+                        "output_per_million": "1.20",
+                        "long_context_threshold_tokens": 272000,
+                        "long_context_uncached_input_per_million": "0.40",
+                    }
+                ],
+            }
+        )
+
+
+def test_pricing_rejects_overlapping_input_token_categories():
+    snapshot = PriceSnapshot.from_dict(
+        {
+            "snapshot_id": "disjoint-input-categories",
+            "effective_date": "2026-08-17",
+            "currency": "USD",
+            "source_url": "https://developers.openai.com/api/docs/pricing",
+            "prices": [
+                {
+                    "provider": "openai",
+                    "model": "gpt-5.6-luna",
+                    "uncached_input_per_million": "0.20",
+                    "cached_input_per_million": "0.02",
+                    "cache_write_per_million": "0.25",
+                    "output_per_million": "1.20",
+                }
+            ],
+        }
+    )
+    usage = {
+        "attempts": [
+            {
+                "provider": "openai",
+                "requested_model": "gpt-5.6-luna",
+                "input_tokens": 100,
+                "cached_input_tokens": 60,
+                "cache_write_tokens": 50,
+                "output_tokens": 10,
+            }
+        ]
+    }
+
+    cost = estimate_model_usage_cost(usage, snapshot)
+
+    assert cost["status"] == "incomplete"
+    assert cost["estimated_cost"] is None
+    assert cost["complete_attempts"] == 0
+    assert cost["incomplete_attempts"] == 1
 
 
 # ---------------------------------------------------------------------------

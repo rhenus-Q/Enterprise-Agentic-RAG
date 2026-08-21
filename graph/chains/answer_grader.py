@@ -88,7 +88,7 @@ def get_answer_grader():
     on first call, not at import time.
     """
 
-    llm = get_chat_model()
+    llm = get_chat_model(ModelTask.ANSWER_GRADER)
     structured_llm = llm.with_structured_output(GradeAnswer)
     return bind_model_task(prompt | structured_llm, ModelTask.ANSWER_GRADER)
 

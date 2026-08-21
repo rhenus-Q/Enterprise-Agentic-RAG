@@ -203,7 +203,7 @@ def test_build_history_record_shape():
         run_id="test-run-001",
     )
 
-    assert record["schema_version"] == 2
+    assert record["schema_version"] == 3
     assert record["run_id"] == "test-run-001"
     assert record["generated"] == "2026-06-13T10:00:00Z"
     assert record["dataset"] == "evals/questions.jsonl"
@@ -235,7 +235,7 @@ def test_build_history_record_is_metadata_only():
     assert "page_content" not in serialized
 
 
-def test_build_history_record_v2_keeps_sanitized_model_usage_and_run_metadata():
+def test_build_history_record_v3_keeps_sanitized_model_usage_and_run_metadata():
     evaluated = _minimal_evaluated(ids=("r1",))
     evaluated[0]["summary"]["model_usage"] = {
         "attempt_count": 1,
@@ -267,7 +267,7 @@ def test_build_history_record_v2_keeps_sanitized_model_usage_and_run_metadata():
         },
     )
 
-    assert record["schema_version"] == 2
+    assert record["schema_version"] == 3
     assert record["rows"][0]["model_usage"]["attempt_count"] == 1
     assert record["run_metadata"]["model_profile"] == "legacy"
     serialized = json.dumps(record)
@@ -773,6 +773,17 @@ def test_load_history_record_reads_schema_version_1_for_backward_compatibility(t
     assert "model_usage" not in loaded["rows"][0]
 
 
+def test_load_history_record_reads_schema_version_2_for_backward_compatibility(tmp_path):
+    path = tmp_path / "legacy-v2.json"
+    payload = _record()
+    payload["schema_version"] = 2
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    loaded = load_history_record(path)
+
+    assert loaded["schema_version"] == 2
+
+
 def test_load_latest_skips_invalid_and_uses_next_valid(tmp_path, capsys):
     rec_good = _record(run_id="run-a", generated="2026-06-13T09:00:00Z")
     write_history_record(rec_good, tmp_path)
@@ -966,7 +977,7 @@ def test_history_written_on_normal_run(tmp_path, monkeypatch):
     written = list(history_dir.glob("*.json"))
     assert len(written) == 1
     rec = json.loads(written[0].read_text(encoding="utf-8"))
-    assert rec["schema_version"] == 2
+    assert rec["schema_version"] == 3
     assert "answer" not in rec["rows"][0]
     assert "formatted_answer" not in rec["rows"][0]
 

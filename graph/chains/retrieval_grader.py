@@ -80,7 +80,7 @@ def get_retrieval_grader():
     on first call, not at import time.
     """
 
-    llm = get_chat_model()
+    llm = get_chat_model(ModelTask.RETRIEVAL_GRADER)
     structured_llm = llm.with_structured_output(RetrievalGrade)
     return bind_model_task(prompt | structured_llm, ModelTask.RETRIEVAL_GRADER)
 

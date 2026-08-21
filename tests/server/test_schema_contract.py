@@ -40,6 +40,7 @@ MODEL_TO_INTERFACE = {
     "RunDetail": "RunDetail",
     "RunRuntime": "RunRuntime",
     "RunSummary": "RunSummary",
+    "RuntimeModelTarget": "RuntimeModelTarget",
     "RuntimeStatus": "RuntimeStatus",
 }
 

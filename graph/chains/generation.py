@@ -119,7 +119,7 @@ def get_generation_chain():
     3. extract a plain string with StrOutputParser
     """
 
-    llm = get_chat_model()
+    llm = get_chat_model(ModelTask.GENERATION)
 
     chain = (
         {

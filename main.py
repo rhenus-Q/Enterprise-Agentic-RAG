@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import urllib.request
 
@@ -19,6 +20,7 @@ from graph.config import (
     llm_provider,
     local_chat_model,
     local_embedding_model,
+    model_policy_status,
     ollama_base_url,
     privacy_mode,
     web_search_enabled,
@@ -55,6 +57,11 @@ from ingestion import (
 # Seconds to wait for the local endpoint during startup checks. Deliberately
 # short: this probes reachability and the installed-model list, never inference.
 PREFLIGHT_TIMEOUT_SECONDS = 5
+
+_CLOUD_PROVIDER_CREDENTIALS = {
+    "openai": "OPENAI_API_KEY",
+    "together": "TOGETHER_API_KEY",
+}
 
 
 class PreflightError(RuntimeError):
@@ -104,6 +111,28 @@ def _model_installed(model, installed):
     return ":" not in model and f"{model}:latest" in installed
 
 
+def _missing_cloud_credentials(policy_status):
+    """Return missing credentials for the effective cloud runtime dependencies."""
+
+    providers = {target["provider"] for target in policy_status["targets"]}
+    if providers == {PROVIDER_OLLAMA}:
+        return []
+
+    # Every cloud profile retains the OpenAI embedding/index deployment mode.
+    required = {"OPENAI_API_KEY"}
+    required.update(
+        credential
+        for provider, credential in _CLOUD_PROVIDER_CREDENTIALS.items()
+        if provider in providers
+    )
+    missing = []
+    for name in sorted(required):
+        value = os.getenv(name)
+        if value is None or not value.strip():
+            missing.append(name)
+    return missing
+
+
 def run_startup_preflight():
     """
     Validate the mode and provider configuration before the graph runs.
@@ -135,8 +164,18 @@ def run_startup_preflight():
         privacy_mode()
         fully_local_mode()
         provider = llm_provider()
+        policy_status = model_policy_status()
     except ValueError as exc:
         raise PreflightError(str(exc)) from exc
+
+    missing_credentials = _missing_cloud_credentials(policy_status)
+    if missing_credentials:
+        raise PreflightError(
+            "The effective model profile "
+            f"{policy_status['effective_profile']!r} is missing required credentials: "
+            f"{', '.join(missing_credentials)}. Configure the named environment "
+            "variables before starting the application."
+        )
 
     if provider != PROVIDER_OLLAMA:
         openai_index_directory, _openai_collection_name = active_index_config()
@@ -214,11 +253,13 @@ def run_startup_preflight():
 
     return (
         "Local provider mode is ON (LLM_PROVIDER=ollama) — EXPERIMENTAL.\n"
+        f"  - Requested profile: {policy_status['requested_profile']}\n"
+        f"  - Effective profile: {policy_status['effective_profile']}\n"
         f"  - Chat model:      {chat_model}\n"
         f"  - Embedding model: {embedding_model}\n"
         f"  - Endpoint:        {base_url}\n"
         f"  - Index:           {persist_directory}\n"
-        "  - No data is sent to OpenAI, Tavily, or LangSmith, and no failure\n"
+        "  - No data is sent to OpenAI, Together, Tavily, or LangSmith, and no failure\n"
         "    path falls back to them. The endpoint above is itself the trust\n"
         "    boundary: it may be this machine or your own private infrastructure.\n"
         "  - Web search is disabled for every run in this mode, and a per-run\n"

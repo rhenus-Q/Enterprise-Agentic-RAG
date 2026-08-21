@@ -104,7 +104,7 @@ would test routing rather than fabrication resistance.
 # Validate the dataset only - no API calls, no history I/O, always safe
 uv run python evals/run_eval.py --validate-only
 
-# Full eval - REAL OpenAI (and Tavily) calls; requires keys in .env
+# Full eval - REAL configured-provider calls and, when enabled, Tavily
 uv run python evals/run_eval.py
 
 # Focused/smoke eval (does not write history or auto-compare with the latest baseline)
@@ -125,6 +125,10 @@ uv run python evals/run_eval.py --history-dir /path/to/history/
 # Use an explicitly reviewed, dated provider/model price snapshot
 uv run python evals/run_eval.py --price-snapshot evals/prices/legacy-YYYY-MM-DD.json
 ```
+
+Cloud credentials depend on the selected model profile and provider
+configuration. Local mode uses the configured Ollama-compatible endpoint;
+Tavily is called only when the effective run enables web search.
 
 ## History and delta reporting
 

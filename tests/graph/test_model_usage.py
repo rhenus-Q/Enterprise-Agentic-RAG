@@ -11,6 +11,7 @@ from langchain_core.outputs import ChatGeneration, LLMResult
 from langchain_core.runnables import Runnable, RunnableLambda
 from langgraph.graph import END, START, StateGraph
 
+from graph.chains.model_policy import ModelProfile, get_model_policy
 from graph.chains.model_tasks import ModelTask
 from graph.model_usage import (
     STATUS_PROVIDER_ERROR,
@@ -123,6 +124,58 @@ def test_normalize_token_usage_preserves_reported_zero_detail_counts():
     assert usage["cached_input_tokens"] == 0
     assert usage["cache_write_tokens"] == 0
     assert usage["reasoning_tokens"] == 0
+
+
+def test_normalize_token_usage_reads_openai_cache_write_detail_name():
+    response = _response(
+        response_metadata={
+            "token_usage": {
+                "prompt_tokens": 4,
+                "completion_tokens": 1,
+                "total_tokens": 5,
+                "prompt_tokens_details": {
+                    "cached_tokens": 0,
+                    "cache_write_tokens": 0,
+                },
+            }
+        }
+    )
+
+    assert normalize_token_usage(response)["cache_write_tokens"] == 0
+
+
+def test_collector_retains_sanitized_provider_request_settings(monkeypatch):
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    collector = ModelUsageCollector()
+    run_id = uuid4()
+    collector.on_chat_model_start(
+        {},
+        [[]],
+        run_id=run_id,
+        metadata={
+            "model_task": ModelTask.QUESTION_ROUTER.value,
+            "requested_profile": "flash_luna",
+            "effective_profile": "flash_luna",
+            "model_tier": "cheap",
+            "model_provider": "together",
+            "requested_model": "deepseek-ai/DeepSeek-V4-Flash-0731",
+            "model_request_settings": {
+                "temperature": 0,
+                "timeout_seconds": 60,
+                "reasoning_enabled": False,
+            },
+        },
+        invocation_params={"model": "deepseek-ai/DeepSeek-V4-Flash-0731"},
+    )
+    collector.on_llm_end(_response(), run_id=run_id)
+
+    attempt = collector.aggregate().to_dict()["attempts"][0]
+    assert attempt["provider"] == "together"
+    assert attempt["request_settings"] == {
+        "temperature": 0,
+        "timeout_seconds": 60,
+        "reasoning_enabled": False,
+    }
 
 
 def test_collector_records_all_six_attempts_in_run_local_order(monkeypatch):
@@ -351,7 +404,7 @@ def test_each_chain_propagates_static_task_metadata(
     module = importlib.import_module(module_name)
     factory = getattr(module, factory_name)
     captured = []
-    monkeypatch.setattr(module, "get_chat_model", lambda: _CapturingRunnable(captured))
+    monkeypatch.setattr(module, "get_chat_model", lambda _task: _CapturingRunnable(captured))
     factory.cache_clear()
     try:
         factory().invoke(payload)
@@ -408,3 +461,143 @@ def test_task_tags_can_supply_identity_without_metadata(monkeypatch, task):
     collector.on_llm_end(_response(), run_id=run_id)
 
     assert collector.aggregate().to_dict()["attempts"][0]["task"] == task.value
+
+
+@pytest.mark.parametrize("profile", list(ModelProfile))
+def test_every_profile_attributes_all_six_attempts_to_the_exact_target(monkeypatch, profile):
+    monkeypatch.setenv("MODEL_OPTIMIZATION_PROFILE", profile.value)
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("PRIVACY_MODE", "false")
+    policy = get_model_policy()
+    collector = ModelUsageCollector()
+
+    for task in ModelTask:
+        target = policy.target_for(task)
+        run_id = uuid4()
+        collector.on_chat_model_start(
+            {},
+            [[]],
+            run_id=run_id,
+            metadata={"model_task": task.value, **policy.metadata_for(task)},
+            tags=[f"model-task:{task.value}"],
+            invocation_params={"model": target.model, "temperature": 0},
+        )
+        collector.on_llm_end(
+            _response(
+                usage_metadata={
+                    "input_tokens": 4,
+                    "output_tokens": 1,
+                    "total_tokens": 5,
+                },
+                response_metadata={"model_name": target.model},
+            ),
+            run_id=run_id,
+        )
+
+    attempts = collector.aggregate().to_dict()["attempts"]
+
+    assert len(attempts) == 6
+    for attempt, task in zip(attempts, ModelTask, strict=True):
+        target = policy.target_for(task)
+        assert attempt["task"] == task.value
+        assert attempt["requested_profile"] == profile.value
+        assert attempt["effective_profile"] == profile.value
+        assert attempt["tier"] == target.tier.value
+        assert attempt["provider"] == target.provider
+        assert attempt["requested_model"] == target.model
+        assert attempt["reported_model"] == target.model
+        assert attempt["cached_input_tokens"] is None
+        assert attempt["cache_write_tokens"] is None
+        assert attempt["reasoning_tokens"] is None
+
+
+class RateLimitError(RuntimeError):
+    """Synthetic 429-equivalent provider error for metadata-only tests."""
+
+
+class InternalServerError(RuntimeError):
+    """Synthetic 5xx-equivalent provider error for metadata-only tests."""
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        TimeoutError("timeout detail"),
+        RateLimitError("429 detail"),
+        InternalServerError("5xx detail"),
+    ],
+)
+def test_together_failures_keep_profile_target_and_sanitized_error_attribution(
+    monkeypatch,
+    error,
+):
+    monkeypatch.setenv("MODEL_OPTIMIZATION_PROFILE", ModelProfile.FLASH_LUNA.value)
+    policy = get_model_policy()
+    task = ModelTask.QUESTION_ROUTER
+    target = policy.target_for(task)
+    collector = ModelUsageCollector()
+    run_id = uuid4()
+
+    collector.on_chat_model_start(
+        {},
+        [[]],
+        run_id=run_id,
+        metadata={"model_task": task.value, **policy.metadata_for(task)},
+        tags=[f"model-task:{task.value}"],
+        invocation_params={"model": target.model},
+    )
+    collector.on_llm_error(error, run_id=run_id)
+
+    attempt = collector.aggregate().to_dict()["attempts"][0]
+    serialized = json.dumps(attempt)
+    assert attempt["status"] == STATUS_PROVIDER_ERROR
+    assert attempt["requested_profile"] == ModelProfile.FLASH_LUNA.value
+    assert attempt["provider"] == "together"
+    assert attempt["requested_model"] == target.model
+    assert attempt["error_type"] == type(error).__name__
+    assert str(error) not in serialized
+    assert attempt["input_tokens"] is None
+
+
+def test_retry_attempts_remain_separate_and_preserve_failed_usage(monkeypatch):
+    monkeypatch.setenv("MODEL_OPTIMIZATION_PROFILE", ModelProfile.FLASH_LUNA.value)
+    policy = get_model_policy()
+    task = ModelTask.GENERATION
+    target = policy.target_for(task)
+    collector = ModelUsageCollector()
+
+    first_run_id = uuid4()
+    collector.on_chat_model_start(
+        {},
+        [[]],
+        run_id=first_run_id,
+        metadata={"model_task": task.value, **policy.metadata_for(task)},
+        invocation_params={"model": target.model},
+    )
+    collector.on_llm_error(TimeoutError("first attempt"), run_id=first_run_id)
+
+    second_run_id = uuid4()
+    collector.on_chat_model_start(
+        {},
+        [[]],
+        run_id=second_run_id,
+        metadata={"model_task": task.value, **policy.metadata_for(task)},
+        invocation_params={"model": target.model},
+    )
+    collector.on_llm_end(
+        _response(
+            usage_metadata={"input_tokens": 3, "output_tokens": 2, "total_tokens": 5},
+            response_metadata={"model_name": target.model},
+        ),
+        run_id=second_run_id,
+    )
+
+    aggregate = collector.aggregate().to_dict()
+    assert aggregate["attempt_count"] == 2
+    assert [attempt["sequence"] for attempt in aggregate["attempts"]] == [1, 2]
+    assert [attempt["status"] for attempt in aggregate["attempts"]] == [
+        STATUS_PROVIDER_ERROR,
+        "success",
+    ]
+    assert aggregate["usage_incomplete_attempts"] == 1
+    assert aggregate["usage_complete_attempts"] == 1

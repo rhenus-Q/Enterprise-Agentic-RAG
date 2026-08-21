@@ -33,6 +33,7 @@ architecture.
 | [016](016-thin-web-application-layer.md) | Thin web application layer | `server/` is an adapter over `graph.engine` — it reports the run's resolved values instead of recomputing them, keeps history metadata-only and in-memory, serializes asks behind one lock, sanitizes every payload, and the frontend renders only what the API reported. |
 | [017](017-cooperative-run-cancellation.md) | Cooperative run cancellation | An optional `AnswerOptions.cancel_event` stops a run at the next node boundary with `RunCancelled` — no `stop_reason`, no history record; `POST /api/ask/cancel` waits for the slot to free and the cancelled ask returns HTTP 499. |
 | [018](018-engine-api.md) | The engine API | `graph/engine.py` is the one entry point every caller runs through: it seeds state and resolves per-run config once, redacts secrets out of the question before it reaches the graph, and collects metadata-only run observability. Recorded retroactively. |
+| [019](019-static-cloud-model-profiles.md) | Static cloud model profiles | Three process-level profiles select uniform GPT-5 mini, uniform Luna, or an exact per-task Flash + Luna allocation without content-aware routing, graph changes, or fallback. |
 
 ## Conventions
 

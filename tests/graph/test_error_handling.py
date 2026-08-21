@@ -17,6 +17,8 @@ from langchain_core.documents import Document
 
 import graph.consts as consts_module
 import graph.graph as graph_module
+from graph.chains.model_policy import ModelProfile, get_model_policy
+from graph.chains.model_tasks import ModelTask
 from graph.consts import (
     RETRIEVE,
     STOP_REASON_GENERATION_ERROR,
@@ -369,6 +371,26 @@ def test_app_stops_safely_when_generation_fails(monkeypatch):
     assert result["stop_reason"] == STOP_REASON_GENERATION_ERROR
     assert result["generation"] == GENERATION_FAILED_ANSWER
     assert result["retries"] == 1  # stopped on the first failure, no retry loop
+
+
+@pytest.mark.parametrize("profile", list(ModelProfile))
+def test_every_profile_preserves_the_safe_generation_failure_outcome(monkeypatch, profile):
+    monkeypatch.setenv("MODEL_OPTIMIZATION_PROFILE", profile.value)
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("PRIVACY_MODE", "false")
+    policy = get_model_policy()
+    _patch_router(monkeypatch, RETRIEVE)
+    _patch_graders_to_fail_if_called(monkeypatch)
+    _patch_all_node_seams(monkeypatch, generation_raises=True)
+
+    result = graph_module.app.invoke(_initial_state())
+
+    assert policy.effective_profile == profile.value
+    assert policy.target_for(ModelTask.GENERATION).model
+    assert result["stop_reason"] == STOP_REASON_GENERATION_ERROR
+    assert result["generation"] == GENERATION_FAILED_ANSWER
+    assert result["retries"] == 1
+    assert result["llm_call_count"] == 1
 
 
 def test_app_stops_with_tool_error_when_hallucination_grader_fails(monkeypatch):

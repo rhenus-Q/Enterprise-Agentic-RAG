@@ -86,9 +86,22 @@ export interface PreflightStatus {
   message: string | null;
 }
 
+export interface RuntimeModelTarget {
+  task: string;
+  tier: string;
+  provider: string;
+  model: string;
+  request_settings: Record<string, string | number | boolean>;
+}
+
 export interface RuntimeStatus {
   provider: string | null;
   chat_model: string | null;
+  requested_model_profile: string | null;
+  effective_model_profile: string | null;
+  model_profile_override_reason: string | null;
+  model_profile_operational: boolean | null;
+  model_targets: RuntimeModelTarget[] | null;
   embedding_provider: string | null;
   embedding_model: string | null;
   privacy_mode: boolean | null;

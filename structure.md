@@ -39,7 +39,7 @@ where lifetime reuse is intentional) so every module imports side-effect-free
 |---|---|---|
 | Orchestration | `graph/graph.py` | `StateGraph` assembly, pure routing functions, `MAX_RETRIES = 5`, compiled `app` |
 | Nodes | `graph/nodes/` | State-transforming steps; the only place state is written |
-| Chains | `graph/chains/` | Six LCEL chains on `gpt-5-mini` (`temperature=0`): `question_router`, `retrieval_grader`, `generation`, `hallucination_grader`, `answer_grader`, `query_rewriter` |
+| Chains | `graph/chains/` | Six provider-aware LCEL chains using a static process-level model policy (`temperature=0`): `question_router`, `retrieval_grader`, `generation`, `hallucination_grader`, `answer_grader`, `query_rewriter` |
 
 Supporting modules: `graph/state.py` (the state schema), `graph/consts.py`
 (node names, `stop_reason` values, the `WEB_SEARCH_SOURCE` metadata marker),
@@ -306,14 +306,14 @@ disabled:
   `enabled=True` on a normal run would override an operator's deliberate
   `LANGSMITH_TRACING=false`.
 
-Scope limit: this state stops external web search and trace export, not the
-OpenAI calls themselves — the question and retrieved chunks still reach the
-model provider for all four LLM steps that run in this mode:
-retrieval/document grading, generation, grounding (hallucination) grading, and
-answer-usefulness grading. Routing is not among them: the router LLM is
+Scope limit: this state stops external web search and trace export, not cloud
+model calls. The question and retrieved chunks still reach the chat provider(s)
+selected by `MODEL_OPTIMIZATION_PROFILE` for the four LLM steps that run in
+this mode: retrieval/document grading, generation, grounding (hallucination)
+grading, and answer-usefulness grading. Cloud retrieval also sends the query to
+OpenAI for embedding. Routing is not among these calls: the router LLM is
 skipped entirely (see above), and it only ever receives the question, never
-retrieved chunks. Closing the model path too requires swapping the provider,
-which is what the local provider mode below does.
+retrieved chunks. Closing the cloud model paths requires local provider mode.
 
 All grounding and usefulness gates remain active when web search is off, with one
 principled exception in both modes: the deterministic insufficient-context
@@ -345,6 +345,32 @@ default to off and reject unparseable values at startup.
   mode — before the local-only checks, so an invalid value becomes a
   `PreflightError` rather than a raw traceback in the CLI or a swallowed
   per-row failure in the eval harness. `--validate-only` still bypasses it.
+
+### Static cloud model profiles (`MODEL_OPTIMIZATION_PROFILE`)
+
+`graph/chains/model_policy.py` resolves one of three fixed process-level chat
+profiles: Legacy (`gpt-5-mini` on all six tasks), Luna All (`gpt-5.6-luna` on
+all six), or Flash + Luna. The hybrid pins question routing, retrieval grading,
+and hallucination grading to Together's exact DeepSeek Flash 0731 model while
+answer grading, generation, and query rewriting use OpenAI GPT-5.6 Luna.
+`graph/chains/_llm.py` remains the only chat-client factory; Together uses its
+OpenAI-compatible API and `TOGETHER_API_KEY`.
+
+The profile changes chat allocation only. Cloud deployments retain
+`LLM_PROVIDER=openai`, OpenAI embeddings, the OpenAI-scoped Chroma index, and
+therefore an `OPENAI_API_KEY` requirement for retrieval. `flash_luna` requires
+both cloud keys; the other two profiles require only OpenAI. Preflight checks
+effective runtime dependencies without making a network call.
+
+Resolution order is local override, then privacy override to Legacy, then the
+requested cloud profile. Targets and clients are immutable/process-cached. The
+resolver is not content-aware and adds no graph nodes, state fields, fallback,
+or new LLM calls. Per-attempt metadata records requested/effective profile,
+tier, provider, requested/reported model, fixed settings, latency, and the real
+provider token fields without storing prompts or responses. Cost calculation
+is pure and opt-in: `evals/model_pricing.py` requires an explicit price snapshot
+keyed by exact provider/model and never fetches prices or guesses missing usage.
+See [ADR 019](docs/adr/019-static-cloud-model-profiles.md).
 
 ### Local provider mode (`LLM_PROVIDER=ollama`) — experimental
 
@@ -389,7 +415,8 @@ rather than replacing it.
   graph. Preflight lives outside the graph because ADR 006 requires in-graph
   failures to degrade rather than crash; checking first keeps both graceful
   degradation and an actionable message.
-* **Boundary.** No third-party egress — not "nothing leaves the machine":
+* **Boundary.** No OpenAI, Together, Tavily, or LangSmith egress — not
+  "nothing leaves the machine":
   `OLLAMA_BASE_URL` may point at private infrastructure. See ADR 014.
 
 ## 10. stop_reason and user-facing caveats
@@ -607,9 +634,9 @@ the execution timeline renders post-hoc.
 | Suite | What it covers | External calls |
 |---|---|---|
 | `tests/node/` | Each node's state in/out behavior, generation context formatting and no-document short-circuit behavior, the web-result relevance gate, defensive Tavily parsing, and graceful degradation when each node's external dependency raises | None — every dependency mocked at its lazy factory seam |
-| `tests/graph/` | Graph routing and compiled runs, privacy and fallback behavior, stop reasons and budgets, failure degradation and caveat formatting, engine/CLI behavior, ingestion/provenance pure helpers, and import side-effect purity | None — fully mocked |
+| `tests/graph/` | Graph routing and compiled runs, privacy and fallback behavior, stop reasons and budgets, model-profile routing, provider usage aggregation, failure degradation and caveat formatting, engine/CLI behavior, ingestion/provenance pure helpers, and import side-effect purity | None — fully mocked |
 | `tests/chains/` | Five live-model modules covering generation, retrieval grading, question routing, hallucination grading, and answer grading. Query rewriting currently has no live integration module. | **Real OpenAI API** — every test is gated by the `requires_openai` marker; do not run without explicit approval |
-| `tests/evals/` | The eval harness's pure helpers: dataset loading/validation (incl. the shipped dataset), per-row checks, metrics, report rendering | None — pure functions |
+| `tests/evals/` | The eval harness's pure helpers: dataset loading/validation, per-row checks, metrics, cost estimation, and report rendering | None — pure functions |
 | `tests/server/` | The FastAPI layer (§14): ask shape and citation building, cancellation, status/index compatibility and sanitization, documents listing, run store bounds and 404s, and the full error map | None — `graph.engine.answer_question` is monkeypatched; no keys, no network |
 | `tests/test_env_isolation.py` | Root-level regression that deployment/provider variables from a developer environment cannot decide mocked-test assertions | None |
 

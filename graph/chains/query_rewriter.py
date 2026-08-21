@@ -74,5 +74,5 @@ def get_query_rewriter():
     on first call, not at import time.
     """
 
-    llm = get_chat_model()
+    llm = get_chat_model(ModelTask.QUERY_REWRITER)
     return bind_model_task(prompt | llm | StrOutputParser(), ModelTask.QUERY_REWRITER)

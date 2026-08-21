@@ -172,6 +172,7 @@ State is a `TypedDict` defined in `graph/state.py` with fourteen fields: the wor
 ├── evals/
 │   ├── questions.jsonl      # Behavioral eval dataset (24 rows, 6 categories)
 │   ├── run_eval.py          # Eval runner: real graph runs + deterministic checks (not in CI)
+│   ├── model_pricing.py     # Pure exact-provider/model cost calculation from explicit snapshots
 │   └── results.md           # Generated eval report
 ├── .github/
 │   └── workflows/ci.yml     # CI: aggregate keys-free Python tests, lint/type checks, and frontend validation
@@ -183,21 +184,22 @@ State is a `TypedDict` defined in `graph/state.py` with fourteen fields: the wor
 │   ├── state.py             # GraphState TypedDict
 │   ├── config.py            # Env-driven runtime flags: WEB_SEARCH_ENABLED, WEB_FALLBACK_POLICY,
 │   │                        #   per-run budgets (MAX_LLM_CALLS_PER_RUN, MAX_WEB_SEARCHES_PER_RUN, MAX_WEB_RESULTS_TO_GRADE),
-│   │                        #   per-request LLM timeout (LLM_REQUEST_TIMEOUT_SECONDS)
+│   │                        #   per-request LLM timeout and the static cloud model profile
+│   ├── model_usage.py       # Real provider usage/latency normalization and metadata-only aggregation
 │   ├── consts.py            # Node-name constants and stop_reason values
 │   ├── nodes/               # retrieve, grade_documents, generate, web_search,
 │   │                        #   retry helpers (add_grounding_feedback, rewrite_query),
 │   │                        #   terminal notice nodes (stop_reason recorders)
 │   └── chains/              # LCEL chains: generation, retrieval_grader, question_router,
 │                            #   hallucination_grader, answer_grader, query_rewriter
-│                            #   (each behind a lazy get_*() factory)
+│                            #   (each behind a lazy get_*() factory and shared model policy)
 └── tests/
     ├── conftest.py          # Loads .env; provides the `requires_openai` skip marker; autouse fixture
     │                        #   clears the mode/provider env vars so a local .env cannot decide assertions
     ├── node/                # Unit tests — includes test_generation_context_delimiters.py and
     │                        #   test_generation_short_circuit.py; no API keys
     ├── graph/               # Routing / privacy-toggle / compiled-graph tests — fully mocked
-    ├── evals/               # Unit tests for the eval harness's pure helpers — fully mocked
+    ├── evals/               # Pure eval and exact-model cost helpers — fully mocked
     ├── server/              # FastAPI endpoint tests — engine monkeypatched, no keys, no network
     ├── test_env_isolation.py # Root-level regression for deployment/provider env isolation
     └── chains/              # Five real-model chain modules; no query-rewriter live integration coverage
@@ -225,7 +227,8 @@ See [`.env.example`](.env.example) for the full template:
 
 | Variable                                                                            | Required                              | Used for                                                                                                                                                                       |
 | ----------------------------------------------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `OPENAI_API_KEY`                                                                    | Yes (unless `LLM_PROVIDER=ollama`)    | Chat models (router, graders, generation) and embeddings                                                                                                                       |
+| `OPENAI_API_KEY`                                                                    | Yes (unless `LLM_PROVIDER=ollama`)    | OpenAI embeddings for every cloud profile, plus GPT chat targets                                                                                                               |
+| `TOGETHER_API_KEY`                                                                  | When using `flash_luna`              | Together-hosted DeepSeek Flash chat targets in `flash_luna`; never used for embeddings or as an OpenAI fallback                                                          |
 | `TAVILY_API_KEY`                                                                    | When the effective run can use web search | Tavily web-search paths; not needed under `PRIVACY_MODE=true`, local-provider mode, or an unoverridden `WEB_SEARCH_ENABLED=false` default                                  |
 | `PRIVACY_MODE`                                                                      | Optional (default `false`)            | Absolute privacy lock: disables all external web search *and* LangSmith trace export, and a per-run option cannot reopen either (see below)                                     |
 | `FULLY_LOCAL_MODE`                                                                  | Optional (default `false`)            | Route every LLM and embedding call to the local endpoint and apply the same lock; equivalent to `LLM_PROVIDER=ollama`                                                           |
@@ -233,6 +236,7 @@ See [`.env.example`](.env.example) for the full template:
 | `WEB_FALLBACK_POLICY`                                                               | Optional (default `conservative`)     | `conservative` / `aggressive` / `disabled` — when document grading falls back to web search (see below)                                                                        |
 | `MAX_LLM_CALLS_PER_RUN`, `MAX_WEB_SEARCHES_PER_RUN`, `MAX_WEB_RESULTS_TO_GRADE`     | Optional (defaults `30` / `5` / `15`) | Per-run cost/latency budgets (see below)                                                                                                                                       |
 | `LLM_REQUEST_TIMEOUT_SECONDS`                                                       | Optional (default `60`)               | Per-request timeout for a single LLM call, applied to all six chains; a timeout is handled by the existing failure paths and surfaces as the matching `*_error` stop reason     |
+| `MODEL_OPTIMIZATION_PROFILE`                                                        | Optional (default `legacy`)           | Static process-level chat allocation: `legacy`, `luna_all`, or `flash_luna`                                                                                                                                    |
 | `LLM_PROVIDER`                                                                      | Optional (default `openai`)           | `openai` / `ollama`. Process-level provider switch; `ollama` routes every LLM and embedding call to a local endpoint (see below). An **invalid** value fails loudly rather than falling back |
 | `LOCAL_CHAT_MODEL`                                                                  | Optional (default `qwen3:4b-instruct-2507-q4_K_M`) | Chat model used when `LLM_PROVIDER=ollama`; must be installed on the endpoint                                                                                      |
 | `LOCAL_EMBEDDING_MODEL`                                                             | Optional (default `qwen3-embedding:0.6b`) | Embedding model used when `LLM_PROVIDER=ollama`; changing it requires re-running ingestion                                                                             |
@@ -304,11 +308,48 @@ regenerating from the same empty context cannot improve it. The default
 full web-search behavior.
 
 **What this setting does not do.** It stops external web search and trace
-export for runs that use the default; it does not make the assistant local-only. The retrieval grader,
-generation chain, hallucination grader, and answer grader all still send the
-question and the retrieved chunks to OpenAI. Read the mode as "no third-party
-web search and no trace export", not "nothing leaves the machine" — removing
-the model provider too is what `LLM_PROVIDER=ollama` below is for.
+export for runs that use the default; it does not make the assistant local-only.
+The retrieval grader, generation chain, hallucination grader, and answer grader
+still send the question and retrieved chunks to the cloud chat provider(s)
+selected by `MODEL_OPTIMIZATION_PROFILE`, which may be OpenAI, Together, or
+both. Cloud retrieval also sends the query to OpenAI for embedding. Read the
+mode as "no third-party web search and no trace export", not "nothing leaves
+the machine" — removing cloud model providers is what `LLM_PROVIDER=ollama`
+below is for.
+
+### Static cloud model profiles (`MODEL_OPTIMIZATION_PROFILE`)
+
+Cloud mode keeps the existing OpenAI embedding model and Chroma index while
+assigning the six chat tasks through one static process-level profile. The
+supported cloud profiles are:
+
+| Profile | Exact allocation |
+|---|---|
+| `legacy` | OpenAI `gpt-5-mini` for all six tasks (default and legacy baseline) |
+| `luna_all` | OpenAI `gpt-5.6-luna` for all six tasks |
+| `flash_luna` | Together `deepseek-ai/DeepSeek-V4-Flash-0731` for question routing, retrieval grading, and hallucination grading; OpenAI `gpt-5.6-luna` for answer grading, generation, and query rewriting |
+
+This is fixed allocation, not content-aware routing: the resolver never
+examines a question, document, answer, or model confidence. Change the profile
+only between processes so cached clients and chains cannot cross experiment
+arms. There is no automatic provider/model fallback.
+
+Every cloud profile requires `OPENAI_API_KEY` because query retrieval still
+uses `OpenAIEmbeddings`. The `flash_luna` profile additionally requires
+`TOGETHER_API_KEY`. Together calls use its OpenAI-compatible endpoint with the
+exact Flash model id and reasoning disabled. Startup preflight checks the effective profile and
+names missing variables without exposing values. `PRIVACY_MODE=true` forces an
+effective `legacy` profile; local mode overrides every cloud profile and reads
+neither cloud key. See [ADR 019](docs/adr/019-static-cloud-model-profiles.md).
+
+Every model attempt records metadata-only provider telemetry from the real
+provider response: requested/effective profile, provider, requested and
+reported model, latency, input/cached-input/cache-write/output/reasoning/total
+tokens, and completion/error status. Missing token fields remain unknown; the
+system does not estimate tokens with a local tokenizer. The eval cost helper
+calculates cost only from an explicitly supplied, reviewed price snapshot keyed
+by exact `(provider, model)` pairs and reports incomplete usage or pricing
+honestly instead of guessing.
 
 ### Local provider mode (`LLM_PROVIDER=ollama`) — experimental
 
@@ -317,7 +358,7 @@ path: only a provider swap can. Setting `LLM_PROVIDER=ollama` routes all six
 chains and both embedding call sites to an Ollama-compatible endpoint.
 
 **The boundary, stated accurately.** In local mode no data is sent to OpenAI,
-Tavily, or LangSmith, and no failure path falls back to them — a local model
+Together, Tavily, or LangSmith, and no failure path falls back to them — a local model
 failure ends the run through the normal `generation_error` caveat rather than
 silently rerouting. But `OLLAMA_BASE_URL` is itself the trust boundary: it
 defaults to `localhost` and may point at your own private infrastructure. The
@@ -827,7 +868,8 @@ LLM-as-judge), then writes a Markdown report to
 # Validate the dataset format only — no API calls
 uv run python evals/run_eval.py --validate-only
 
-# Full eval — real OpenAI/Tavily calls, requires keys (not part of CI)
+# Full eval — real calls to configured model provider(s) and, when enabled, Tavily
+# Requires matching cloud credentials or a configured local endpoint; not part of CI
 uv run python evals/run_eval.py
 
 # Focused/smoke eval - no history write or automatic baseline comparison

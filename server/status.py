@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ingestion
 from graph import config
-from server.schemas import IndexStatus, PreflightStatus, RuntimeStatus
+from server.schemas import IndexStatus, PreflightStatus, RuntimeModelTarget, RuntimeStatus
 
 # Compatibility state used when the index could not be inspected at all
 # (permission denied, unreadable directory). Deliberately distinct from
@@ -29,6 +29,10 @@ CONFIG_ERROR_FULLY_LOCAL_MODE = (
 CONFIG_ERROR_LLM_PROVIDER = (
     "LLM_PROVIDER is not a valid provider selection. Use 'openai' or 'ollama'; "
     "note that FULLY_LOCAL_MODE=true requires 'ollama'."
+)
+CONFIG_ERROR_MODEL_OPTIMIZATION_PROFILE = (
+    "MODEL_OPTIMIZATION_PROFILE is not valid. Use 'legacy', 'luna_all', or "
+    "'flash_luna'; unset it to use 'legacy'."
 )
 
 
@@ -96,6 +100,11 @@ def _config_error_status(preflight: PreflightStatus, message: str) -> RuntimeSta
     return RuntimeStatus(
         provider=None,
         chat_model=None,
+        requested_model_profile=None,
+        effective_model_profile=None,
+        model_profile_override_reason=None,
+        model_profile_operational=None,
+        model_targets=None,
         embedding_provider=None,
         embedding_model=None,
         privacy_mode=None,
@@ -139,6 +148,11 @@ def build_runtime_status(preflight: PreflightStatus) -> RuntimeStatus:
     except ValueError:
         return _config_error_status(preflight, CONFIG_ERROR_LLM_PROVIDER)
 
+    try:
+        policy = config.model_policy_status()
+    except ValueError:
+        return _config_error_status(preflight, CONFIG_ERROR_MODEL_OPTIMIZATION_PROFILE)
+
     # Canonical effective-mode helper rather than a local re-derivation.
     # Cannot raise here: llm_provider() above already resolved.
     local_mode = config.local_mode_enabled()
@@ -152,10 +166,16 @@ def build_runtime_status(preflight: PreflightStatus) -> RuntimeStatus:
 
     index = build_index_status()
     expected = index.expected_fingerprint
+    target_models = {target["model"] for target in policy["targets"]}
 
     return RuntimeStatus(
         provider=provider,
-        chat_model=config.local_chat_model() if local_mode else config.OPENAI_CHAT_MODEL,
+        chat_model=next(iter(target_models)) if len(target_models) == 1 else None,
+        requested_model_profile=policy["requested_profile"],
+        effective_model_profile=policy["effective_profile"],
+        model_profile_override_reason=policy["override_reason"],
+        model_profile_operational=policy["operational"],
+        model_targets=[RuntimeModelTarget.model_validate(target) for target in policy["targets"]],
         embedding_provider=expected["embedding_provider"],
         embedding_model=expected["embedding_model"],
         privacy_mode=privacy_enabled,

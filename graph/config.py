@@ -9,6 +9,7 @@ side-effect-free and easy to test: no client construction, no .env loading
 """
 
 import os
+from typing import Any
 
 # Values (case-insensitive, whitespace-stripped) that disable a boolean flag.
 _FALSY_VALUES = {"false", "0", "no", "off"}
@@ -207,21 +208,63 @@ def llm_request_timeout_seconds() -> int:
     )
 
 
+# --- Static cloud model profile (MODEL_OPTIMIZATION_PROFILE) ---
+#
+# This is a process-level static deployment selection, never a per-run option.
+# It changes chat-model targets only; LLM_PROVIDER continues to own deployment,
+# embeddings, and the active provider-scoped Chroma index.
+MODEL_PROFILE_LEGACY = "legacy"
+MODEL_PROFILE_LUNA_ALL = "luna_all"
+MODEL_PROFILE_FLASH_LUNA = "flash_luna"
+
+_MODEL_OPTIMIZATION_PROFILES = (
+    MODEL_PROFILE_LEGACY,
+    MODEL_PROFILE_LUNA_ALL,
+    MODEL_PROFILE_FLASH_LUNA,
+)
+
+
+def model_optimization_profile() -> str:
+    """Strictly parse the process-level cloud model profile."""
+
+    raw = os.getenv("MODEL_OPTIMIZATION_PROFILE")
+    if raw is None or not raw.strip():
+        return MODEL_PROFILE_LEGACY
+
+    cleaned = raw.strip().lower()
+    if cleaned not in _MODEL_OPTIMIZATION_PROFILES:
+        raise ValueError(
+            f"Invalid MODEL_OPTIMIZATION_PROFILE value {raw.strip()!r}. "
+            f"Valid options: {', '.join(_MODEL_OPTIMIZATION_PROFILES)}. "
+            f"Unset the variable to use the default profile ({MODEL_PROFILE_LEGACY})."
+        )
+    return cleaned
+
+
+def model_policy_status() -> dict[str, Any]:
+    """Return the sanitized policy view without making server import chain code."""
+
+    from graph.chains.model_policy import get_model_policy
+
+    return get_model_policy().to_status_dict()
+
+
 # --- Provider selection (LLM_PROVIDER) ---
 #
-# Which provider serves every LLM and embedding call. Deliberately coarse: a
-# process-level deployment mode, not a per-run option and not a per-chain
-# selection. It has to be process-level because get_retriever() is cached for
-# the process and its Chroma collection is bound to one embedding space
+# Selects the cloud or local deployment, embedding provider, and provider-scoped
+# Chroma index. It is process-level, not a per-run option. In cloud mode,
+# MODEL_OPTIMIZATION_PROFILE determines the chat task/provider allocation. The
+# deployment choice has to be process-level because get_retriever() is cached
+# for the process and its Chroma collection is bound to one embedding space
 # (OpenAI's default 1536 dims vs. a local model's 1024), so a run cannot swap
-# providers halfway.
+# embedding providers halfway.
 PROVIDER_OPENAI = "openai"
 PROVIDER_OLLAMA = "ollama"
 
 _LLM_PROVIDERS = (PROVIDER_OPENAI, PROVIDER_OLLAMA)
 
 # The OpenAI chat model every chain uses whenever LLM_PROVIDER is unset or
-# "openai" (graph/chains/_llm.py::get_chat_model()). Not env-configurable,
+# "openai" under the Legacy policy. Not env-configurable,
 # unlike the local-provider models below. Lives here rather than in _llm.py
 # so callers outside the graph (e.g. server/status.py) can read it without
 # importing the chains package.

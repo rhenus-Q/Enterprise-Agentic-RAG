@@ -88,7 +88,7 @@ def get_question_router():
     on first call, not at import time.
     """
 
-    llm = get_chat_model()
+    llm = get_chat_model(ModelTask.QUESTION_ROUTER)
     structured_llm = llm.with_structured_output(RouteQuery)
     return bind_model_task(prompt | structured_llm, ModelTask.QUESTION_ROUTER)
 

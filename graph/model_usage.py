@@ -110,7 +110,12 @@ def _usage_candidate(value: Any) -> dict[str, int | None]:
         ),
         "cache_write_tokens": _first_known(
             _first_int(mapping, "cache_write_tokens", "cache_creation_input_tokens"),
-            _first_int(input_details, "cache_creation", "cache_write"),
+            _first_int(
+                input_details,
+                "cache_creation",
+                "cache_write",
+                "cache_write_tokens",
+            ),
         ),
         "output_tokens": _first_int(mapping, "output_tokens", "completion_tokens"),
         "reasoning_tokens": _first_known(
@@ -418,6 +423,11 @@ class ModelUsageCollector(BaseCallbackHandler):
             "temperature": temperature,
             "timeout_seconds": config.llm_request_timeout_seconds(),
         }
+        policy_settings = metadata.get("model_request_settings")
+        if isinstance(policy_settings, Mapping):
+            reasoning_enabled = policy_settings.get("reasoning_enabled")
+            if isinstance(reasoning_enabled, bool):
+                settings["reasoning_enabled"] = reasoning_enabled
         return (
             requested_profile,
             effective_profile,

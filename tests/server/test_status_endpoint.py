@@ -15,6 +15,7 @@ from server.app import create_app
 from server.status import (
     CONFIG_ERROR_FULLY_LOCAL_MODE,
     CONFIG_ERROR_LLM_PROVIDER,
+    CONFIG_ERROR_MODEL_OPTIMIZATION_PROFILE,
     CONFIG_ERROR_PRIVACY_MODE,
 )
 
@@ -65,6 +66,14 @@ def test_status_reports_openai_default_mode(monkeypatch):
 
     assert payload["provider"] == "openai"
     assert payload["chat_model"] == "gpt-5-mini"
+    assert payload["requested_model_profile"] == "legacy"
+    assert payload["effective_model_profile"] == "legacy"
+    assert payload["model_profile_override_reason"] is None
+    assert payload["model_profile_operational"] is True
+    assert len(payload["model_targets"]) == 6
+    assert {(target["provider"], target["model"]) for target in payload["model_targets"]} == {
+        ("openai", "gpt-5-mini")
+    }
     assert payload["embedding_provider"] == "openai"
     assert payload["privacy_mode"] is False
     assert payload["local_mode"] is False
@@ -83,6 +92,21 @@ def test_status_reports_privacy_lock(monkeypatch):
     assert payload["local_mode"] is False
     assert payload["web_search_enabled_default"] is False
     assert payload["web_search_locked"] is True
+
+
+def test_status_reports_requested_and_privacy_overridden_profiles(monkeypatch):
+    monkeypatch.setenv("PRIVACY_MODE", "true")
+    monkeypatch.setenv("MODEL_OPTIMIZATION_PROFILE", "flash_luna")
+    _patch_index(monkeypatch, expected=OPENAI_FINGERPRINT, stored=OPENAI_FINGERPRINT)
+
+    payload = _get_status(monkeypatch)
+
+    assert payload["requested_model_profile"] == "flash_luna"
+    assert payload["effective_model_profile"] == "legacy"
+    assert payload["model_profile_override_reason"] == "privacy_mode"
+    assert payload["model_profile_operational"] is True
+    assert payload["chat_model"] == "gpt-5-mini"
+    assert {target["provider"] for target in payload["model_targets"]} == {"openai"}
 
 
 def test_status_reports_resolved_local_mode(monkeypatch):
@@ -104,6 +128,11 @@ def test_status_reports_resolved_local_mode(monkeypatch):
 
     assert payload["provider"] == "ollama"
     assert payload["chat_model"] == "local-chat-model"
+    assert payload["requested_model_profile"] == "legacy"
+    assert payload["effective_model_profile"] == "local"
+    assert payload["model_profile_override_reason"] == "local_mode"
+    assert payload["model_profile_operational"] is True
+    assert {target["provider"] for target in payload["model_targets"]} == {"ollama"}
     assert payload["embedding_provider"] == "ollama"
     assert payload["embedding_model"] == "local-embedding-model"
     assert payload["local_mode"] is True
@@ -143,6 +172,56 @@ def test_invalid_provider_is_a_structured_200_config_error(monkeypatch):
     assert payload["config_error"] == CONFIG_ERROR_LLM_PROVIDER
     # Actionable, but the rejected value is never echoed back.
     assert "bogus" not in json.dumps(payload)
+
+
+def test_invalid_model_profile_is_a_sanitized_structured_config_error(monkeypatch):
+    monkeypatch.setenv("MODEL_OPTIMIZATION_PROFILE", "invalid-profile-SENTINEL")
+
+    payload = _get_status(monkeypatch)
+
+    assert payload["provider"] is None
+    assert payload["model_targets"] is None
+    assert payload["config_error"] == CONFIG_ERROR_MODEL_OPTIMIZATION_PROFILE
+    assert "SENTINEL" not in json.dumps(payload)
+
+
+@pytest.mark.parametrize(
+    ("profile", "expected_chat_model", "expected_targets"),
+    [
+        ("legacy", "gpt-5-mini", {("openai", "gpt-5-mini")}),
+        ("luna_all", "gpt-5.6-luna", {("openai", "gpt-5.6-luna")}),
+        (
+            "flash_luna",
+            None,
+            {
+                ("together", "deepseek-ai/DeepSeek-V4-Flash-0731"),
+                ("openai", "gpt-5.6-luna"),
+            },
+        ),
+    ],
+)
+def test_status_reports_every_operational_profile_without_endpoint_or_credentials(
+    monkeypatch,
+    profile,
+    expected_chat_model,
+    expected_targets,
+):
+    monkeypatch.setenv("MODEL_OPTIMIZATION_PROFILE", profile)
+    _patch_index(monkeypatch, expected=OPENAI_FINGERPRINT, stored=OPENAI_FINGERPRINT)
+
+    payload = _get_status(monkeypatch)
+    serialized = json.dumps(payload)
+
+    assert payload["requested_model_profile"] == profile
+    assert payload["effective_model_profile"] == profile
+    assert payload["model_profile_operational"] is True
+    assert payload["chat_model"] == expected_chat_model
+    assert {
+        (target["provider"], target["model"]) for target in payload["model_targets"]
+    } == expected_targets
+    assert "TOGETHER_API_KEY" not in serialized
+    assert "OPENAI_API_KEY" not in serialized
+    assert "base_url" not in serialized
 
 
 @pytest.mark.parametrize(

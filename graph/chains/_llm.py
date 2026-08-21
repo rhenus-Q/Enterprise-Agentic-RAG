@@ -1,77 +1,110 @@
-"""
-_llm.py
+"""The single lazy chat-model factory shared by all six LCEL chains."""
 
-The single chat-model factory shared by all six LCEL chains.
+from __future__ import annotations
 
-Which provider a chain talks to is a process-level deployment mode
-(LLM_PROVIDER), never a per-chain or per-run choice: every chain gets its
-model from get_chat_model(). Routing all six through one factory also removes
-the sixfold duplication of the model name, temperature=0, and the per-request
-timeout that existed before.
-
-Import stays side-effect-free in the repo's sense: no client is constructed at
-import time, and the local-provider package is imported only when local mode
-is actually selected, so an OpenAI deployment never needs langchain-ollama
-present to import this module.
-"""
-
-from functools import lru_cache
+import importlib
+import os
+from functools import cache
 from typing import Any
 
 from langchain_openai import ChatOpenAI
 
-from graph.config import (
-    OPENAI_CHAT_MODEL,
-    llm_request_timeout_seconds,
-    local_chat_model,
-    local_mode_enabled,
-    ollama_base_url,
+from graph import config
+from graph.chains.model_policy import PROVIDER_TOGETHER, ModelTarget, get_model_policy
+from graph.chains.model_tasks import ModelTask
+
+_CHAIN_FACTORIES = (
+    ("graph.chains.generation", "get_generation_chain"),
+    ("graph.chains.retrieval_grader", "get_retrieval_grader"),
+    ("graph.chains.question_router", "get_question_router"),
+    ("graph.chains.hallucination_grader", "get_hallucination_grader"),
+    ("graph.chains.answer_grader", "get_answer_grader"),
+    ("graph.chains.query_rewriter", "get_query_rewriter"),
 )
+
+TOGETHER_API_BASE_URL = "https://api.together.ai/v1"
+
+
+class ModelTargetNotOperational(RuntimeError):
+    """The policy resolved a provider target without a supported client adapter."""
+
+
+class ModelCredentialMissing(RuntimeError):
+    """A selected provider credential is absent without exposing credential data."""
 
 
 def _chat_ollama_class() -> Any:
-    """
-    Import ChatOllama lazily.
-
-    langchain-ollama is only needed when local mode is selected. Importing it
-    inside this helper keeps `import graph.chains._llm` (and the whole OpenAI
-    path) working where the package is absent, and gives tests one seam to
-    patch without installing a provider.
-    """
+    """Import ChatOllama only after the policy selects local mode."""
 
     from langchain_ollama import ChatOllama
 
     return ChatOllama
 
 
-@lru_cache(maxsize=1)
-def get_chat_model() -> Any:
-    """
-    Build and cache the chat model for the active provider.
+def _required_credential(name: str) -> str:
+    """Return one non-empty provider credential or fail before client construction."""
 
-    temperature=0 and the LLM_REQUEST_TIMEOUT_SECONDS budget apply on both
-    branches. The timeout reaches Ollama by a different route: ChatOllama has
-    no `timeout` field and its model config ignores unknown keyword arguments,
-    so a `timeout=` passed directly would be silently dropped. It travels via
-    `client_kwargs`, which langchain-ollama forwards to
-    `ollama.Client(host=base_url, **client_kwargs)` and on to httpx.
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        raise ModelCredentialMissing(f"{name} is required by the resolved model target.")
+    return value.strip()
 
-    Cached for the process, matching the deployment-mode semantics of
-    LLM_PROVIDER. Tests that change the provider environment must call
-    get_chat_model.cache_clear() first or they observe a stale client.
-    """
 
-    if local_mode_enabled():
+@cache
+def _get_chat_model_for_target(target: ModelTarget) -> Any:
+    """Construct one client per immutable resolved target."""
+
+    settings = target.request_settings_dict()
+    timeout = settings["timeout_seconds"]
+    temperature = settings["temperature"]
+
+    if target.provider == config.PROVIDER_OLLAMA:
         chat_ollama = _chat_ollama_class()
         return chat_ollama(
-            model=local_chat_model(),
-            temperature=0,
-            base_url=ollama_base_url(),
-            client_kwargs={"timeout": llm_request_timeout_seconds()},
+            model=target.model,
+            temperature=temperature,
+            base_url=target.api_base_identity,
+            client_kwargs={"timeout": timeout},
         )
 
-    return ChatOpenAI(
-        model=OPENAI_CHAT_MODEL,
-        temperature=0,
-        timeout=llm_request_timeout_seconds(),
+    if target.provider == config.PROVIDER_OPENAI:
+        return ChatOpenAI(
+            model=target.model,
+            temperature=temperature,
+            timeout=timeout,
+        )
+
+    if target.provider == PROVIDER_TOGETHER:
+        extra_body: dict[str, Any] = {}
+        if settings.get("reasoning_enabled") is False:
+            extra_body["reasoning"] = {"enabled": False}
+        return ChatOpenAI(
+            model=target.model,
+            temperature=temperature,
+            timeout=timeout,
+            api_key=_required_credential("TOGETHER_API_KEY"),
+            base_url=TOGETHER_API_BASE_URL,
+            extra_body=extra_body,
+        )
+
+    raise ModelTargetNotOperational(
+        f"Model target {target.provider}/{target.model} is defined by the policy "
+        "but no supported client adapter is configured."
     )
+
+
+def get_chat_model(task: ModelTask) -> Any:
+    """Resolve one task through the process policy and return its cached client."""
+
+    policy = get_model_policy()
+    return _get_chat_model_for_target(policy.target_for(task))
+
+
+def clear_model_caches() -> None:
+    """Clear policy, target-client, and all six lazy chain caches for tests."""
+
+    get_model_policy.cache_clear()
+    _get_chat_model_for_target.cache_clear()
+    for module_name, factory_name in _CHAIN_FACTORIES:
+        factory = getattr(importlib.import_module(module_name), factory_name)
+        factory.cache_clear()

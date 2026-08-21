@@ -11,6 +11,8 @@ import os
 import pytest
 from dotenv import load_dotenv
 
+from graph.chains.model_policy import get_model_policy
+
 load_dotenv()
 
 
@@ -20,13 +22,13 @@ requires_openai = pytest.mark.skipif(
     reason="OPENAI_API_KEY is required to call the real gpt-5-mini for these tests",
 )
 
-
 # Environment variables selecting the deployment mode and configuring the
 # LLM/embedding provider.
 PROVIDER_ENV_VARS = (
     "PRIVACY_MODE",
     "FULLY_LOCAL_MODE",
     "LLM_PROVIDER",
+    "MODEL_OPTIMIZATION_PROFILE",
     "LOCAL_CHAT_MODEL",
     "LOCAL_EMBEDDING_MODEL",
     "OLLAMA_BASE_URL",
@@ -92,3 +94,7 @@ def isolate_provider_env(monkeypatch):
 
     for name in ISOLATED_ENV_VARS:
         monkeypatch.delenv(name, raising=False)
+
+    get_model_policy.cache_clear()
+    yield
+    get_model_policy.cache_clear()
