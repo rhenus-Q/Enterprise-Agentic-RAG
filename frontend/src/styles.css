@@ -1387,6 +1387,12 @@ h3 {
   overflow-wrap: anywhere;
 }
 
+.answer-footer .answer-footer__profile {
+  color: var(--green);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
 .answer-footer__duration {
   margin-left: auto;
 }

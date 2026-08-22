@@ -7,6 +7,13 @@ interface AnswerCardProps {
   response: AskResponse;
 }
 
+const PROFILE_LABELS: Record<AskResponse["effective_profile"], string> = {
+  legacy: "Legacy",
+  luna_all: "Luna All",
+  flash_luna: "Flash + Luna",
+  local: "Local",
+};
+
 export function AnswerCard({ response }: AnswerCardProps) {
   const totalTime = formatDuration(response.total_duration_ms);
 
@@ -48,6 +55,9 @@ export function AnswerCard({ response }: AnswerCardProps) {
         <RuntimeBadge runtime={response.runtime} />
         <span className="answer-footer__run" aria-label={`Run ID: ${response.run_id}`}>
           Run ID: {response.run_id}
+        </span>
+        <span className="runtime-badge answer-footer__profile">
+          <span>{PROFILE_LABELS[response.effective_profile]}</span>
         </span>
         <span className="answer-footer__duration" aria-label={`Total time: ${totalTime}`}>
           Total time: {totalTime}

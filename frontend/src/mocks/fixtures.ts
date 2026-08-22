@@ -185,6 +185,7 @@ export const runtimeFixtures = {
 
 const baseAskResponse: AskResponse = {
   run_id: "run_01HV7P9F6G",
+  effective_profile: "legacy",
   question: "What is the reimbursement window for business expenses?",
   input_redacted: false,
   question_sha256: "f3d3a81d9ed2719f7797c8ba11a91f5f61c48880856350396fe123532b37fb68",

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from langchain_core.documents import Document
 
 import main
-from graph import consts, engine, formatting
+from graph import config, consts, engine, formatting
 from graph.consts import WEB_SEARCH_SOURCE
 from server.app import create_app
 
@@ -93,6 +93,14 @@ def _patch_successful_preflight(monkeypatch) -> None:
 
 def test_ask_success_builds_deduplicated_citations_and_records_trace(monkeypatch):
     _patch_successful_preflight(monkeypatch)
+    monkeypatch.setattr(
+        config,
+        "model_policy_status",
+        lambda: {
+            "requested_profile": "luna_all",
+            "effective_profile": "flash_luna",
+        },
+    )
     result = _answer_result()
     calls = []
 
@@ -116,6 +124,7 @@ def test_ask_success_builds_deduplicated_citations_and_records_trace(monkeypatch
         assert response.status_code == 200
         payload = response.json()
         assert payload["run_id"] == "run-ask-1"
+        assert payload["effective_profile"] == "flash_luna"
         assert payload["question"] == result.question
         assert payload["answer"] == result.answer
         assert payload["status"] == "ok"

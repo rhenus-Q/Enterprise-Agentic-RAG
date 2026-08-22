@@ -7,6 +7,13 @@ interface RuntimeBadgeProps {
   loading?: boolean;
 }
 
+const PROFILE_NAMES: Record<string, string> = {
+  legacy: "Legacy",
+  luna_all: "Luna All",
+  flash_luna: "Flash + Luna",
+  local: "Local",
+};
+
 export function RuntimeBadge({ status, runtime, loading = false }: RuntimeBadgeProps) {
   if (loading) {
     return <span className="runtime-badge runtime-badge--loading">Checking runtime…</span>;
@@ -33,15 +40,14 @@ export function RuntimeBadge({ status, runtime, loading = false }: RuntimeBadgeP
   }
 
   const isPrivate = status.privacy_mode || status.local_mode;
-  const prefix = status.local_mode ? "Local" : status.privacy_mode ? "Private" : "Connected";
+  const profileName =
+    PROFILE_NAMES[status.effective_model_profile ?? ""] ?? formatProviderName(status.provider);
 
   return (
     <span className={`runtime-badge ${isPrivate ? "runtime-badge--private" : ""}`}>
       <span className="runtime-dot" />
       <span className="runtime-copy">
-        <strong>
-          {prefix} · {formatProviderName(status.provider)}
-        </strong>
+        <strong>Model · {profileName}</strong>
       </span>
     </span>
   );

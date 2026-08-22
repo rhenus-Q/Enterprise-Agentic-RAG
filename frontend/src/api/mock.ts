@@ -193,6 +193,7 @@ function askResponseForScenario(): AskResponse {
     case "local-mode":
       return {
         ...askFixtures.webSearchDisabled,
+        effective_profile: "local",
         runtime: {
           provider: "ollama",
           web_search_enabled: false,

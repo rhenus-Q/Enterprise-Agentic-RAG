@@ -49,6 +49,7 @@ class RunRuntime(BaseModel):
 
 class AskResponse(BaseModel):
     run_id: str
+    effective_profile: str
     question: str
     input_redacted: bool
     question_sha256: str

@@ -108,9 +108,19 @@ describe("RuntimeBadge", () => {
   });
 
   it.each([
-    [runtimeFixtures.openai, "Connected · OpenAI", false],
-    [runtimeFixtures.privacy, "Private · OpenAI", true],
-    [runtimeFixtures.local, "Local · Ollama", true],
+    [runtimeFixtures.openai, "Model · Legacy", false],
+    [
+      { ...runtimeFixtures.openai, effective_model_profile: "luna_all" },
+      "Model · Luna All",
+      false,
+    ],
+    [
+      { ...runtimeFixtures.openai, effective_model_profile: "flash_luna" },
+      "Model · Flash + Luna",
+      false,
+    ],
+    [runtimeFixtures.privacy, "Model · Legacy", true],
+    [runtimeFixtures.local, "Model · Local", true],
   ] as const)("renders the resolved runtime label %s", (status, label, privateMode) => {
     render(<RuntimeBadge status={status} />);
 

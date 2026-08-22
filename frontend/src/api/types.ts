@@ -51,6 +51,7 @@ export interface RunRuntime {
 
 export interface AskResponse {
   run_id: string;
+  effective_profile: "legacy" | "luna_all" | "flash_luna" | "local";
   question: string;
   input_redacted: boolean;
   question_sha256: string;

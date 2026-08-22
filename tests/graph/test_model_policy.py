@@ -155,9 +155,7 @@ def test_privacy_mode_overrides_nonlegacy_profiles_to_legacy(monkeypatch, reques
 
 
 @pytest.mark.parametrize("requested", list(ModelProfile))
-def test_local_mode_overrides_every_profile_and_resolves_zero_cloud_targets(
-    monkeypatch, requested
-):
+def test_local_mode_overrides_every_profile_and_resolves_zero_cloud_targets(monkeypatch, requested):
     monkeypatch.setenv("LLM_PROVIDER", "ollama")
     monkeypatch.setenv("MODEL_OPTIMIZATION_PROFILE", requested.value)
     monkeypatch.setenv("LOCAL_CHAT_MODEL", "local-test-model")

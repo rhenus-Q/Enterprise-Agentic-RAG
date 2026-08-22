@@ -79,7 +79,7 @@ describe("App runtime status", () => {
     const api = appClient();
     render(<App api={api} />);
 
-    expect(await screen.findByText(/Connected · OpenAI/)).not.toBeNull();
+    expect(await screen.findByText(/Model · Legacy/)).not.toBeNull();
     expect((screen.getByRole("checkbox", { name: "Web search" }) as HTMLInputElement).disabled).toBe(
       false,
     );
@@ -137,7 +137,7 @@ describe("App runtime status", () => {
     });
 
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
-    expect(screen.getByText(/Connected · OpenAI/)).not.toBeNull();
+    expect(screen.getByText(/Model · Legacy/)).not.toBeNull();
     expect((screen.getByRole("checkbox", { name: "Web search" }) as HTMLInputElement).disabled).toBe(
       false,
     );
@@ -149,7 +149,7 @@ describe("App dependency injection", () => {
   it("uses the same injected client for each active child page and run detail", async () => {
     const api = appClient();
     render(<App api={api} />);
-    await screen.findByText(/Connected · OpenAI/);
+    await screen.findByText(/Model · Legacy/);
 
     fireEvent.click(screen.getByRole("button", { name: "Documents" }));
     await waitFor(() => expect(api.getDocuments).toHaveBeenCalledTimes(1));
@@ -176,7 +176,7 @@ describe("App dependency injection", () => {
     );
 
     render(<App api={api} />);
-    await screen.findByText(/Connected · OpenAI/);
+    await screen.findByText(/Model · Legacy/);
     fireEvent.change(screen.getByLabelText("Question"), { target: { value: "Question" } });
     fireEvent.click(composerAskButton());
     fireEvent.click(await screen.findByRole("button", { name: "Stop" }));
@@ -190,7 +190,7 @@ describe("App dependency injection", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     render(<App api={appClient()} />);
-    await screen.findByText(/Connected · OpenAI/);
+    await screen.findByText(/Model · Legacy/);
     fireEvent.click(screen.getByRole("button", { name: "Documents" }));
     await screen.findByText("Data Retention Policy");
 
@@ -202,7 +202,7 @@ describe("App navigation and mount identity", () => {
   it("keeps tab navigation correct and scrolls only when the active page changes", async () => {
     const scrollTo = vi.mocked(window.scrollTo);
     render(<App api={appClient()} />);
-    await screen.findByText(/Connected · OpenAI/);
+    await screen.findByText(/Model · Legacy/);
 
     const navigation = screen.getByRole("navigation", { name: "Primary navigation" });
     const askTab = navigation.querySelector<HTMLButtonElement>("button:first-of-type")!;
@@ -222,7 +222,7 @@ describe("App navigation and mount identity", () => {
 
   it("retains the app shell and the same hidden Ask page across tab changes", async () => {
     render(<App api={appClient()} />);
-    await screen.findByText(/Connected · OpenAI/);
+    await screen.findByText(/Model · Legacy/);
 
     const appShell = document.querySelector<HTMLElement>(".app-shell");
     const askPage = document.querySelector<HTMLElement>(".ask-page");

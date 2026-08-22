@@ -29,12 +29,13 @@ describe("AnswerCard", () => {
     expect(screen.getByText(/redacted before this question entered/i)).not.toBeNull();
   });
 
-  it("shows OpenAI and the run ID together with total time aligned last", () => {
+  it("shows OpenAI, run ID, effective profile, and total time in order", () => {
     const response = askFixtures.localSuccess;
     const { container } = render(<AnswerCard response={response} />);
 
     expect(screen.getByText("OpenAI")).not.toBeNull();
     expect(screen.getByText(`Run ID: ${response.run_id}`)).not.toBeNull();
+    expect(screen.getByText("Legacy")).not.toBeNull();
     expect(
       screen.getByText(`Total time: ${formatDuration(response.total_duration_ms)}`),
     ).not.toBeNull();
@@ -46,9 +47,23 @@ describe("AnswerCard", () => {
     const footerItems = container.querySelector(".answer-footer")?.children;
     expect(footerItems?.[0]?.textContent).toContain("OpenAI");
     expect(footerItems?.[1]?.textContent).toBe(`Run ID: ${response.run_id}`);
-    expect(footerItems?.[2]?.textContent).toBe(
+    expect(footerItems?.[2]?.textContent).toBe("Legacy");
+    expect(footerItems?.[3]?.textContent).toBe(
       `Total time: ${formatDuration(response.total_duration_ms)}`,
     );
+  });
+
+  it.each([
+    ["legacy", "Legacy"],
+    ["luna_all", "Luna All"],
+    ["flash_luna", "Flash + Luna"],
+    ["local", "Local"],
+  ] as const)("maps the %s effective profile to %s", (effective_profile, label) => {
+    const { container } = render(
+      <AnswerCard response={{ ...askFixtures.localSuccess, effective_profile }} />,
+    );
+
+    expect(container.querySelector(".answer-footer__profile")?.textContent).toBe(label);
   });
 
   it("uses the knowledge answer section label", () => {

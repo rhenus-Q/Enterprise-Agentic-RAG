@@ -192,6 +192,7 @@ def _build_citations(documents: Any) -> list[Citation]:
 def _build_ask_response(
     result: engine.AnswerResult,
     provider: str,
+    effective_profile: str,
     status: str,
 ) -> AskResponse:
     if result.run_id is None:
@@ -199,6 +200,7 @@ def _build_ask_response(
 
     return AskResponse(
         run_id=result.run_id,
+        effective_profile=effective_profile,
         question=result.question,
         input_redacted=result.input_redacted,
         question_sha256=result.question_sha256,
@@ -327,6 +329,7 @@ def create_app() -> FastAPI:
 
             try:
                 provider = config.llm_provider()
+                effective_profile = config.model_policy_status()["effective_profile"]
             except ValueError:
                 return JSONResponse(
                     status_code=503,
@@ -335,7 +338,7 @@ def create_app() -> FastAPI:
 
             try:
                 status = _run_status(result.stop_reason)
-                response = _build_ask_response(result, provider, status)
+                response = _build_ask_response(result, provider, effective_profile, status)
             except Exception as exc:
                 return _internal_error(exc)
 

@@ -1,7 +1,9 @@
 """Evidence-backed revision of the frozen Generation V1 lexical scorer.
 
-This module adds normalization for equivalent forms that produced demonstrated
-false negatives in the four-model diagnostic run.
+The historical ``generation-lexical-v1`` implementation remains in
+``run_model_optimization_eval.py``. This module only adds normalization for
+equivalent forms that produced demonstrated false negatives in the
+four-model diagnostic run.
 """
 
 from __future__ import annotations
